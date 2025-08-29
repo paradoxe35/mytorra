@@ -581,15 +581,15 @@ query := "SELECT * FROM users WHERE id = " + userID
 
 // ✅ SAFE - Use parameterized queries with sqlx
 const getUserQuery = `
-    SELECT id, email, name 
-    FROM users 
+    SELECT id, email, name
+    FROM users
     WHERE email = $1 AND deleted_at IS NULL
 `
 err := db.Get(&user, getUserQuery, email)
 
 // ✅ SAFE - Use named parameters with sqlx
 const updateUserQuery = `
-    UPDATE users 
+    UPDATE users
     SET name = :name, updated_at = :updated_at
     WHERE id = :id AND deleted_at IS NULL
 `
@@ -655,15 +655,15 @@ type CreateUserRequest struct {
 func sanitizeInput(input string) string {
     // Remove null bytes
     input = strings.ReplaceAll(input, "\x00", "")
-    
+
     // Trim whitespace
     input = strings.TrimSpace(input)
-    
+
     // Limit length
     if len(input) > 1000 {
         input = input[:1000]
     }
-    
+
     return input
 }
 
@@ -681,28 +681,28 @@ func validateUpload(file multipart.File, header *multipart.FileHeader) error {
     if header.Size > 10*1024*1024 {
         return errors.New("file too large")
     }
-    
+
     // Validate MIME type
     buffer := make([]byte, 512)
     _, err := file.Read(buffer)
     if err != nil {
         return err
     }
-    
+
     contentType := http.DetectContentType(buffer)
     allowedTypes := map[string]bool{
         "image/jpeg": true,
         "image/png":  true,
         "image/gif":  true,
     }
-    
+
     if !allowedTypes[contentType] {
         return errors.New("invalid file type")
     }
-    
+
     // Reset file pointer
     file.Seek(0, 0)
-    
+
     return nil
 }
 
@@ -776,18 +776,18 @@ func SecurityHeaders(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         // Prevent MIME type sniffing
         w.Header().Set("X-Content-Type-Options", "nosniff")
-        
+
         // Prevent clickjacking
         w.Header().Set("X-Frame-Options", "DENY")
-        
+
         // XSS Protection (for older browsers)
         w.Header().Set("X-XSS-Protection", "1; mode=block")
-        
+
         // Force HTTPS
         w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
-        
+
         // Content Security Policy
-        w.Header().Set("Content-Security-Policy", 
+        w.Header().Set("Content-Security-Policy",
             "default-src 'self'; "+
             "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "+
             "style-src 'self' 'unsafe-inline'; "+
@@ -797,14 +797,14 @@ func SecurityHeaders(next http.Handler) http.Handler {
             "frame-ancestors 'none'; "+
             "base-uri 'self'; "+
             "form-action 'self'")
-        
+
         // Referrer Policy
         w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-        
+
         // Permissions Policy
-        w.Header().Set("Permissions-Policy", 
+        w.Header().Set("Permissions-Policy",
             "geolocation=(), microphone=(), camera=()")
-        
+
         next.ServeHTTP(w, r)
     })
 }
@@ -833,7 +833,7 @@ func validatePasswordStrength(password string) error {
     if len(password) < 12 {
         return errors.New("password must be at least 12 characters")
     }
-    
+
     var hasUpper, hasLower, hasNumber, hasSpecial bool
     for _, char := range password {
         switch {
@@ -847,16 +847,16 @@ func validatePasswordStrength(password string) error {
             hasSpecial = true
         }
     }
-    
+
     if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
         return errors.New("password must contain uppercase, lowercase, number and special character")
     }
-    
+
     // Check against common passwords
     if isCommonPassword(password) {
         return errors.New("password is too common")
     }
-    
+
     return nil
 }
 ```
@@ -880,7 +880,7 @@ func loadSecrets() (*Secrets, error) {
             return nil, err
         }
     }
-    
+
     return &Secrets{
         APISecret: secret,
     }, nil
@@ -903,13 +903,13 @@ type IPRateLimiter struct {
 func (i *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
     i.mu.Lock()
     defer i.mu.Unlock()
-    
+
     limiter, exists := i.visitors[ip]
     if !exists {
         limiter = rate.NewLimiter(i.rate, i.burst)
         i.visitors[ip] = limiter
     }
-    
+
     return limiter
 }
 
@@ -918,12 +918,12 @@ func RateLimitMiddleware(rl *IPRateLimiter) func(http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
             ip := getClientIP(r)
             limiter := rl.GetLimiter(ip)
-            
+
             if !limiter.Allow() {
                 http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
                 return
             }
-            
+
             next.ServeHTTP(w, r)
         })
     }
@@ -965,7 +965,7 @@ func (s *SecurityLogger) MonitorForThreats(r *http.Request) {
             "ip":    getClientIP(r),
         })
     }
-    
+
     // Check for XSS patterns
     if containsXSSPattern(r.URL.RawQuery) {
         s.LogSuspiciousActivity(r.Context(), "potential_xss", map[string]interface{}{
@@ -1170,6 +1170,50 @@ func (s *UserService) CreateUser(ctx context.Context, req CreateUserRequest) (*U
 - README with setup instructions
 - Architecture decision records (ADRs)
 
+### 12.3 Context7 Documentation Lookup (MANDATORY)
+
+**When implementing new features or using external libraries:**
+
+1. **Always Check Context7 First**: Before implementing any feature that involves external libraries, frameworks, or complex Go patterns, developers MUST:
+   - Use Context7 to look up the latest documentation
+   - Search for best practices and recent updates
+   - Review code examples and implementation patterns
+   - Check for security advisories or deprecation notices
+
+2. **Examples of When to Use Context7:**
+   - Implementing OAuth2 flows
+   - Setting up database migrations
+   - Configuring message queues (RabbitMQ)
+   - Using new Go standard library features
+   - Implementing WebSocket connections
+   - Setting up observability (OpenTelemetry)
+   - Configuring CI/CD pipelines
+   - Using any third-party library
+
+3. **Documentation Priority:**
+   ```
+   Context7 (Latest) → Official Docs → Community Resources → Stack Overflow
+   ```
+
+4. **Document Context7 Findings:**
+   - When using Context7 to research implementation approaches, document key findings in code comments
+   - Include Context7 reference links in ADRs for major architectural decisions
+   - Update team knowledge base with important discoveries
+
+**Example Usage:**
+```go
+// Implementation based on Context7 documentation for Chi router v5
+// Ref: Context7 lookup performed on 2025-08-29 for latest middleware patterns
+func SetupRouter() *chi.Mux {
+    r := chi.NewRouter()
+
+    // Middleware stack order based on Context7 best practices
+    r.Use(middleware.Recovery)
+    r.Use(middleware.RequestID)
+    // ... rest of implementation
+}
+```
+
 ---
 
 ## 13. Service Communication Guidelines
@@ -1243,19 +1287,32 @@ groups:
 
 ## 15. Development Workflow (MANDATORY)
 
-### 15.1 Before Every Commit
+### 15.1 Project Todo Tracking
+
+**MANDATORY**: Keep the `project.todo` file updated throughout development:
+
+- Mark tasks as completed when finished: `[x]`
+- Update task status regularly
+- Add new subtasks as discovered
+- Document blockers or issues in task comments
+- Review todo list at start and end of each work session
+
+### 15.2 Before Every Commit
 
 ```bash
-# 1. Format your code
+# 1. Update project.todo with completed tasks
+# Mark completed items with [x]
+
+# 2. Format your code
 make fmt
 
-# 2. Run linters
+# 3. Run linters
 make lint
 
-# 3. Run ALL tests
+# 4. Run ALL tests
 make test
 
-# 4. Check test coverage
+# 5. Check test coverage
 make test-coverage
 
 # If all pass, then commit
@@ -1263,7 +1320,7 @@ git add .
 git commit -m "feat: your feature description"
 ```
 
-### 15.2 Before Opening Pull Request
+### 15.3 Before Opening Pull Request
 
 ```bash
 # Run complete validation

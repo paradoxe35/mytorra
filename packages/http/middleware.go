@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+
 	"github.com/paradoxe35/torra/packages/logger"
 )
 

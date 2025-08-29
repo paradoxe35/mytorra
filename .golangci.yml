@@ -1,0 +1,165 @@
+version: "2"
+
+linters:
+  default: none
+
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - unused
+
+    - gosec
+
+    - gocritic
+    - revive
+    - misspell
+    - unconvert
+    - prealloc
+    - nakedret
+
+    - gocyclo
+    - dupl
+    - funlen
+
+    - whitespace
+    - lll
+    - godot
+
+    - bodyclose
+    - noctx
+    - rowserrcheck
+    - sqlclosecheck
+
+    - unparam
+    - dogsled
+    - gochecknoinits
+    - goconst
+    - exhaustive
+
+  settings:
+    gocyclo:
+      min-complexity: 15
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    misspell:
+      locale: US
+    lll:
+      line-length: 140
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    funlen:
+      lines: 100
+      statements: 50
+    godot:
+      scope: all
+      capital: true
+    govet:
+      enable-all: true
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    gosec:
+      severity: medium
+      confidence: medium
+    revive:
+      severity: warning
+      confidence: 0.8
+    staticcheck:
+      checks: ["all", "-ST1000", "-ST1003"]
+    unparam:
+      check-exported: true
+    exhaustive:
+      default-signifies-exhaustive: true
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - funlen
+          - lll
+          - goconst
+          - gocyclo
+
+      - path: cmd/
+        linters:
+          - gocyclo
+          - funlen
+          - gochecknoinits
+
+      - path: ".*\\.gen\\.go$"
+        linters: [all]
+
+      - path: ".*\\.pb\\.go$"
+        linters: [all]
+
+    paths:
+      - vendor
+      - .git
+      - .idea
+      - node_modules
+      - dist
+      - build
+      - ".*\\.pb\\.go$"
+      - ".*\\.gen\\.go$"
+      - "mock_.*\\.go$"
+
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/paradoxe35/torra
+    gofumpt:
+      extra-rules: true
+
+issues:
+  max-issues-per-linter: 0
+
+  max-same-issues: 0
+
+  new: false
+
+  fix: false
+
+run:
+  timeout: 5m
+
+  tests: true
+
+  modules-download-mode: readonly
+
+  allow-parallel-runners: true
+
+  concurrency: 0
+
+output:
+  formats:
+    text:
+      path: stdout
+
+severity:
+  default: error
+
+  rules:
+    - linters:
+        - dupl
+      severity: warning
+    - linters:
+        - godot
+        - misspell
+      severity: info

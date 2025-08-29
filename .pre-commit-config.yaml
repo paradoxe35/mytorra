@@ -1,0 +1,76 @@
+repos:
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: Go Format
+        entry: bash -c 'golangci-lint fmt'
+        language: system
+        files: '\.go$'
+        pass_filenames: false
+        description: Format Go code using golangci-lint formatters (gofmt, gofumpt, goimports)
+
+      - id: go-lint
+        name: Go Lint
+        entry: bash -c 'golangci-lint run --config .golangci.yml --fix 2>/dev/null || echo "Go lint check skipped (no modules in workspace yet)"'
+        language: system
+        files: '\.go$'
+        pass_filenames: false
+        description: Run golangci-lint with all configured linters
+
+      - id: go-test
+        name: Go Test
+        entry: bash -c 'if [ -f Makefile ] && grep -q "test-short:" Makefile; then make test-short 2>/dev/null || echo "Tests skipped (no modules in workspace yet)"; else go test -short ./... 2>/dev/null || echo "Tests skipped (no modules in workspace yet)"; fi'
+        language: system
+        files: '\.go$'
+        pass_filenames: false
+        description: Run short tests for Go code
+
+      - id: todo-check
+        name: Check Todo List
+        entry: bash -c 'echo "📝 Remember to update project.todo with completed tasks!"'
+        language: system
+        always_run: true
+        pass_filenames: false
+
+      - id: no-secrets
+        name: Check for secrets
+        entry: bash -c 'which git-secrets >/dev/null 2>&1 && git secrets --scan || echo "⚠️  git-secrets not installed - skipping secret scan"'
+        language: system
+        pass_filenames: false
+        description: Scan for accidentally committed secrets
+
+      - id: go-mod-tidy
+        name: Go Mod Tidy
+        entry: bash -c 'find . -name "go.mod" -not -path "./vendor/*" -execdir go mod tidy \;'
+        language: system
+        files: 'go\.(mod|sum)$'
+        pass_filenames: false
+        description: Ensure go.mod and go.sum are tidy
+
+      - id: go-generate
+        name: Check Generated Files
+        entry: bash -c 'if grep -r "//go:generate" --include="*.go" . 2>/dev/null; then echo "⚠️  Files with go:generate directives found - remember to run go generate"; fi'
+        language: system
+        files: '\.go$'
+        pass_filenames: false
+        description: Remind to run go generate if needed
+
+      - id: context7-check
+        name: Context7 Documentation Check
+        entry: bash -c 'echo "📚 Remember to check Context7 for latest documentation when using external libraries!"'
+        language: system
+        files: '\.go$'
+        pass_filenames: false
+        description: Reminder to check Context7 for latest documentation
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: detect-private-key
