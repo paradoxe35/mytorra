@@ -1,17 +1,20 @@
 {
-  "token_hmac_secret_key": "torra-dev-secret-key",
+  "token_hmac_secret_key": "torra-centrifugo-secret-key-dev",
   "admin": true,
-  "admin_password": "admin",
-  "admin_secret": "admin-secret",
-  "api_key": "api-key",
+  "admin_password": "torra_admin",
+  "admin_secret": "torra-admin-secret-dev",
+  "api_key": "torra-api-key-dev",
   "allowed_origins": ["http://localhost:3000", "http://localhost:8080"],
-  "presence": true,
-  "join_leave": true,
-  "force_push_join_leave": true,
-  "history_size": 100,
-  "history_ttl": "24h",
-  "history_recover": true,
-  "allow_subscribe_for_client": true,
+  "health": true,
+  "prometheus": true,
+  "log_level": "debug",
+  "log_pretty": true,
+  "websocket": true,
+  "sockjs": true,
+  "uni_websocket": true,
+  "uni_sse": true,
+  "uni_http_stream": true,
+  "uni_grpc": true,
   "namespaces": [
     {
       "name": "chat",
@@ -19,28 +22,26 @@
       "join_leave": true,
       "history_size": 100,
       "history_ttl": "24h",
-      "history_recover": true
-    },
-    {
-      "name": "tracking",
-      "presence": false,
-      "join_leave": false,
-      "history_size": 10,
-      "history_ttl": "1m"
+      "recover": true
     },
     {
       "name": "notifications",
       "presence": false,
       "join_leave": false,
-      "history_size": 50,
-      "history_ttl": "1h",
-      "history_recover": true
+      "publish": true
+    },
+    {
+      "name": "tracking",
+      "presence": true,
+      "join_leave": false,
+      "publish": true
     }
   ],
-  "log_level": "debug",
-  "log_file": "",
-  "pid_file": "",
-  "engine": "memory",
-  "health": true,
-  "prometheus": true
+  "engine": "redis",
+  "redis": {
+    "address": "redis:6379",
+    "db": 1,
+    "use_lists": true,
+    "prefix": "centrifugo"
+  }
 }
