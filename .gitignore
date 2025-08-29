@@ -1,0 +1,82 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work.sum
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Application specific
+/bin/
+/dist/
+/tmp/
+/logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads
+/uploads/
+/media/
+
+# Config files with secrets
+config.local.yaml
+config.production.yaml
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.cer
+
+# Build artifacts
+/build/
+/release/
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Testing
+/coverage/
+*.coverprofile
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes
+kubeconfig
+*.kubeconfig

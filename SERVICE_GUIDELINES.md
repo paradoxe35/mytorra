@@ -517,9 +517,53 @@ func TestPostgresRepo_Integration(t *testing.T) {
 
 ---
 
-## 9. Security Standards
+## 9. Security Standards (CRITICAL)
 
-### 9.1 Authentication & Authorization
+### 9.1 SQL Injection Prevention
+
+**NEVER construct SQL queries with string concatenation or fmt.Sprintf!**
+
+```go
+// ❌ DANGEROUS - NEVER DO THIS
+query := fmt.Sprintf("SELECT * FROM users WHERE email = '%s'", email)
+
+// ❌ DANGEROUS - SQL INJECTION VULNERABLE
+query := "SELECT * FROM users WHERE id = " + userID
+
+// ✅ SAFE - Use parameterized queries with sqlx
+const getUserQuery = `
+    SELECT id, email, name 
+    FROM users 
+    WHERE email = $1 AND deleted_at IS NULL
+`
+err := db.Get(&user, getUserQuery, email)
+
+// ✅ SAFE - Use named parameters with sqlx
+const updateUserQuery = `
+    UPDATE users 
+    SET name = :name, updated_at = :updated_at
+    WHERE id = :id AND deleted_at IS NULL
+`
+_, err := db.NamedExec(updateUserQuery, map[string]interface{}{
+    "id":         userID,
+    "name":       sanitizedName,
+    "updated_at": time.Now(),
+})
+
+// ✅ SAFE - For dynamic queries, use query builders
+import "github.com/Masterminds/squirrel"
+
+query := squirrel.Select("*").From("users")
+if email != "" {
+    query = query.Where(squirrel.Eq{"email": email})
+}
+if status != "" {
+    query = query.Where(squirrel.Eq{"status": status})
+}
+sql, args, err := query.ToSql()
+```
+
+### 9.2 Authentication & Authorization
 
 ```go
 // JWT validation middleware
@@ -545,14 +589,72 @@ func JWTMiddleware(secret []byte) func(http.Handler) http.Handler {
 }
 ```
 
-### 9.2 Input Validation
+### 9.3 Input Validation & Sanitization
 
 ```go
-// Use validator tags
+// MANDATORY: Validate ALL inputs
 type CreateUserRequest struct {
-    Email    string `json:"email" validate:"required,email"`
-    Name     string `json:"name" validate:"required,min=2,max=100"`
-    Password string `json:"password" validate:"required,min=8"`
+    Email    string `json:"email" validate:"required,email,max=255"`
+    Name     string `json:"name" validate:"required,min=2,max=100,alphanumunicode"`
+    Password string `json:"password" validate:"required,min=12,containsany=!@#$%,containsnumber"`
+    Age      int    `json:"age" validate:"min=18,max=120"`
+    Phone    string `json:"phone" validate:"required,e164"`
+    URL      string `json:"url" validate:"omitempty,url,max=2048"`
+}
+
+// Sanitize user inputs
+func sanitizeInput(input string) string {
+    // Remove null bytes
+    input = strings.ReplaceAll(input, "\x00", "")
+    
+    // Trim whitespace
+    input = strings.TrimSpace(input)
+    
+    // Limit length
+    if len(input) > 1000 {
+        input = input[:1000]
+    }
+    
+    return input
+}
+
+// HTML content sanitization
+import "github.com/microcosm-cc/bluemonday"
+
+func sanitizeHTML(input string) string {
+    p := bluemonday.UGCPolicy()
+    return p.Sanitize(input)
+}
+
+// File upload validation
+func validateUpload(file multipart.File, header *multipart.FileHeader) error {
+    // Check file size (10MB limit)
+    if header.Size > 10*1024*1024 {
+        return errors.New("file too large")
+    }
+    
+    // Validate MIME type
+    buffer := make([]byte, 512)
+    _, err := file.Read(buffer)
+    if err != nil {
+        return err
+    }
+    
+    contentType := http.DetectContentType(buffer)
+    allowedTypes := map[string]bool{
+        "image/jpeg": true,
+        "image/png":  true,
+        "image/gif":  true,
+    }
+    
+    if !allowedTypes[contentType] {
+        return errors.New("invalid file type")
+    }
+    
+    // Reset file pointer
+    file.Seek(0, 0)
+    
+    return nil
 }
 
 // Validate in handler
@@ -572,19 +674,256 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-### 9.3 Security Headers
+### 9.4 XSS Prevention
 
 ```go
-// Security middleware
+// Always escape output
+import "html/template"
+
+// Safe template rendering
+func renderHTML(w http.ResponseWriter, data interface{}) {
+    tmpl := template.Must(template.New("").Parse(`
+        <h1>{{.Title | html}}</h1>
+        <p>{{.Content | html}}</p>
+    `))
+    tmpl.Execute(w, data)
+}
+
+// JSON responses with proper content type
+func respondJSON(w http.ResponseWriter, data interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    w.Header().Set("X-Content-Type-Options", "nosniff")
+    json.NewEncoder(w).Encode(data)
+}
+```
+
+### 9.5 CSRF Protection
+
+```go
+import "github.com/gorilla/csrf"
+
+// CSRF middleware setup
+func SetupCSRF(authKey []byte) func(http.Handler) http.Handler {
+    return csrf.Protect(authKey,
+        csrf.Secure(true),
+        csrf.HttpOnly(true),
+        csrf.SameSite(csrf.SameSiteStrictMode),
+        csrf.Path("/"),
+    )
+}
+
+// In handlers
+func (h *Handler) RenderForm(w http.ResponseWriter, r *http.Request) {
+    token := csrf.Token(r)
+    // Include token in form or header
+    w.Header().Set("X-CSRF-Token", token)
+}
+```
+
+### 9.6 Security Headers (Comprehensive)
+
+```go
 func SecurityHeaders(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Prevent MIME type sniffing
         w.Header().Set("X-Content-Type-Options", "nosniff")
+        
+        // Prevent clickjacking
         w.Header().Set("X-Frame-Options", "DENY")
+        
+        // XSS Protection (for older browsers)
         w.Header().Set("X-XSS-Protection", "1; mode=block")
-        w.Header().Set("Strict-Transport-Security", "max-age=31536000")
-        w.Header().Set("Content-Security-Policy", "default-src 'self'")
+        
+        // Force HTTPS
+        w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+        
+        // Content Security Policy
+        w.Header().Set("Content-Security-Policy", 
+            "default-src 'self'; "+
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "+
+            "style-src 'self' 'unsafe-inline'; "+
+            "img-src 'self' data: https:; "+
+            "font-src 'self' data:; "+
+            "connect-src 'self'; "+
+            "frame-ancestors 'none'; "+
+            "base-uri 'self'; "+
+            "form-action 'self'")
+        
+        // Referrer Policy
+        w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+        
+        // Permissions Policy
+        w.Header().Set("Permissions-Policy", 
+            "geolocation=(), microphone=(), camera=()")
+        
         next.ServeHTTP(w, r)
     })
+}
+```
+
+### 9.7 Password Security
+
+```go
+import "golang.org/x/crypto/bcrypt"
+
+// Password hashing
+func hashPassword(password string) (string, error) {
+    // Use cost of 12 or higher
+    bytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+    return string(bytes), err
+}
+
+// Password verification
+func checkPassword(password, hash string) bool {
+    err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+    return err == nil
+}
+
+// Password strength validation
+func validatePasswordStrength(password string) error {
+    if len(password) < 12 {
+        return errors.New("password must be at least 12 characters")
+    }
+    
+    var hasUpper, hasLower, hasNumber, hasSpecial bool
+    for _, char := range password {
+        switch {
+        case unicode.IsUpper(char):
+            hasUpper = true
+        case unicode.IsLower(char):
+            hasLower = true
+        case unicode.IsNumber(char):
+            hasNumber = true
+        case unicode.IsPunct(char) || unicode.IsSymbol(char):
+            hasSpecial = true
+        }
+    }
+    
+    if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
+        return errors.New("password must contain uppercase, lowercase, number and special character")
+    }
+    
+    // Check against common passwords
+    if isCommonPassword(password) {
+        return errors.New("password is too common")
+    }
+    
+    return nil
+}
+```
+
+### 9.8 Secrets Management
+
+```go
+// NEVER hardcode secrets
+// ❌ NEVER DO THIS
+const apiKey = "sk_live_abcd1234"
+
+// ✅ Load from environment or secret manager
+func loadSecrets() (*Secrets, error) {
+    // From environment
+    secret := os.Getenv("API_SECRET")
+    if secret == "" {
+        // From secret manager (Vault, AWS Secrets Manager, etc.)
+        client := vault.NewClient()
+        secret, err := client.GetSecret("mytorra/api/secret")
+        if err != nil {
+            return nil, err
+        }
+    }
+    
+    return &Secrets{
+        APISecret: secret,
+    }, nil
+}
+```
+
+### 9.9 Rate Limiting & DDoS Protection
+
+```go
+import "golang.org/x/time/rate"
+
+// Per-IP rate limiting
+type IPRateLimiter struct {
+    visitors map[string]*rate.Limiter
+    mu       sync.RWMutex
+    rate     rate.Limit
+    burst    int
+}
+
+func (i *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
+    i.mu.Lock()
+    defer i.mu.Unlock()
+    
+    limiter, exists := i.visitors[ip]
+    if !exists {
+        limiter = rate.NewLimiter(i.rate, i.burst)
+        i.visitors[ip] = limiter
+    }
+    
+    return limiter
+}
+
+func RateLimitMiddleware(rl *IPRateLimiter) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            ip := getClientIP(r)
+            limiter := rl.GetLimiter(ip)
+            
+            if !limiter.Allow() {
+                http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+                return
+            }
+            
+            next.ServeHTTP(w, r)
+        })
+    }
+}
+```
+
+### 9.10 Audit Logging
+
+```go
+// Log security events
+type SecurityLogger struct {
+    logger *slog.Logger
+}
+
+func (s *SecurityLogger) LogAuthAttempt(ctx context.Context, email string, success bool, ip string) {
+    s.logger.Info("authentication attempt",
+        slog.String("email", email),
+        slog.Bool("success", success),
+        slog.String("ip", ip),
+        slog.String("request_id", middleware.GetReqID(ctx)),
+        slog.Time("timestamp", time.Now()),
+    )
+}
+
+func (s *SecurityLogger) LogSuspiciousActivity(ctx context.Context, activity string, details map[string]interface{}) {
+    s.logger.Warn("suspicious activity detected",
+        slog.String("activity", activity),
+        slog.Any("details", details),
+        slog.String("request_id", middleware.GetReqID(ctx)),
+    )
+}
+
+// Monitor for security threats
+func (s *SecurityLogger) MonitorForThreats(r *http.Request) {
+    // Check for SQL injection patterns
+    if containsSQLInjectionPattern(r.URL.RawQuery) {
+        s.LogSuspiciousActivity(r.Context(), "potential_sql_injection", map[string]interface{}{
+            "query": r.URL.RawQuery,
+            "ip":    getClientIP(r),
+        })
+    }
+    
+    // Check for XSS patterns
+    if containsXSSPattern(r.URL.RawQuery) {
+        s.LogSuspiciousActivity(r.Context(), "potential_xss", map[string]interface{}{
+            "query": r.URL.RawQuery,
+            "ip":    getClientIP(r),
+        })
+    }
 }
 ```
 

@@ -1,0 +1,13 @@
+go 1.25
+
+use (
+    ./services/core
+    ./packages/config
+    ./packages/logger
+    ./packages/security
+    ./packages/http
+    ./packages/database
+    ./packages/events
+    ./packages/errors
+    ./packages/cache
+)
