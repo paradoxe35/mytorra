@@ -1,0 +1,390 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop, feature/*]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  GO_VERSION: '1.25'
+  GOLANGCI_LINT_VERSION: 'v1.61.0'
+  NODE_VERSION: '20'
+
+jobs:
+  # Build job - compiles all services
+  build:
+    name: Build Services
+    runs-on: [self-hosted, linux, x64]
+    strategy:
+      matrix:
+        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            go.work.sum
+            **/go.sum
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: |
+          go mod download
+          go work sync
+
+      - name: Build ${{ matrix.service }} service
+        run: |
+          if [ -d "services/${{ matrix.service }}" ]; then
+            echo "Building ${{ matrix.service }} service..."
+            cd services/${{ matrix.service }}
+
+            # Build API if exists
+            if [ -d "cmd/api" ]; then
+              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+                -ldflags="-w -s -X main.Version=${{ github.sha }}" \
+                -o ../../bin/${{ matrix.service }}-api \
+                ./cmd/api
+            fi
+
+            # Build Worker if exists
+            if [ -d "cmd/worker" ]; then
+              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+                -ldflags="-w -s -X main.Version=${{ github.sha }}" \
+                -o ../../bin/${{ matrix.service }}-worker \
+                ./cmd/worker
+            fi
+          else
+            echo "Service ${{ matrix.service }} not yet implemented"
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.service }}-binaries
+          path: bin/
+          retention-days: 7
+
+  # Test job - runs all tests
+  test:
+    name: Run Tests
+    runs-on: [self-hosted, linux, x64]
+    needs: build
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Setup test environment
+        run: |
+          cp .env.example .env.test
+          echo "MYTORRA_DATABASE_HOST=localhost" >> .env.test
+          echo "MYTORRA_DATABASE_USER=test" >> .env.test
+          echo "MYTORRA_DATABASE_PASSWORD=test" >> .env.test
+          echo "MYTORRA_DATABASE_NAME=testdb" >> .env.test
+          echo "MYTORRA_REDIS_HOST=localhost" >> .env.test
+
+      - name: Run unit tests
+        run: |
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+        env:
+          MYTORRA_ENVIRONMENT: test
+
+      - name: Run integration tests
+        run: |
+          go test -v -race -tags=integration ./tests/integration/...
+        env:
+          MYTORRA_ENVIRONMENT: test
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.txt
+          flags: unittests
+          name: codecov-umbrella
+
+      - name: Generate test report
+        if: always()
+        run: |
+          go install github.com/jstemmer/go-junit-report/v2@latest
+          go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-report.xml
+
+  # Lint job - code quality checks
+  lint:
+    name: Lint Code
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: --timeout=10m --config=.golangci.yml
+          skip-cache: true
+          working-directory: .
+
+      - name: Check Go formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go files are not formatted. Please run 'make fmt'"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: Check Go mod tidy
+        run: |
+          go mod tidy
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "go.mod or go.sum is not tidy. Please run 'go mod tidy'"
+            git diff
+            exit 1
+          fi
+
+  # Security scan job
+  security:
+    name: Security Scan
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gosec-results.sarif
+
+      - name: Run Nancy vulnerability scanner
+        run: |
+          go install github.com/sonatype-nexus-community/nancy@latest
+          go list -json -deps ./... | nancy sleuth
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+  # Docker build job
+  docker:
+    name: Build Docker Images
+    runs-on: [self-hosted, linux, x64]
+    needs: [build, test, lint]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    strategy:
+      matrix:
+        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/torra-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/${{ matrix.service }}
+          file: ./services/${{ matrix.service }}/Dockerfile.api
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+  # Deploy job (staging/production)
+  deploy:
+    name: Deploy to Environment
+    runs-on: [self-hosted, linux, x64]
+    needs: [docker]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+      url: ${{ github.ref == 'refs/heads/main' && 'https://torra.com' || 'https://staging.torra.com' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy to Kubernetes
+        run: |
+          ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+          NAMESPACE=torra-${ENVIRONMENT}
+
+          # Apply configurations
+          kubectl apply -f infra/kubernetes/namespaces/${NAMESPACE}.yaml
+          kubectl apply -f infra/kubernetes/configmaps/${ENVIRONMENT}/ -n ${NAMESPACE}
+          kubectl apply -f infra/kubernetes/secrets/${ENVIRONMENT}/ -n ${NAMESPACE}
+
+          # Update image tags
+          for service in core marketplace delivery booking torracab media realtime; do
+            if [ -f "infra/kubernetes/deployments/${service}.yaml" ]; then
+              kubectl set image deployment/${service} \
+                ${service}=${{ secrets.DOCKER_USERNAME }}/torra-${service}:${{ github.sha }} \
+                -n ${NAMESPACE}
+            fi
+          done
+
+          # Wait for rollout
+          kubectl rollout status deployment --timeout=10m -n ${NAMESPACE}
+
+      - name: Run smoke tests
+        run: |
+          ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+          URL=${{ github.ref == 'refs/heads/main' && 'https://api.torra.com' || 'https://api.staging.torra.com' }}
+
+          # Health check
+          curl -f ${URL}/health || exit 1
+
+          # Run smoke test suite
+          go test -v -tags=smoke ./tests/smoke/... -env=${ENVIRONMENT}
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Deployment to ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }} ${{ job.status }}
+            Service: Torra Platform
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # Cleanup job
+  cleanup:
+    name: Cleanup Resources
+    runs-on: [self-hosted, linux, x64]
+    needs: [deploy]
+    if: always()
+    steps:
+      - name: Clean workspace
+        run: |
+          docker system prune -af --volumes
+          rm -rf /tmp/torra-*
+
+      - name: Remove old artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.rest.actions.listArtifactsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+
+            const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+
+            for (const artifact of artifacts.data.artifacts) {
+              if (Date.parse(artifact.created_at) < oneWeekAgo) {
+                await github.rest.actions.deleteArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id
+                });
+              }
+            }

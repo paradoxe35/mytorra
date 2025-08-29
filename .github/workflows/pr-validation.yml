@@ -1,0 +1,281 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+env:
+  GO_VERSION: '1.25'
+  MIN_COVERAGE: 80
+
+jobs:
+  # Check PR title and description
+  pr-check:
+    name: PR Standards Check
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Check PR title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            chore
+            ci
+            build
+            revert
+          requireScope: true
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            didn't match the configured pattern. Please ensure that the subject
+            doesn't start with an uppercase character.
+
+      - name: Check PR size
+        uses: CodelyTV/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/xs'
+          xs_max_size: 10
+          s_label: 'size/s'
+          s_max_size: 100
+          m_label: 'size/m'
+          m_max_size: 500
+          l_label: 'size/l'
+          l_max_size: 1000
+          xl_label: 'size/xl'
+
+  # Run tests with coverage check
+  test-coverage:
+    name: Test Coverage Check
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run tests with coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+          # Calculate coverage percentage
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Coverage: ${COVERAGE}%"
+          echo "coverage=${COVERAGE}" >> $GITHUB_OUTPUT
+
+          # Check if coverage meets minimum requirement
+          if (( $(echo "$COVERAGE < $MIN_COVERAGE" | bc -l) )); then
+            echo "❌ Coverage ${COVERAGE}% is below minimum required ${MIN_COVERAGE}%"
+            exit 1
+          else
+            echo "✅ Coverage ${COVERAGE}% meets minimum requirement"
+          fi
+        id: coverage
+
+      - name: Generate coverage badge
+        if: always()
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          generate-coverage-badge: true
+          coverage-badge-filename: coverage.svg
+          coverage-label: Coverage
+          coverage-percentage: ${{ steps.coverage.outputs.coverage }}
+          colors: '#4c1 #97ca00 #a4a61d #dfb317 #fe7d37 #e05d44'
+          intervals: 90 80 70 60 50 0
+
+      - name: Comment PR with coverage
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const coverage = '${{ steps.coverage.outputs.coverage }}';
+            const minCoverage = '${{ env.MIN_COVERAGE }}';
+            const status = parseFloat(coverage) >= parseFloat(minCoverage) ? '✅' : '❌';
+
+            const body = `## Test Coverage Report ${status}
+
+            **Current Coverage:** ${coverage}%
+            **Required Coverage:** ${minCoverage}%
+
+            <details>
+            <summary>Coverage Details</summary>
+
+            \`\`\`
+            ${{ steps.coverage.outputs.details }}
+            \`\`\`
+            </details>`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  # Code quality analysis
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run code complexity analysis
+        run: |
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          echo "### Cyclomatic Complexity Report" >> complexity-report.md
+          echo "Functions with complexity > 10:" >> complexity-report.md
+          gocyclo -over 10 . | tee -a complexity-report.md || true
+
+      - name: Run code duplication check
+        run: |
+          go install github.com/mibk/dupl@latest
+          echo "### Code Duplication Report" >> duplication-report.md
+          dupl -t 100 . | tee -a duplication-report.md || true
+
+      - name: Check for TODOs and FIXMEs
+        run: |
+          echo "### TODOs and FIXMEs" >> todo-report.md
+          grep -rn "TODO\|FIXME" --include="*.go" . | tee -a todo-report.md || true
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-quality-reports
+          path: |
+            complexity-report.md
+            duplication-report.md
+            todo-report.md
+
+  # Documentation check
+  docs-check:
+    name: Documentation Check
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check Go doc comments
+        run: |
+          go install golang.org/x/tools/cmd/godoc@latest
+          # Check for missing doc comments on exported types and functions
+          output=$(go list -f '{{.Dir}}' ./... | xargs -I {} sh -c 'go doc -all {} 2>&1 | grep -E "^func|^type|^var|^const" | grep -v "//" || true')
+          if [ -n "$output" ]; then
+            echo "⚠️ Found exported symbols without documentation:"
+            echo "$output"
+          fi
+
+      - name: Check README files
+        run: |
+          # Ensure each service has a README
+          for service in services/*/; do
+            if [ -d "$service" ] && [ ! -f "${service}README.md" ]; then
+              echo "❌ Missing README.md in $service"
+              exit 1
+            fi
+          done
+
+      - name: Validate OpenAPI specs
+        run: |
+          if [ -d "docs/api" ]; then
+            npm install -g @apidevtools/swagger-cli
+            for spec in docs/api/*.yaml; do
+              if [ -f "$spec" ]; then
+                echo "Validating $spec..."
+                swagger-cli validate "$spec"
+              fi
+            done
+          fi
+
+  # Dependencies check
+  dependencies:
+    name: Dependencies Check
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Check for outdated dependencies
+        run: |
+          go list -u -m all | grep '\[' || echo "All dependencies are up to date"
+
+      - name: Check for unused dependencies
+        run: |
+          go install github.com/kisielk/godepgraph@latest
+          go mod graph | godepgraph -s -o deps.dot
+          echo "Dependency graph generated in deps.dot"
+
+      - name: License check
+        run: |
+          go install github.com/google/go-licenses@latest
+          go-licenses check ./... --disallowed_types=forbidden,restricted
+
+  # Approval gate
+  approval:
+    name: Approval Requirements
+    runs-on: [self-hosted, linux, x64]
+    needs: [pr-check, test-coverage, code-quality, docs-check, dependencies]
+    steps:
+      - name: Check approval status
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const approvals = reviews.filter(r => r.state === 'APPROVED');
+            const changesRequested = reviews.filter(r => r.state === 'CHANGES_REQUESTED');
+
+            if (changesRequested.length > 0) {
+              core.setFailed('Changes requested by reviewers must be addressed');
+            }
+
+            if (approvals.length < 1) {
+              core.setFailed('At least 1 approval required');
+            }
+
+            console.log(`✅ PR has ${approvals.length} approvals`);
+
+      - name: Auto-merge if approved
+        if: success() && github.event.pull_request.auto_merge == null
+        uses: pascalgn/merge-action@v0.15.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_METHOD: squash
+          MERGE_COMMIT_MESSAGE: pull-request-title
+          MERGE_DELETE_BRANCH: true
+          MERGE_REQUIRED_APPROVALS: 1

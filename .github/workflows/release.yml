@@ -1,0 +1,355 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  GO_VERSION: '1.25'
+  REGISTRY: docker.io
+
+jobs:
+  # Prepare release
+  prepare:
+    name: Prepare Release
+    runs-on: [self-hosted, linux, x64]
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Release version: ${VERSION}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - including all changes"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" HEAD)
+          else
+            echo "Changes since $PREV_TAG"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD)
+          fi
+
+          # Save changelog for later use
+          echo "$CHANGELOG" > CHANGELOG.md
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Upload changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog
+          path: CHANGELOG.md
+
+  # Build release binaries
+  build-binaries:
+    name: Build Release Binaries
+    runs-on: [self-hosted, linux, x64]
+    needs: prepare
+    strategy:
+      matrix:
+        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        os: [linux, darwin, windows]
+        arch: [amd64, arm64]
+        exclude:
+          - os: windows
+            arch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build binary
+        run: |
+          SERVICE="${{ matrix.service }}"
+          OS="${{ matrix.os }}"
+          ARCH="${{ matrix.arch }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          if [ -d "services/${SERVICE}" ]; then
+            cd services/${SERVICE}
+
+            # Determine binary extension
+            EXT=""
+            if [ "$OS" = "windows" ]; then
+              EXT=".exe"
+            fi
+
+            # Build API binary
+            if [ -d "cmd/api" ]; then
+              OUTPUT="../../dist/${SERVICE}-api-${VERSION}-${OS}-${ARCH}${EXT}"
+              CGO_ENABLED=0 GOOS=$OS GOARCH=$ARCH go build \
+                -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildTime=$(date -u +%Y%m%d-%H%M%S)" \
+                -o "$OUTPUT" \
+                ./cmd/api
+
+              # Create checksum
+              sha256sum "$OUTPUT" > "${OUTPUT}.sha256"
+            fi
+
+            # Build Worker binary
+            if [ -d "cmd/worker" ]; then
+              OUTPUT="../../dist/${SERVICE}-worker-${VERSION}-${OS}-${ARCH}${EXT}"
+              CGO_ENABLED=0 GOOS=$OS GOARCH=$ARCH go build \
+                -ldflags="-w -s -X main.Version=${VERSION} -X main.BuildTime=$(date -u +%Y%m%d-%H%M%S)" \
+                -o "$OUTPUT" \
+                ./cmd/worker
+
+              # Create checksum
+              sha256sum "$OUTPUT" > "${OUTPUT}.sha256"
+            fi
+          fi
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.service }}-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/
+          retention-days: 30
+
+  # Build and push Docker images
+  docker-release:
+    name: Build and Push Docker Images
+    runs-on: [self-hosted, linux, x64]
+    needs: prepare
+    strategy:
+      matrix:
+        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/${{ matrix.service }}
+          file: ./services/${{ matrix.service }}/Dockerfile.api
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-${{ matrix.service }}:latest
+          labels: |
+            org.opencontainers.image.title=torra-${{ matrix.service }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.prepare.outputs.version }}
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+  # Create Helm charts
+  helm-charts:
+    name: Package Helm Charts
+    runs-on: [self-hosted, linux, x64]
+    needs: prepare
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Update chart versions
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+
+          # Update Chart.yaml versions
+          for chart in infra/helm/*/; do
+            if [ -f "${chart}Chart.yaml" ]; then
+              sed -i "s/^version:.*/version: ${VERSION#v}/" "${chart}Chart.yaml"
+              sed -i "s/^appVersion:.*/appVersion: ${VERSION}/" "${chart}Chart.yaml"
+            fi
+          done
+
+      - name: Package charts
+        run: |
+          mkdir -p helm-packages
+
+          for chart in infra/helm/*/; do
+            if [ -f "${chart}Chart.yaml" ]; then
+              helm package "$chart" -d helm-packages/
+            fi
+          done
+
+          # Create index
+          helm repo index helm-packages/
+
+      - name: Upload Helm charts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: helm-packages/
+          retention-days: 30
+
+  # Create GitHub release
+  github-release:
+    name: Create GitHub Release
+    runs-on: [self-hosted, linux, x64]
+    needs: [prepare, build-binaries, docker-release, helm-charts]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts/
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-files
+
+          # Collect binaries
+          find release-artifacts -name "*.sha256" -o -name "*-linux-*" -o -name "*-darwin-*" -o -name "*-windows-*" | \
+            xargs -I {} cp {} release-files/
+
+          # Collect Helm charts
+          cp release-artifacts/helm-charts/*.tgz release-files/ || true
+
+          # Create release archive
+          tar czf release-files/torra-platform-${{ needs.prepare.outputs.version }}.tar.gz \
+            -C release-artifacts .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          name: Release ${{ needs.prepare.outputs.version }}
+          body: |
+            ## 🚀 Release ${{ needs.prepare.outputs.version }}
+
+            ### 📝 Changelog
+            ${{ needs.prepare.outputs.changelog }}
+
+            ### 🐳 Docker Images
+            All services are available on Docker Hub:
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-core:${{ needs.prepare.outputs.version }}
+            docker pull ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-marketplace:${{ needs.prepare.outputs.version }}
+            # ... and other services
+            ```
+
+            ### ⎈ Helm Charts
+            Install using Helm:
+            ```bash
+            helm install torra ./torra-platform-${{ needs.prepare.outputs.version }}.tgz
+            ```
+
+            ### 📦 Binary Downloads
+            See attached files for platform-specific binaries.
+
+            ### 🔧 Installation
+            Please refer to the [installation guide](https://github.com/${{ github.repository }}/blob/main/docs/installation.md) for detailed instructions.
+
+            ### 🙏 Contributors
+            Thank you to all contributors who made this release possible!
+          files: release-files/*
+          draft: false
+          prerelease: ${{ contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-alpha') }}
+
+  # Deploy to production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: [self-hosted, linux, x64]
+    needs: [github-release, prepare]
+    environment:
+      name: production
+      url: https://torra.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.PROD_KUBE_CONFIG }}" | base64 -d > kubeconfig
+          export KUBECONFIG=kubeconfig
+
+      - name: Deploy to production
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          NAMESPACE="torra-production"
+
+          # Update deployments with new version
+          for service in core marketplace delivery booking torracab media realtime; do
+            kubectl set image deployment/${service} \
+              ${service}=${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-${service}:${VERSION} \
+              -n ${NAMESPACE}
+          done
+
+          # Wait for rollout
+          kubectl rollout status deployment --timeout=15m -n ${NAMESPACE}
+
+      - name: Run production tests
+        run: |
+          # Run smoke tests
+          ./scripts/test-production.sh
+
+          # Check service health
+          kubectl get pods -n torra-production
+          kubectl top pods -n torra-production
+
+      - name: Update DNS and CDN
+        run: |
+          # Update CDN cache
+          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CF_ZONE_ID }}/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}'
+
+      - name: Notify release
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            🎉 Release ${{ needs.prepare.outputs.version }} deployed to production!
+            Status: ${{ job.status }}
+            Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
