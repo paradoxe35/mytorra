@@ -25,13 +25,6 @@ repos:
         pass_filenames: false
         description: Run short tests for Go code
 
-      - id: todo-check
-        name: Check Todo List
-        entry: bash -c 'echo "📝 Remember to update project.todo with completed tasks!"'
-        language: system
-        always_run: true
-        pass_filenames: false
-
       - id: no-secrets
         name: Check for secrets
         entry: bash -c 'which git-secrets >/dev/null 2>&1 && git secrets --scan || echo "⚠️  git-secrets not installed - skipping secret scan"'
@@ -55,14 +48,6 @@ repos:
         pass_filenames: false
         description: Remind to run go generate if needed
 
-      - id: context7-check
-        name: Context7 Documentation Check
-        entry: bash -c 'echo "📚 Remember to check Context7 for latest documentation when using external libraries!"'
-        language: system
-        files: '\.go$'
-        pass_filenames: false
-        description: Reminder to check Context7 for latest documentation
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
@@ -70,7 +55,7 @@ repos:
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ["--maxkb=1000"]
       - id: check-case-conflict
       - id: check-merge-conflict
       - id: detect-private-key

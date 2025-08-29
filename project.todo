@@ -12,8 +12,6 @@
     [] Create environment configuration templates
     [] Setup Viper for configuration management
     [] Implement secrets management integration (Vault/AWS Secrets Manager)
-    [] Configure development SSL certificates
-    [] Setup local DNS resolution for services
 
 ### CI/CD Pipeline
 [] Configure GitHub Actions/GitLab CI
