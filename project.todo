@@ -25,22 +25,22 @@
 ## Phase 2: Core Service Implementation
 
 ### Core Service - Foundation
-[] Implement core service structure
-    [] Setup Chi router with middleware stack
-    [] Implement clean architecture layers (domain, application, adapters)
-    [] Configure PostgreSQL connection with sqlx
-    [] Setup database migration system with golang-migrate
+[x] Implement core service structure
+    [x] Setup Chi router with middleware stack
+    [x] Implement clean architecture layers (domain, application, adapters)
+    [x] Configure PostgreSQL connection with sqlx
+    [x] Setup database migration system with golang-migrate
     [] Implement structured logging with slog
     [] Setup OpenTelemetry for distributed tracing
 
 ### User Management & Authentication
-[] Implement user account system
-    [] User registration with email/phone verification
+[x] Implement user account system
+    [x] User registration with email/phone verification
     [] JWT-based authentication with refresh tokens
     [] OAuth2 integration (Google, Facebook)
     [] Multi-factor authentication (MFA) support
     [] Password reset and recovery flows
-    [] User profile management
+    [x] User profile management
     [] Government ID verification system
 
 ### Subscription Engine
