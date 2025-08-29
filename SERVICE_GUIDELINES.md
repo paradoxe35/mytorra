@@ -1,0 +1,882 @@
+# MyTorra Platform - Service Implementation Guidelines
+
+## Overview
+
+This document defines the mandatory standards, patterns, and best practices that MUST be followed when implementing any service within the MyTorra platform. These guidelines ensure consistency, maintainability, and professional quality across all services.
+
+---
+
+## 1. Service Architecture Requirements
+
+### 1.1 Clean Architecture Structure (MANDATORY)
+
+Every service MUST implement the following layered architecture:
+
+```
+services/<service-name>/
+├── cmd/
+│   ├── api/
+│   │   └── main.go          # HTTP API server entry point
+│   └── worker/              # OPTIONAL: Only if service needs background jobs
+│       └── main.go          # Background worker entry point
+├── internal/
+│   ├── domain/              # Pure business logic, no dependencies
+│   │   ├── entities/        # Core business entities
+│   │   ├── valueobjects/    # Value objects
+│   │   └── errors/          # Domain-specific errors
+│   ├── application/         # Use cases and orchestration
+│   │   ├── services/        # Application services
+│   │   ├── ports/           # Interface definitions (contracts)
+│   │   └── dtos/            # Data transfer objects
+│   └── adapters/            # External world implementations
+│       ├── http/            # HTTP handlers and middleware
+│       ├── postgres/        # Database repositories
+│       ├── redis/           # Cache implementations
+│       ├── rabbitmq/        # Message bus handlers
+│       └── grpc/            # gRPC clients/servers (if needed)
+├── migrations/              # Database migrations
+├── configs/                 # Configuration files
+├── Dockerfile.api          # Docker image for API
+├── Dockerfile.worker       # OPTIONAL: Docker image for Worker (if needed)
+└── go.mod                  # Module dependencies
+```
+
+### 1.2 Separation of Concerns
+
+- **Domain Layer**: Contains ONLY business logic, no framework dependencies
+- **Application Layer**: Orchestrates domain logic, defines interfaces
+- **Adapters Layer**: Implements interfaces, handles external communications
+- **Dependency Direction**: Outer layers depend on inner layers, NEVER reverse
+
+### 1.3 Interface-Driven Design
+
+All external dependencies MUST be accessed through interfaces:
+
+```go
+// application/ports/user_repository.go
+type UserRepository interface {
+    FindByID(ctx context.Context, id string) (*domain.User, error)
+    Save(ctx context.Context, user *domain.User) error
+    FindByEmail(ctx context.Context, email string) (*domain.User, error)
+}
+
+// adapters/postgres/user_repository.go
+type PostgresUserRepository struct {
+    db *sqlx.DB
+}
+
+func (r *PostgresUserRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
+    // Implementation
+}
+```
+
+---
+
+## 2. Go Development Standards
+
+### 2.1 Required Go Version
+
+- **Minimum Version**: Go 1.25 or later
+- **Module Mode**: Always use Go modules (`go mod`)
+- **Workspace**: Part of monorepo workspace (`go.work`)
+
+### 2.2 Code Formatting & Linting
+
+**MANDATORY Tools**:
+
+- `gofmt`: All code MUST be formatted
+- `golangci-lint`: MUST pass with zero errors
+- Pre-commit hooks MUST be configured
+
+**Required Linters Configuration**:
+
+```yaml
+# .golangci.yml
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - gosec
+    - gocritic
+    - revive
+    - misspell
+    - unconvert
+    - prealloc
+    - nakedret
+    - gocyclo
+    - dupl
+```
+
+### 2.3 Error Handling
+
+```go
+// ALWAYS wrap errors with context
+if err != nil {
+    return fmt.Errorf("userRepo.FindByID failed for id %s: %w", userID, err)
+}
+
+// Define domain errors
+var (
+    ErrUserNotFound = errors.New("user not found")
+    ErrInvalidEmail = errors.New("invalid email format")
+)
+
+// Use errors.Is for checking
+if errors.Is(err, ErrUserNotFound) {
+    return nil, status.Error(codes.NotFound, "user not found")
+}
+```
+
+### 2.4 Context Usage
+
+```go
+// Context MUST be first parameter for I/O operations
+func (s *UserService) GetUser(ctx context.Context, id string) (*User, error) {
+    // Use context for timeout/cancellation
+    ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+    defer cancel()
+
+    return s.repo.FindByID(ctx, id)
+}
+```
+
+---
+
+## 3. HTTP API Standards
+
+### 3.1 Framework & Router
+
+- **Required**: Chi router (`github.com/go-chi/chi/v5`)
+- **Middleware Stack Order**:
+  1. Recovery (panic recovery)
+  2. RequestID
+  3. RealIP
+  4. Logger
+  5. Timeout
+  6. Rate Limiter
+  7. Authentication
+  8. Authorization
+  9. CORS (if needed)
+
+### 3.2 API Design Principles
+
+```go
+// RESTful resource naming
+router.Route("/api/v1/users", func(r chi.Router) {
+    r.Get("/", h.ListUsers)        // GET /api/v1/users
+    r.Post("/", h.CreateUser)       // POST /api/v1/users
+    r.Get("/{id}", h.GetUser)       // GET /api/v1/users/{id}
+    r.Put("/{id}", h.UpdateUser)    // PUT /api/v1/users/{id}
+    r.Delete("/{id}", h.DeleteUser) // DELETE /api/v1/users/{id}
+})
+
+// Consistent response format
+type Response struct {
+    Success bool        `json:"success"`
+    Data    interface{} `json:"data,omitempty"`
+    Error   *ErrorInfo  `json:"error,omitempty"`
+    Meta    *Meta       `json:"meta,omitempty"`
+}
+```
+
+### 3.3 OpenAPI Documentation
+
+- **MANDATORY**: All APIs MUST have OpenAPI 3.0 specs
+- **Location**: `docs/api/<service>.v1.yaml`
+- **Code Generation**: Use `oapi-codegen` for server stubs
+
+---
+
+## 4. Database Standards
+
+### 4.1 PostgreSQL Requirements
+
+- **Library**: `sqlx` (`github.com/jmoiron/sqlx`)
+- **Migrations**: `golang-migrate`
+- **Connection Pooling**: Configure max connections
+- **Prepared Statements**: Use for repeated queries
+
+### 4.2 Database Patterns
+
+```go
+// Repository pattern implementation
+type PostgresUserRepo struct {
+    db *sqlx.DB
+}
+
+// Use named queries for clarity
+const getUserByEmailQuery = `
+    SELECT id, email, name, created_at, updated_at
+    FROM users
+    WHERE email = :email AND deleted_at IS NULL
+`
+
+// Transaction support
+func (r *PostgresUserRepo) CreateWithProfile(ctx context.Context, user *User, profile *Profile) error {
+    tx, err := r.db.BeginTxx(ctx, nil)
+    if err != nil {
+        return fmt.Errorf("begin transaction: %w", err)
+    }
+    defer tx.Rollback()
+
+    // Multiple operations
+    if err := r.createUser(ctx, tx, user); err != nil {
+        return err
+    }
+    if err := r.createProfile(ctx, tx, profile); err != nil {
+        return err
+    }
+
+    return tx.Commit()
+}
+```
+
+### 4.3 Migration Standards
+
+```sql
+-- migrations/001_create_users.up.sql
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP
+);
+
+CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_created_at ON users(created_at);
+```
+
+---
+
+## 5. Messaging & Events
+
+### 5.1 RabbitMQ Standards
+
+```go
+// Event definitions in packages/events/
+type ProductListedEvent struct {
+    EventID     string    `json:"event_id"`
+    ProductID   string    `json:"product_id"`
+    SellerID    string    `json:"seller_id"`
+    Price       float64   `json:"price"`
+    Currency    string    `json:"currency"`
+    ListedAt    time.Time `json:"listed_at"`
+    EventType   string    `json:"event_type"`
+    Version     string    `json:"version"`
+}
+
+// Publisher interface
+type EventPublisher interface {
+    Publish(ctx context.Context, event interface{}) error
+}
+
+// Consumer MUST be idempotent
+func (h *EventHandler) HandleProductListed(ctx context.Context, event ProductListedEvent) error {
+    // Check if already processed
+    if exists, err := h.repo.EventExists(ctx, event.EventID); exists || err != nil {
+        return err
+    }
+
+    // Process event
+    // ...
+
+    // Mark as processed
+    return h.repo.MarkEventProcessed(ctx, event.EventID)
+}
+```
+
+### 5.2 Background Jobs (Asynq)
+
+```go
+// Job definitions
+const (
+    TypeEmailWelcome = "email:welcome"
+    TypeImageResize  = "image:resize"
+    TypeReportDaily  = "report:daily"
+)
+
+// Job payload
+type EmailWelcomePayload struct {
+    UserID string `json:"user_id"`
+}
+
+// Enqueue job (in API process)
+func (s *UserService) SendWelcomeEmail(ctx context.Context, userID string) error {
+    payload, _ := json.Marshal(EmailWelcomePayload{UserID: userID})
+    task := asynq.NewTask(TypeEmailWelcome, payload)
+
+    _, err := s.asynqClient.Enqueue(task,
+        asynq.MaxRetry(3),
+        asynq.Timeout(30*time.Second),
+    )
+    return err
+}
+
+// Process job (in Worker process)
+func (w *EmailWorker) ProcessWelcomeEmail(ctx context.Context, t *asynq.Task) error {
+    var payload EmailWelcomePayload
+    if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+        return fmt.Errorf("unmarshal payload: %w", err)
+    }
+
+    // Send email logic
+    return w.emailService.SendWelcome(ctx, payload.UserID)
+}
+```
+
+---
+
+## 6. Configuration Management
+
+### 6.1 Viper Configuration
+
+```go
+// config/config.go
+type Config struct {
+    Server   ServerConfig
+    Database DatabaseConfig
+    Redis    RedisConfig
+    RabbitMQ RabbitMQConfig
+}
+
+type ServerConfig struct {
+    Port         int           `mapstructure:"port"`
+    ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+    WriteTimeout time.Duration `mapstructure:"write_timeout"`
+}
+
+// Load configuration
+func LoadConfig(path string) (*Config, error) {
+    viper.SetConfigFile(path)
+    viper.AutomaticEnv()
+    viper.SetEnvPrefix("MYTORRA")
+    viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+    if err := viper.ReadInConfig(); err != nil {
+        return nil, err
+    }
+
+    var config Config
+    if err := viper.Unmarshal(&config); err != nil {
+        return nil, err
+    }
+
+    return &config, nil
+}
+```
+
+### 6.2 Environment Variables
+
+```bash
+# Required environment variables
+MYTORRA_DATABASE_URL=postgres://user:pass@localhost/mytorra
+MYTORRA_REDIS_URL=redis://localhost:6379
+MYTORRA_RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+MYTORRA_JWT_SECRET=${SECRET_FROM_VAULT}
+MYTORRA_SERVICE_NAME=core
+MYTORRA_ENVIRONMENT=development
+```
+
+---
+
+## 7. Logging & Observability
+
+### 7.1 Structured Logging (slog)
+
+```go
+// Initialize logger
+logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+    Level: slog.LevelInfo,
+}))
+
+// Add context fields
+logger = logger.With(
+    slog.String("service", "core"),
+    slog.String("version", version),
+    slog.String("environment", env),
+)
+
+// Use in handlers
+func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    logger := h.logger.With(
+        slog.String("request_id", middleware.GetReqID(ctx)),
+        slog.String("method", r.Method),
+        slog.String("path", r.URL.Path),
+    )
+
+    userID := chi.URLParam(r, "id")
+    logger.Info("fetching user", slog.String("user_id", userID))
+
+    user, err := h.service.GetUser(ctx, userID)
+    if err != nil {
+        logger.Error("failed to fetch user",
+            slog.String("user_id", userID),
+            slog.String("error", err.Error()),
+        )
+        // Handle error
+    }
+}
+```
+
+### 7.2 Metrics & Tracing
+
+```go
+// OpenTelemetry setup
+import (
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/trace"
+)
+
+// Create tracer
+tracer := otel.Tracer("mytorra.core")
+
+// Use in functions
+func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
+    ctx, span := tracer.Start(ctx, "GetUser")
+    defer span.End()
+
+    span.SetAttributes(
+        attribute.String("user.id", id),
+    )
+
+    user, err := s.repo.FindByID(ctx, id)
+    if err != nil {
+        span.RecordError(err)
+        return nil, err
+    }
+
+    return user, nil
+}
+```
+
+---
+
+## 8. Testing Requirements
+
+### 8.1 Test Coverage
+
+- **Minimum Coverage**: 80% for business logic
+- **Test Types Required**:
+  - Unit tests for all domain logic
+  - Integration tests for repositories
+  - Contract tests for API endpoints
+  - Load tests for critical paths
+
+### 8.2 Testing Patterns
+
+```go
+// Unit test example
+func TestUserService_CreateUser(t *testing.T) {
+    // Arrange
+    mockRepo := mocks.NewMockUserRepository(t)
+    service := NewUserService(mockRepo)
+
+    user := &domain.User{
+        Email: "test@example.com",
+        Name:  "Test User",
+    }
+
+    mockRepo.On("Save", mock.Anything, user).Return(nil)
+
+    // Act
+    err := service.CreateUser(context.Background(), user)
+
+    // Assert
+    assert.NoError(t, err)
+    mockRepo.AssertExpectations(t)
+}
+
+// Integration test with testcontainers
+func TestPostgresRepo_Integration(t *testing.T) {
+    ctx := context.Background()
+
+    // Start PostgreSQL container
+    postgres, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+        ContainerRequest: testcontainers.ContainerRequest{
+            Image:        "postgres:15",
+            ExposedPorts: []string{"5432/tcp"},
+            Env: map[string]string{
+                "POSTGRES_PASSWORD": "test",
+            },
+        },
+        Started: true,
+    })
+    require.NoError(t, err)
+    defer postgres.Terminate(ctx)
+
+    // Run tests against real database
+    // ...
+}
+```
+
+---
+
+## 9. Security Standards
+
+### 9.1 Authentication & Authorization
+
+```go
+// JWT validation middleware
+func JWTMiddleware(secret []byte) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            token := extractToken(r)
+            if token == "" {
+                http.Error(w, "unauthorized", http.StatusUnauthorized)
+                return
+            }
+
+            claims, err := validateToken(token, secret)
+            if err != nil {
+                http.Error(w, "invalid token", http.StatusUnauthorized)
+                return
+            }
+
+            ctx := context.WithValue(r.Context(), "user_claims", claims)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+```
+
+### 9.2 Input Validation
+
+```go
+// Use validator tags
+type CreateUserRequest struct {
+    Email    string `json:"email" validate:"required,email"`
+    Name     string `json:"name" validate:"required,min=2,max=100"`
+    Password string `json:"password" validate:"required,min=8"`
+}
+
+// Validate in handler
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    var req CreateUserRequest
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        respondError(w, http.StatusBadRequest, "invalid request body")
+        return
+    }
+
+    if err := h.validator.Struct(req); err != nil {
+        respondError(w, http.StatusBadRequest, "validation failed")
+        return
+    }
+
+    // Process valid request
+}
+```
+
+### 9.3 Security Headers
+
+```go
+// Security middleware
+func SecurityHeaders(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("X-Content-Type-Options", "nosniff")
+        w.Header().Set("X-Frame-Options", "DENY")
+        w.Header().Set("X-XSS-Protection", "1; mode=block")
+        w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+        w.Header().Set("Content-Security-Policy", "default-src 'self'")
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+---
+
+## 10. Performance Guidelines
+
+### 10.1 Database Optimization
+
+- Use connection pooling
+- Implement query result caching
+- Use prepared statements for repeated queries
+- Add appropriate indexes
+- Implement pagination for list endpoints
+- Use batch operations where possible
+
+### 10.2 Caching Strategy
+
+```go
+// Cache-aside pattern
+func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
+    // Try cache first
+    cacheKey := fmt.Sprintf("user:%s", id)
+    if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
+        var user User
+        if err := json.Unmarshal(cached, &user); err == nil {
+            return &user, nil
+        }
+    }
+
+    // Cache miss - get from database
+    user, err := s.repo.FindByID(ctx, id)
+    if err != nil {
+        return nil, err
+    }
+
+    // Update cache
+    if data, err := json.Marshal(user); err == nil {
+        s.cache.Set(ctx, cacheKey, data, 5*time.Minute)
+    }
+
+    return user, nil
+}
+```
+
+### 10.3 Rate Limiting
+
+```go
+// Per-user rate limiting
+limiter := rate.NewLimiter(rate.Every(time.Second), 10) // 10 requests per second
+
+func RateLimitMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        userID := getUserID(r.Context())
+        limiter := getUserLimiter(userID)
+
+        if !limiter.Allow() {
+            http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+            return
+        }
+
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+---
+
+## 11. Deployment Standards
+
+### 11.1 Docker Requirements
+
+```dockerfile
+# Dockerfile.api
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api
+
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+WORKDIR /root/
+COPY --from=builder /app/api .
+COPY --from=builder /app/configs ./configs
+EXPOSE 8080
+CMD ["./api"]
+```
+
+### 11.2 Health Checks
+
+```go
+// Health check endpoint
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+    checks := map[string]string{
+        "database": "checking",
+        "redis":    "checking",
+        "rabbitmq": "checking",
+    }
+
+    // Check database
+    if err := h.db.PingContext(r.Context()); err != nil {
+        checks["database"] = "unhealthy"
+    } else {
+        checks["database"] = "healthy"
+    }
+
+    // Check other dependencies...
+
+    healthy := true
+    for _, status := range checks {
+        if status != "healthy" {
+            healthy = false
+            break
+        }
+    }
+
+    response := map[string]interface{}{
+        "status": "ok",
+        "checks": checks,
+    }
+
+    if !healthy {
+        response["status"] = "degraded"
+        w.WriteHeader(http.StatusServiceUnavailable)
+    }
+
+    json.NewEncoder(w).Encode(response)
+}
+```
+
+### 11.3 Graceful Shutdown
+
+```go
+func main() {
+    // Setup server
+    srv := &http.Server{
+        Addr:    ":8080",
+        Handler: router,
+    }
+
+    // Start server
+    go func() {
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            log.Fatal("listen:", err)
+        }
+    }()
+
+    // Wait for interrupt signal
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+    <-quit
+
+    // Graceful shutdown with timeout
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+
+    if err := srv.Shutdown(ctx); err != nil {
+        log.Fatal("server forced to shutdown:", err)
+    }
+
+    log.Println("server exited")
+}
+```
+
+---
+
+## 12. Documentation Requirements
+
+### 12.1 Code Documentation
+
+```go
+// Package user provides user management functionality.
+package user
+
+// UserService handles all user-related business logic.
+type UserService struct {
+    repo UserRepository
+    // other dependencies
+}
+
+// CreateUser creates a new user with the provided details.
+// It validates the input, checks for duplicate emails, and stores the user.
+// Returns the created user or an error if the operation fails.
+func (s *UserService) CreateUser(ctx context.Context, req CreateUserRequest) (*User, error) {
+    // Implementation
+}
+```
+
+### 12.2 API Documentation
+
+- OpenAPI 3.0 specification required
+- Postman collection for testing
+- README with setup instructions
+- Architecture decision records (ADRs)
+
+---
+
+## 13. Service Communication Guidelines
+
+### 13.1 Inter-Service Communication
+
+**Synchronous (REST)**:
+
+- Use for immediate responses
+- Implement circuit breakers
+- Add retry logic with exponential backoff
+- Set appropriate timeouts
+
+**Asynchronous (Events)**:
+
+- Use for fire-and-forget operations
+- Ensure idempotency
+- Implement dead letter queues
+- Version event schemas
+
+### 13.2 Service Discovery
+
+```go
+// Service registry interface
+type ServiceRegistry interface {
+    Register(service ServiceInfo) error
+    Discover(serviceName string) ([]ServiceEndpoint, error)
+    HealthCheck() error
+}
+
+// Use in client
+func NewServiceClient(registry ServiceRegistry) *Client {
+    endpoints, _ := registry.Discover("core-service")
+    // Load balance between endpoints
+}
+```
+
+---
+
+## 14. Monitoring & Alerting
+
+### 14.1 Key Metrics to Track
+
+- Request rate, error rate, duration (RED)
+- CPU, memory, disk usage
+- Database connection pool metrics
+- Queue depths and processing rates
+- Business metrics (users, transactions, etc.)
+
+### 14.2 Alerting Rules
+
+```yaml
+# Example Prometheus alert rules
+groups:
+  - name: service_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        annotations:
+          summary: "High error rate detected"
+
+      - alert: SlowRequests
+        expr: histogram_quantile(0.95, http_request_duration_seconds) > 1
+        for: 10m
+        annotations:
+          summary: "95th percentile latency is above 1s"
+```
+
+---
+
+## 15. Compliance Checklist
+
+Before deploying any service to production, ensure:
+
+- [ ] Clean architecture implemented
+- [ ] All tests passing with >80% coverage
+- [ ] OpenAPI documentation complete
+- [ ] Security headers configured
+- [ ] Rate limiting implemented
+- [ ] Health checks working
+- [ ] Graceful shutdown implemented
+- [ ] Logging properly structured
+- [ ] Metrics exposed for Prometheus
+- [ ] Docker images optimized
+- [ ] Configuration externalized
+- [ ] Secrets managed securely
+- [ ] Database migrations tested
+- [ ] Error handling comprehensive
+- [ ] Code reviewed and approved
+
+---
+
+## Conclusion
+
+These guidelines are living standards that should be updated as the platform evolves. Every developer working on the MyTorra platform must familiarize themselves with these guidelines and follow them consistently.
+
+For questions or clarifications, consult the architecture team or refer to the example implementations in the `services/core` directory.
