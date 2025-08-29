@@ -12,7 +12,7 @@ import (
 var (
 	emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	phoneRegex = regexp.MustCompile(`^\+[1-9]\d{1,14}$`)
-	
+
 	sqlInjectionPatterns = []string{
 		"'",
 		"--",
@@ -62,7 +62,7 @@ func ValidatePassword(password string) error {
 	if len(password) < 12 {
 		return errors.New("password must be at least 12 characters")
 	}
-	
+
 	var hasUpper, hasLower, hasNumber, hasSpecial bool
 	for _, char := range password {
 		switch {
@@ -76,7 +76,7 @@ func ValidatePassword(password string) error {
 			hasSpecial = true
 		}
 	}
-	
+
 	if !hasUpper {
 		return errors.New("password must contain at least one uppercase letter")
 	}
@@ -89,24 +89,24 @@ func ValidatePassword(password string) error {
 	if !hasSpecial {
 		return errors.New("password must contain at least one special character")
 	}
-	
+
 	return nil
 }
 
 func SanitizeInput(input string) string {
 	input = strings.ReplaceAll(input, "\x00", "")
 	input = strings.TrimSpace(input)
-	
+
 	if len(input) > 10000 {
 		input = input[:10000]
 	}
-	
+
 	for _, pattern := range sqlInjectionPatterns {
 		if strings.Contains(strings.ToLower(input), pattern) {
 			input = strings.ReplaceAll(input, pattern, "")
 		}
 	}
-	
+
 	return input
 }
 
@@ -114,16 +114,16 @@ func ValidateFileUpload(file multipart.File, header *multipart.FileHeader, maxSi
 	if header.Size > maxSize {
 		return errors.New("file size exceeds limit")
 	}
-	
+
 	buffer := make([]byte, 512)
 	_, err := file.Read(buffer)
 	if err != nil {
 		return err
 	}
 	file.Seek(0, 0)
-	
+
 	contentType := http.DetectContentType(buffer)
-	
+
 	allowed := false
 	for _, t := range allowedTypes {
 		if contentType == t {
@@ -131,11 +131,11 @@ func ValidateFileUpload(file multipart.File, header *multipart.FileHeader, maxSi
 			break
 		}
 	}
-	
+
 	if !allowed {
 		return errors.New("file type not allowed")
 	}
-	
+
 	return nil
 }
 
@@ -160,7 +160,7 @@ func ContainsXSSPattern(input string) bool {
 		"<embed",
 		"<object",
 	}
-	
+
 	lowered := strings.ToLower(input)
 	for _, pattern := range xssPatterns {
 		if strings.Contains(lowered, pattern) {

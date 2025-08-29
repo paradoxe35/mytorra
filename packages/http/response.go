@@ -28,19 +28,19 @@ type Meta struct {
 func RespondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	
+
 	response := Response{
 		Success: status < 400,
 		Data:    data,
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func RespondError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	
+
 	response := Response{
 		Success: false,
 		Error: &ErrorInfo{
@@ -48,14 +48,14 @@ func RespondError(w http.ResponseWriter, status int, code, message string) {
 			Message: message,
 		},
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func RespondErrorWithDetails(w http.ResponseWriter, status int, code, message, details string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	
+
 	response := Response{
 		Success: false,
 		Error: &ErrorInfo{
@@ -64,19 +64,19 @@ func RespondErrorWithDetails(w http.ResponseWriter, status int, code, message, d
 			Details: details,
 		},
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }
 
 func RespondWithMeta(w http.ResponseWriter, status int, data interface{}, meta *Meta) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	
+
 	response := Response{
 		Success: status < 400,
 		Data:    data,
 		Meta:    meta,
 	}
-	
+
 	json.NewEncoder(w).Encode(response)
 }

@@ -9,14 +9,14 @@ import (
 type ErrorType string
 
 const (
-	ErrorTypeValidation   ErrorType = "VALIDATION"
+	ErrorTypeValidation    ErrorType = "VALIDATION"
 	ErrorTypeAuthorization ErrorType = "AUTHORIZATION"
-	ErrorTypeNotFound     ErrorType = "NOT_FOUND"
-	ErrorTypeConflict     ErrorType = "CONFLICT"
-	ErrorTypeInternal     ErrorType = "INTERNAL"
-	ErrorTypeExternal     ErrorType = "EXTERNAL"
-	ErrorTypeRateLimit    ErrorType = "RATE_LIMIT"
-	ErrorTypeBadRequest   ErrorType = "BAD_REQUEST"
+	ErrorTypeNotFound      ErrorType = "NOT_FOUND"
+	ErrorTypeConflict      ErrorType = "CONFLICT"
+	ErrorTypeInternal      ErrorType = "INTERNAL"
+	ErrorTypeExternal      ErrorType = "EXTERNAL"
+	ErrorTypeRateLimit     ErrorType = "RATE_LIMIT"
+	ErrorTypeBadRequest    ErrorType = "BAD_REQUEST"
 )
 
 type AppError struct {

@@ -1,7 +1,6 @@
 ### Project Setup & Infrastructure
 [] Initialize monorepo structure with Go workspace
     [] Create go.work file for workspace management
-    [] Setup Turborepo configuration (turbo.json)
     [] Create base directory structure (services/, packages/, apps/, infra/, docs/, tests/)
     [] Initialize git repository with .gitignore
     [] Setup pre-commit hooks for gofmt and linting

@@ -457,18 +457,67 @@ func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
 
 ---
 
-## 8. Testing Requirements
+## 8. Testing Requirements (MANDATORY)
 
-### 8.1 Test Coverage
+### 8.1 Test Coverage & Execution
 
 - **Minimum Coverage**: 80% for business logic
+- **MANDATORY**: Run `make test` before EVERY commit
 - **Test Types Required**:
   - Unit tests for all domain logic
   - Integration tests for repositories
   - Contract tests for API endpoints
   - Load tests for critical paths
+- **Test Execution**: ALL tests must pass before committing code
+- **CI/CD**: Tests run automatically on every push
 
-### 8.2 Testing Patterns
+### 8.2 Test File Organization
+
+```
+service/
+├── internal/
+│   ├── domain/
+│   │   ├── user.go
+│   │   └── user_test.go          # Unit tests next to code
+│   ├── application/
+│   │   ├── user_service.go
+│   │   └── user_service_test.go
+│   └── adapters/
+│       ├── postgres/
+│       │   ├── user_repo.go
+│       │   └── user_repo_test.go # Integration tests
+│       └── http/
+│           ├── user_handler.go
+│           └── user_handler_test.go
+└── tests/
+    ├── integration/               # Full integration tests
+    ├── e2e/                      # End-to-end tests
+    └── load/                     # Load tests
+```
+
+### 8.3 Testing Commands
+
+```bash
+# Run all tests
+make test
+
+# Run tests with coverage
+make test-coverage
+
+# Run tests for specific service
+make test-service SERVICE=core
+
+# Run integration tests only
+make test-integration
+
+# Run tests with race detection
+make test-race
+
+# Generate coverage report
+make coverage-html
+```
+
+### 8.4 Testing Patterns
 
 ```go
 // Unit test example
@@ -1192,12 +1241,50 @@ groups:
 
 ---
 
-## 15. Compliance Checklist
+## 15. Development Workflow (MANDATORY)
+
+### 15.1 Before Every Commit
+
+```bash
+# 1. Format your code
+make fmt
+
+# 2. Run linters
+make lint
+
+# 3. Run ALL tests
+make test
+
+# 4. Check test coverage
+make test-coverage
+
+# If all pass, then commit
+git add .
+git commit -m "feat: your feature description"
+```
+
+### 15.2 Before Opening Pull Request
+
+```bash
+# Run complete validation
+make validate
+
+# This runs:
+# - Format check
+# - Lint
+# - All tests
+# - Coverage check
+# - Security scan
+# - Build verification
+```
+
+## 16. Compliance Checklist
 
 Before deploying any service to production, ensure:
 
 - [ ] Clean architecture implemented
 - [ ] All tests passing with >80% coverage
+- [ ] `make validate` passes without errors
 - [ ] OpenAPI documentation complete
 - [ ] Security headers configured
 - [ ] Rate limiting implemented

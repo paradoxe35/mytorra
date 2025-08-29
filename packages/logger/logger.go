@@ -14,9 +14,9 @@ type Logger struct {
 
 func New(serviceName, environment string) *Logger {
 	var handler slog.Handler
-	
+
 	opts := &slog.HandlerOptions{
-		Level: getLogLevel(environment),
+		Level:     getLogLevel(environment),
 		AddSource: environment == "development",
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			if a.Key == slog.TimeKey {
@@ -25,19 +25,19 @@ func New(serviceName, environment string) *Logger {
 			return a
 		},
 	}
-	
+
 	if environment == "development" {
 		handler = slog.NewTextHandler(os.Stdout, opts)
 	} else {
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	}
-	
+
 	logger := slog.New(handler).With(
 		slog.String("service", serviceName),
 		slog.String("environment", environment),
 		slog.String("version", getVersion()),
 	)
-	
+
 	return &Logger{logger}
 }
 
@@ -100,7 +100,7 @@ func (l *Logger) LogPanic(r interface{}) {
 	const size = 64 << 10
 	buf := make([]byte, size)
 	buf = buf[:runtime.Stack(buf, false)]
-	
+
 	l.Error("panic recovered",
 		slog.Any("panic", r),
 		slog.String("stack", string(buf)),

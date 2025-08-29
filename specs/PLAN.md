@@ -23,7 +23,9 @@ mytorra-platform/
 ├── .gitignore
 ├── README.md
 ├── go.work
-├── turbo.json          # Monorepo orchestrator configuration
+├── Makefile
+├── .golangci.yml
+├── .pre-commit-config.yaml
 │
 ├── services/
 │   └── core/
@@ -103,7 +105,6 @@ This section prescribes the specific tools, libraries, and enforceable best prac
 
 | Category                  | Technology / Tool                              | Rationale & Implementation Details                                                                                                                                                                                                                                                                                                                             |
 | :------------------------ | :--------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Monorepo Orchestrator** | **Turborepo**                                  | **Why:** Simplifies running tasks (build, test, lint) across the monorepo. It caches outputs and only runs tasks on services that have changed, dramatically speeding up local development and CI pipelines. **Implementation:** A `turbo.json` file at the root will define the task pipeline.                                                                |
 | **Web Framework**         | **Chi**                                        | **Why:** Robust, idiomatic, and fully compatible with the Go `net/http` ecosystem. Recommended over Fiber for its standard library compliance and broader middleware support, which is critical for observability and security integrations.                                                                                                                   |
 | **Database**              | **Managed PostgreSQL** + **PostGIS**           | **Why:** Reliable primary data store with powerful geospatial capabilities. Using a managed service (Cloud SQL / RDS) offloads complex operational tasks like backups, patching, and replication.                                                                                                                                                              |
 | **Database ORM/Lib**      | **sqlx** (`github.com/jmoiron/sqlx`)           | **Why:** Provides powerful, non-intrusive extensions to the standard `database/sql` package without the overhead of a full ORM. It simplifies scanning query results into structs and handling named parameters. **Implementation:** `sqlx` will be used within the persistence adapters (e.g., `internal/adapters/postgres/`) to execute the handwritten SQL. |

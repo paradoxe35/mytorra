@@ -57,11 +57,11 @@ type RedisConfig struct {
 }
 
 type RabbitMQConfig struct {
-	URL            string `mapstructure:"url"`
-	Exchange       string `mapstructure:"exchange"`
-	Queue          string `mapstructure:"queue"`
-	ConsumerTag    string `mapstructure:"consumer_tag"`
-	PrefetchCount  int    `mapstructure:"prefetch_count"`
+	URL            string        `mapstructure:"url"`
+	Exchange       string        `mapstructure:"exchange"`
+	Queue          string        `mapstructure:"queue"`
+	ConsumerTag    string        `mapstructure:"consumer_tag"`
+	PrefetchCount  int           `mapstructure:"prefetch_count"`
 	ReconnectDelay time.Duration `mapstructure:"reconnect_delay"`
 }
 
@@ -122,14 +122,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.read_timeout", "30s")
 	v.SetDefault("server.write_timeout", "30s")
 	v.SetDefault("server.idle_timeout", "120s")
-	
+
 	v.SetDefault("database.host", "localhost")
 	v.SetDefault("database.port", 5432)
 	v.SetDefault("database.ssl_mode", "disable")
 	v.SetDefault("database.max_open_conns", 25)
 	v.SetDefault("database.max_idle_conns", 25)
 	v.SetDefault("database.conn_max_lifetime", "5m")
-	
+
 	v.SetDefault("redis.host", "localhost")
 	v.SetDefault("redis.port", 6379)
 	v.SetDefault("redis.database", 0)
@@ -138,10 +138,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.dial_timeout", "5s")
 	v.SetDefault("redis.read_timeout", "3s")
 	v.SetDefault("redis.write_timeout", "3s")
-	
+
 	v.SetDefault("rabbitmq.prefetch_count", 1)
 	v.SetDefault("rabbitmq.reconnect_delay", "5s")
-	
+
 	v.SetDefault("jwt.access_duration", "15m")
 	v.SetDefault("jwt.refresh_duration", "7d")
 	v.SetDefault("jwt.issuer", "mytorra")
@@ -151,15 +151,15 @@ func validate(cfg *Config) error {
 	if cfg.Service.Name == "" {
 		return fmt.Errorf("service name is required")
 	}
-	
+
 	if cfg.Database.Host != "" && cfg.Database.Database == "" {
 		return fmt.Errorf("database name is required when host is specified")
 	}
-	
+
 	if cfg.JWT.Secret == "" && cfg.Service.Environment == "production" {
 		return fmt.Errorf("JWT secret is required in production")
 	}
-	
+
 	return nil
 }
 
