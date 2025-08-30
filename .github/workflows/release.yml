@@ -3,16 +3,16 @@ name: Release Pipeline
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: "Release version (e.g., v1.0.0)"
         required: true
         type: string
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: "1.25"
   REGISTRY: docker.io
 
 jobs:
@@ -73,7 +73,8 @@ jobs:
     needs: prepare
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service:
+          [core, marketplace, delivery, booking, torracab, media, realtime]
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
         exclude:
@@ -144,7 +145,8 @@ jobs:
     needs: prepare
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service:
+          [core, marketplace, delivery, booking, torracab, media, realtime]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -195,7 +197,7 @@ jobs:
       - name: Setup Helm
         uses: azure/setup-helm@v4
         with:
-          version: 'latest'
+          version: "latest"
 
       - name: Update chart versions
         run: |

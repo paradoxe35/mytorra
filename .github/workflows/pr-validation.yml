@@ -10,7 +10,7 @@ permissions:
   pull-requests: write
 
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: "1.25"
   MIN_COVERAGE: 80
 
 jobs:
@@ -47,15 +47,15 @@ jobs:
         uses: CodelyTV/pr-size-labeler@v1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          xs_label: 'size/xs'
+          xs_label: "size/xs"
           xs_max_size: 10
-          s_label: 'size/s'
+          s_label: "size/s"
           s_max_size: 100
-          m_label: 'size/m'
+          m_label: "size/m"
           m_max_size: 500
-          l_label: 'size/l'
+          l_label: "size/l"
           l_max_size: 1000
-          xl_label: 'size/xl'
+          xl_label: "size/xl"
 
   # Run tests with coverage check
   test-coverage:
@@ -97,7 +97,7 @@ jobs:
           coverage-badge-filename: coverage.svg
           coverage-label: Coverage
           coverage-percentage: ${{ steps.coverage.outputs.coverage }}
-          colors: '#4c1 #97ca00 #a4a61d #dfb317 #fe7d37 #e05d44'
+          colors: "#4c1 #97ca00 #a4a61d #dfb317 #fe7d37 #e05d44"
           intervals: 90 80 70 60 50 0
 
       - name: Comment PR with coverage

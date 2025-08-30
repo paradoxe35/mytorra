@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, develop, feature/*]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, feature/*]
   workflow_dispatch:
 
 permissions:
@@ -13,8 +13,8 @@ permissions:
   security-events: write
 
 env:
-  GO_VERSION: '1.25'
-  NODE_VERSION: '20'
+  GO_VERSION: "1.25"
+  NODE_VERSION: "20"
 
 jobs:
   # Build job - compiles all services
@@ -23,7 +23,8 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service:
+          [core, marketplace, delivery, booking, torracab, media, realtime]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -222,7 +223,7 @@ jobs:
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master
         with:
-          args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
+          args: "-no-fail -fmt sarif -out gosec-results.sarif ./..."
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v3
@@ -237,11 +238,11 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v3
@@ -256,7 +257,8 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service:
+          [core, marketplace, delivery, booking, torracab, media, realtime]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
