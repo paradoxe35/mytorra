@@ -18,7 +18,7 @@ type RabbitMQAdapter struct {
 	channel      *amqp.Channel
 	exchange     string
 	routingKey   string
-	logger       *logger.Logger
+	logger       logger.Interface
 	publishQueue chan publishRequest
 	done         chan bool
 }
@@ -30,7 +30,7 @@ type publishRequest struct {
 }
 
 // NewRabbitMQEventPublisher creates a new RabbitMQ event publisher
-func NewRabbitMQEventPublisher(cfg *config.RabbitMQConfig, logger *logger.Logger) (EventPublisher, error) {
+func NewRabbitMQEventPublisher(cfg *config.RabbitMQConfig, logger logger.Interface) (EventPublisher, error) {
 	conn, err := amqp.Dial(cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to RabbitMQ: %w", err)

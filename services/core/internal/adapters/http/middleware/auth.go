@@ -13,10 +13,10 @@ import (
 
 type AuthMiddleware struct {
 	jwtSecret []byte
-	logger    *logger.Logger
+	logger    logger.Interface
 }
 
-func NewAuthMiddleware(jwtSecret string, logger *logger.Logger) *AuthMiddleware {
+func NewAuthMiddleware(jwtSecret string, logger logger.Interface) *AuthMiddleware {
 	return &AuthMiddleware{
 		jwtSecret: []byte(jwtSecret),
 		logger:    logger,

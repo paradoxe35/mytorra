@@ -314,7 +314,7 @@ func TestResetPasswordRequest_Validate(t *testing.T) {
 				ConfirmPassword: "DifferentPass123!@#",
 			},
 			wantErr: true,
-			errMsg:  "mismatch",
+			errMsg:  "Passwords do not match",
 		},
 	}
 

@@ -2,14 +2,13 @@ package ports
 
 import (
 	"context"
+
+	"github.com/paradoxe35/torra/packages/events"
 )
 
-// EventPublisher defines the interface for publishing domain events
-type EventPublisher interface {
-	Publish(ctx context.Context, event interface{}) error
-	PublishAsync(ctx context.Context, event interface{}) error
-	PublishBatch(ctx context.Context, events []interface{}) error
-}
+// EventPublisher is an alias to the shared events interface
+// This allows the application layer to use the standardized events interface
+type EventPublisher = events.EventPublisher
 
 // EventConsumer defines the interface for consuming domain events
 type EventConsumer interface {

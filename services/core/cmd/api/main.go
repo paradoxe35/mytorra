@@ -65,12 +65,10 @@ func main() {
 	areaRepo := repositories.NewAreaRepository(db)
 
 	// Initialize event publisher
-	// Cast to concrete logger for events (needs concrete type)
-	concreteLogger := appLogger.(*logger.Logger)
-	eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, concreteLogger)
+	eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, appLogger)
 	if err != nil {
 		appLogger.Warn(fmt.Sprintf("Failed to connect to RabbitMQ: %v. Using simple publisher", err))
-		eventPublisher = &events.SimpleEventPublisher{Logger: concreteLogger}
+		eventPublisher = &events.SimpleEventPublisher{Logger: appLogger}
 	}
 	defer eventPublisher.Close()
 
@@ -103,11 +101,11 @@ func main() {
 	)
 
 	// Initialize HTTP handlers
-	authHandler := handlers.NewAuthHandler(authService, userService, concreteLogger)
-	userHandler := handlers.NewUserHandler(userService, concreteLogger)
+	authHandler := handlers.NewAuthHandler(authService, userService, appLogger)
+	userHandler := handlers.NewUserHandler(userService, appLogger)
 
 	// Initialize middleware
-	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, concreteLogger)
+	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, appLogger)
 
 	// Setup router
 	router := adaptersHTTP.NewRouter(authHandler, userHandler, authMiddleware)

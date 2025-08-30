@@ -14,10 +14,10 @@ import (
 
 type UserHandler struct {
 	userService *services.UserService
-	logger      *logger.Logger
+	logger      logger.Interface
 }
 
-func NewUserHandler(userService *services.UserService, logger *logger.Logger) *UserHandler {
+func NewUserHandler(userService *services.UserService, logger logger.Interface) *UserHandler {
 	return &UserHandler{
 		userService: userService,
 		logger:      logger,
