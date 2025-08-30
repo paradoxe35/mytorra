@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/stretchr/testify/mock"
 )
@@ -44,4 +45,39 @@ func (m *MockEvent) EventType() string {
 func (m *MockEvent) EventData() interface{} {
 	args := m.Called()
 	return args.Get(0)
+}
+
+// SimpleEventPublisher is a simple mock implementation for logging events
+type SimpleEventPublisher struct {
+	Logger interface {
+		Debug(string, ...any)
+	}
+}
+
+func (m *SimpleEventPublisher) Publish(ctx context.Context, event interface{}) error {
+	if m.Logger != nil {
+		m.Logger.Debug(fmt.Sprintf("Publishing event: %+v", event))
+	}
+	return nil
+}
+
+func (m *SimpleEventPublisher) PublishAsync(ctx context.Context, event interface{}) error {
+	if m.Logger != nil {
+		m.Logger.Debug(fmt.Sprintf("Publishing async event: %+v", event))
+	}
+	return nil
+}
+
+func (m *SimpleEventPublisher) PublishBatch(ctx context.Context, events []interface{}) error {
+	if m.Logger != nil {
+		m.Logger.Debug(fmt.Sprintf("Publishing batch events: %d events", len(events)))
+	}
+	return nil
+}
+
+func (m *SimpleEventPublisher) Close() error {
+	if m.Logger != nil {
+		m.Logger.Debug("Closing simple event publisher")
+	}
+	return nil
 }

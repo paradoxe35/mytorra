@@ -27,7 +27,7 @@ type UserService struct {
 	areaService    *AreaService
 	eventPublisher ports.EventPublisher
 	cache          ports.Cache
-	logger         *logger.Logger
+	logger         logger.Interface
 	translator     *i18n.Translator
 }
 
@@ -36,7 +36,7 @@ func NewUserService(
 	areaService *AreaService,
 	eventPublisher ports.EventPublisher,
 	cache ports.Cache,
-	logger *logger.Logger,
+	logger logger.Interface,
 	translator *i18n.Translator,
 ) *UserService {
 	return &UserService{
@@ -306,7 +306,8 @@ func (s *UserService) EnableMFA(ctx context.Context, userID uuid.UUID) (*dtos.En
 		return nil, appErrors.InternalError(s.translator.TWithContext(ctx, "error.internal"))
 	}
 
-	user.MFASecret = string(secret)
+	secretStr := string(secret)
+	user.MFASecret = &secretStr
 	user.MFAEnabled = true
 	user.UpdatedAt = time.Now()
 
@@ -339,8 +340,8 @@ func (s *UserService) DisableMFA(ctx context.Context, userID uuid.UUID, req dtos
 		if err := security.CheckPassword(req.Password, user.PasswordHash); err != nil {
 			return appErrors.ValidationError(s.translator.TWithContext(ctx, "auth.invalid_password"))
 		}
-	} else if req.Code != "" {
-		valid, err := security.VerifyMFACode(req.Code, user.MFASecret)
+	} else if req.MFACode != "" {
+		valid, err := security.VerifyMFACode(req.MFACode, *user.MFASecret)
 		if err != nil || !valid {
 			return appErrors.ValidationError(s.translator.TWithContext(ctx, "mfa.invalid_code"))
 		}
@@ -349,7 +350,7 @@ func (s *UserService) DisableMFA(ctx context.Context, userID uuid.UUID, req dtos
 	}
 
 	user.MFAEnabled = false
-	user.MFASecret = ""
+	user.MFASecret = nil
 	user.UpdatedAt = time.Now()
 
 	if err := s.userRepo.Update(ctx, user); err != nil {

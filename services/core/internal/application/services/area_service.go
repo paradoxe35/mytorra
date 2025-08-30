@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/paradoxe35/torra/packages/logger"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
@@ -17,14 +18,14 @@ type AreaService struct {
 	areaRepo       ports.AreaRepository
 	eventPublisher ports.EventPublisher
 	cache          ports.Cache
-	logger         ports.Logger
+	logger         logger.Interface
 }
 
 func NewAreaService(
 	areaRepo ports.AreaRepository,
 	eventPublisher ports.EventPublisher,
 	cache ports.Cache,
-	logger ports.Logger,
+	logger logger.Interface,
 ) *AreaService {
 	return &AreaService{
 		areaRepo:       areaRepo,

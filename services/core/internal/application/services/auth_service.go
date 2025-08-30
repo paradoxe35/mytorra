@@ -21,7 +21,7 @@ import (
 type AuthService struct {
 	userRepo        ports.UserRepository
 	cache           ports.Cache
-	logger          *logger.Logger
+	logger          logger.Interface
 	translator      *i18n.Translator
 	jwtSecret       []byte
 	jwtIssuer       string
@@ -32,7 +32,7 @@ type AuthService struct {
 func NewAuthService(
 	userRepo ports.UserRepository,
 	cache ports.Cache,
-	logger *logger.Logger,
+	logger logger.Interface,
 	translator *i18n.Translator,
 	jwtSecret string,
 	jwtIssuer string,

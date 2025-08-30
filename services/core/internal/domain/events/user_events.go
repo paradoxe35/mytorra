@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	EventTypeUserCreated  = "user.created"
-	EventTypeUserVerified = "user.verified"
-	EventTypeUserDeleted  = "user.deleted"
-	EventTypeUserUpdated  = "user.updated"
+	EventTypeUserCreated             = "user.created"
+	EventTypeUserVerified            = "user.verified"
+	EventTypeUserDeleted             = "user.deleted"
+	EventTypeUserUpdated             = "user.updated"
+	EventTypeIDVerificationSubmitted = "user.id_verification_submitted"
 )
 
 type UserCreatedEvent struct {
@@ -72,5 +73,25 @@ func NewUserDeletedEvent(userID uuid.UUID) UserDeletedEvent {
 		DeletedAt: time.Now(),
 		EventType: EventTypeUserDeleted,
 		Version:   "1.0",
+	}
+}
+
+type IDVerificationSubmittedEvent struct {
+	EventID     string    `json:"event_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Filename    string    `json:"filename"`
+	SubmittedAt time.Time `json:"submitted_at"`
+	EventType   string    `json:"event_type"`
+	Version     string    `json:"version"`
+}
+
+func NewIDVerificationSubmittedEvent(userID uuid.UUID, filename string) IDVerificationSubmittedEvent {
+	return IDVerificationSubmittedEvent{
+		EventID:     uuid.New().String(),
+		UserID:      userID,
+		Filename:    filename,
+		SubmittedAt: time.Now(),
+		EventType:   EventTypeIDVerificationSubmitted,
+		Version:     "1.0",
 	}
 }

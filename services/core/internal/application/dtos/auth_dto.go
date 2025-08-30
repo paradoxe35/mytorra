@@ -253,6 +253,14 @@ type VerifyPhoneRequest struct {
 	Code string `json:"code" validate:"required,len=6,numeric"`
 }
 
+// Validate performs validation
+func (r *VerifyPhoneRequest) Validate(ctx context.Context, translator *i18n.Translator) error {
+	if err := validate.Struct(r); err != nil {
+		return errors.ValidationError(translator.TWithContext(ctx, "validation.invalid_code"))
+	}
+	return nil
+}
+
 // EnableMFARequest represents MFA enablement request
 type EnableMFARequest struct {
 	Password string `json:"password" validate:"required"`

@@ -12,7 +12,9 @@ type Logger struct {
 	*slog.Logger
 }
 
-func New(serviceName, environment string) *Logger {
+// New creates a new logger using the default Logger implementation
+// This maintains backward compatibility while allowing for future extensibility
+func New(serviceName, environment string) Interface {
 	var handler slog.Handler
 
 	opts := &slog.HandlerOptions{
@@ -41,6 +43,37 @@ func New(serviceName, environment string) *Logger {
 	return &Logger{logger}
 }
 
+// NewSlog creates a new logger using the pure slog adapter
+// This allows services to use slog directly while maintaining interface compatibility
+func NewSlog(serviceName, environment string) Interface {
+	var handler slog.Handler
+
+	opts := &slog.HandlerOptions{
+		Level:     getLogLevel(environment),
+		AddSource: environment == "development",
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.String("timestamp", time.Now().UTC().Format(time.RFC3339))
+			}
+			return a
+		},
+	}
+
+	if environment == "development" {
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	} else {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	}
+
+	return NewSlogAdapterWithOptions(serviceName, environment, handler)
+}
+
+// NewWithSlogHandler creates a logger with a custom slog handler
+// This provides maximum flexibility for different logging backends
+func NewWithSlogHandler(serviceName, environment string, handler slog.Handler) Interface {
+	return NewSlogAdapterWithOptions(serviceName, environment, handler)
+}
+
 func getLogLevel(environment string) slog.Level {
 	switch environment {
 	case "production":
@@ -59,22 +92,22 @@ func getVersion() string {
 	return "unknown"
 }
 
-func (l *Logger) WithContext(ctx context.Context) *Logger {
+func (l *Logger) WithContext(ctx context.Context) Interface {
 	if requestID := ctx.Value("request_id"); requestID != nil {
 		return &Logger{l.With(slog.String("request_id", requestID.(string)))}
 	}
 	return l
 }
 
-func (l *Logger) WithError(err error) *Logger {
+func (l *Logger) WithError(err error) Interface {
 	return &Logger{l.With(slog.String("error", err.Error()))}
 }
 
-func (l *Logger) WithField(key string, value any) *Logger {
+func (l *Logger) WithField(key string, value any) Interface {
 	return &Logger{l.With(slog.Any(key, value))}
 }
 
-func (l *Logger) WithFields(fields map[string]any) *Logger {
+func (l *Logger) WithFields(fields map[string]any) Interface {
 	attrs := make([]any, 0, len(fields)*2)
 	for k, v := range fields {
 		attrs = append(attrs, slog.Any(k, v))

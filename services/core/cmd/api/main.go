@@ -65,10 +65,12 @@ func main() {
 	areaRepo := repositories.NewAreaRepository(db)
 
 	// Initialize event publisher
-	eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, appLogger)
+	// Cast to concrete logger for events (needs concrete type)
+	concreteLogger := appLogger.(*logger.Logger)
+	eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, concreteLogger)
 	if err != nil {
-		appLogger.Warn(fmt.Sprintf("Failed to connect to RabbitMQ: %v. Using mock publisher", err))
-		eventPublisher = &mockEventPublisher{logger: appLogger}
+		appLogger.Warn(fmt.Sprintf("Failed to connect to RabbitMQ: %v. Using simple publisher", err))
+		eventPublisher = &events.SimpleEventPublisher{Logger: concreteLogger}
 	}
 	defer eventPublisher.Close()
 
@@ -101,11 +103,11 @@ func main() {
 	)
 
 	// Initialize HTTP handlers
-	authHandler := handlers.NewAuthHandler(authService, userService, appLogger)
-	userHandler := handlers.NewUserHandler(userService, appLogger)
+	authHandler := handlers.NewAuthHandler(authService, userService, concreteLogger)
+	userHandler := handlers.NewUserHandler(userService, concreteLogger)
 
 	// Initialize middleware
-	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, appLogger)
+	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, concreteLogger)
 
 	// Setup router
 	router := adaptersHTTP.NewRouter(authHandler, userHandler, authMiddleware)
@@ -145,29 +147,4 @@ func main() {
 	}
 
 	appLogger.Info("Server exited")
-}
-
-// Temporary mock event publisher until RabbitMQ adapter is implemented
-type mockEventPublisher struct {
-	logger *logger.Logger
-}
-
-func (m *mockEventPublisher) Publish(ctx context.Context, event interface{}) error {
-	m.logger.Debug(fmt.Sprintf("Publishing event: %+v", event))
-	return nil
-}
-
-func (m *mockEventPublisher) PublishAsync(ctx context.Context, event interface{}) error {
-	m.logger.Debug(fmt.Sprintf("Publishing async event: %+v", event))
-	return nil
-}
-
-func (m *mockEventPublisher) PublishBatch(ctx context.Context, events []interface{}) error {
-	m.logger.Debug(fmt.Sprintf("Publishing batch events: %d events", len(events)))
-	return nil
-}
-
-func (m *mockEventPublisher) Close() error {
-	m.logger.Debug("Closing mock event publisher")
-	return nil
 }
