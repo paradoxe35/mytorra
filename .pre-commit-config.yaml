@@ -40,6 +40,14 @@ repos:
         pass_filenames: false
         description: Ensure go.mod and go.sum are tidy
 
+      - id: go-work-sync
+        name: Go Work Sync
+        entry: bash -c 'if [ -f "go.work" ]; then go work sync; else echo "No go.work file found - skipping workspace sync"; fi'
+        language: system
+        files: 'go\.(work|work\.sum|mod|sum)$'
+        pass_filenames: false
+        description: Synchronize Go workspace dependencies
+
       - id: go-generate
         name: Check Generated Files
         entry: bash -c 'if grep -r "//go:generate" --include="*.go" . 2>/dev/null; then echo "⚠️  Files with go:generate directives found - remember to run go generate"; fi'
