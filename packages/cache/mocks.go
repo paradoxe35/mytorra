@@ -12,6 +12,11 @@ type MockCache struct {
 	mock.Mock
 }
 
+// NewMockCache creates a new MockCache instance
+func NewMockCache() *MockCache {
+	return &MockCache{}
+}
+
 func (m *MockCache) Get(ctx context.Context, key string) ([]byte, error) {
 	args := m.Called(ctx, key)
 	if args.Get(0) == nil {

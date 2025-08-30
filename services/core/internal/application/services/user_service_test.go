@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/paradoxe35/torra/packages/cache"
 	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/repositories"
@@ -25,8 +26,8 @@ func TestUserService_CreateUser(t *testing.T) {
 	// Setup
 	mockRepo := repositories.NewMockUserRepository()
 	mockAreaRepo := repositories.NewMockAreaRepository()
-	mockEventPublisher := repositories.MockEventPublisher{}
-	mockCache := repositories.NewMockCache()
+	mockEventPublisher := &repositories.MockEventPublisher{}
+	mockCache := cache.NewMockCache()
 	mockLogger := logger.NewMockLogger()
 
 	// Create real logger and translator
@@ -271,8 +272,8 @@ func TestUserService_GetUser(t *testing.T) {
 	// Setup
 	mockRepo := repositories.NewMockUserRepository()
 	mockAreaRepo := repositories.NewMockAreaRepository()
-	mockEventPublisher := repositories.MockEventPublisher{}
-	mockCache := repositories.NewMockCache()
+	mockEventPublisher := &repositories.MockEventPublisher{}
+	mockCache := cache.NewMockCache()
 	mockLogger := logger.NewMockLogger()
 
 	testLogger := logger.New("test", "test")
@@ -361,8 +362,8 @@ func BenchmarkUserService_CreateUser(b *testing.B) {
 	// Setup
 	mockRepo := repositories.NewMockUserRepository()
 	mockAreaRepo := repositories.NewMockAreaRepository()
-	mockEventPublisher := repositories.MockEventPublisher{}
-	mockCache := repositories.NewMockCache()
+	mockEventPublisher := &repositories.MockEventPublisher{}
+	mockCache := cache.NewMockCache()
 	mockLogger := logger.NewMockLogger()
 
 	testLogger := logger.New("test", "test")
