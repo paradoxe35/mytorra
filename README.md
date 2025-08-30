@@ -78,8 +78,19 @@ make build-service SERVICE=core  # Build specific service
 make run SERVICE=core  # Run specific service
 make watch            # Watch for changes
 
+# Documentation
+make docs          # Generate API documentation
+make docs-serve    # Generate and serve API docs
+make docs-validate # Validate API documentation
+make docs-check    # Check if docs are up to date
+
+# Internationalization
+make i18n-validate # Validate i18n keys usage
+make i18n-build    # Build i18n validator tool
+make i18n-unused   # Find unused i18n keys
+
 # Validation
-make validate      # Run all checks (fmt, lint, test)
+make validate      # Run all checks (fmt, lint, test, docs, i18n)
 ```
 
 ### Workflow

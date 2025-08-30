@@ -19,7 +19,7 @@ jobs:
   # Prepare release
   prepare:
     name: Prepare Release
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     outputs:
       version: ${{ steps.version.outputs.version }}
       changelog: ${{ steps.changelog.outputs.changelog }}
@@ -69,7 +69,7 @@ jobs:
   # Build release binaries
   build-binaries:
     name: Build Release Binaries
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     needs: prepare
     strategy:
       matrix:
@@ -141,7 +141,7 @@ jobs:
   # Build and push Docker images
   docker-release:
     name: Build and Push Docker Images
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     needs: prepare
     strategy:
       matrix:
@@ -189,7 +189,7 @@ jobs:
   # TODO: Enable Helm charts when infra/helm/ directory is created
   # helm-charts:
   #   name: Package Helm Charts
-  #   runs-on: [self-hosted, linux, x64]
+  #   runs-on: arc-runner-set
   #   needs: prepare
   #   steps:
   #     - name: Checkout code
@@ -235,7 +235,7 @@ jobs:
   # Create GitHub release
   github-release:
     name: Create GitHub Release
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     needs: [prepare, build-binaries, docker-release]
     steps:
       - name: Checkout code
@@ -304,7 +304,7 @@ jobs:
   # TODO: Enable production deployment when Kubernetes infrastructure is ready
   # deploy-production:
   #   name: Deploy to Production
-  #   runs-on: [self-hosted, linux, x64]
+  #   runs-on: arc-runner-set
   #   needs: [github-release, prepare]
   #   environment:
   #     name: production

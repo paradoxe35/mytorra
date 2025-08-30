@@ -34,6 +34,8 @@ setup: ## Initial project setup
 	$(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	$(GO) install github.com/vektra/mockery/v2@latest
 	$(GO) install github.com/swaggo/swag/cmd/swag@latest
+	@echo "$(GREEN)Building custom tools...$(NC)"
+	$(MAKE) i18n-build
 	@echo "$(GREEN)Setup complete!$(NC)"
 
 .PHONY: deps
@@ -330,11 +332,81 @@ docker-logs: ## Show logs from all containers
 .PHONY: docs
 docs: ## Generate API documentation
 	@echo "$(GREEN)Generating API documentation...$(NC)"
+	@mkdir -p docs/api
 	@for svc in $(SERVICES); do \
 		if [ -d "services/$$svc/cmd/api" ]; then \
-			cd services/$$svc && swag init -g cmd/api/main.go -o docs && cd ../..; \
+			echo "Generating docs for $$svc service..."; \
+			cd services/$$svc && swag init -g cmd/api/main.go -o ../../docs/api/$$svc --instanceName $$svc && cd ../..; \
 		fi \
 	done
+	@echo "$(GREEN)API documentation generated in docs/api/$(NC)"
+
+.PHONY: docs-serve
+docs-serve: docs ## Generate and serve API documentation
+	@echo "$(GREEN)Starting documentation server...$(NC)"
+	@if command -v swagger-ui-serve >/dev/null 2>&1; then \
+		swagger-ui-serve docs/api/; \
+	else \
+		echo "$(YELLOW)swagger-ui-serve not found. Install with: npm install -g swagger-ui-serve$(NC)"; \
+		echo "$(YELLOW)Alternatively, open docs/api/*/swagger.json in Swagger Editor$(NC)"; \
+	fi
+
+.PHONY: docs-validate
+docs-validate: ## Validate API documentation
+	@echo "$(GREEN)Validating API documentation...$(NC)"
+	@if command -v swagger-cli >/dev/null 2>&1; then \
+		for spec in docs/api/*/swagger.json; do \
+			if [ -f "$$spec" ]; then \
+				echo "Validating $$spec..."; \
+				swagger-cli validate "$$spec" || exit 1; \
+			fi \
+		done; \
+		echo "$(GREEN)All API specs are valid!$(NC)"; \
+	else \
+		echo "$(YELLOW)swagger-cli not found. Install with: npm install -g @apidevtools/swagger-cli$(NC)"; \
+		exit 1; \
+	fi
+
+.PHONY: docs-check
+docs-check: ## Check if API documentation is up to date
+	@echo "$(GREEN)Checking if API documentation is up to date...$(NC)"
+	@temp_dir=$$(mktemp -d); \
+	cp -r docs/api "$$temp_dir/api_backup" 2>/dev/null || true; \
+	$(MAKE) docs >/dev/null 2>&1; \
+	if ! diff -r "$$temp_dir/api_backup" docs/api >/dev/null 2>&1; then \
+		echo "$(RED)API documentation is out of date. Run 'make docs' to update.$(NC)"; \
+		rm -rf "$$temp_dir"; \
+		exit 1; \
+	else \
+		echo "$(GREEN)API documentation is up to date!$(NC)"; \
+	fi; \
+	rm -rf "$$temp_dir"
+
+#===================#
+#  Internationalization  #
+#===================#
+
+.PHONY: i18n-validate
+i18n-validate: ## Validate i18n keys usage
+	@echo "$(GREEN)Validating i18n keys...$(NC)"
+	@if [ ! -f "tools/i18n-validator/i18n-validator" ]; then \
+		echo "Building i18n validator..."; \
+		cd tools/i18n-validator && $(GO) build -o i18n-validator . && cd ../..; \
+	fi
+	@./tools/i18n-validator/i18n-validator . packages/i18n/locales
+
+.PHONY: i18n-build
+i18n-build: ## Build i18n validator tool
+	@echo "$(GREEN)Building i18n validator...$(NC)"
+	@cd tools/i18n-validator && $(GO) build -o i18n-validator .
+
+.PHONY: i18n-unused
+i18n-unused: ## Find unused i18n keys (non-failing)
+	@echo "$(GREEN)Finding unused i18n keys...$(NC)"
+	@if [ ! -f "tools/i18n-validator/i18n-validator" ]; then \
+		$(MAKE) i18n-build; \
+	fi
+	@./tools/i18n-validator/i18n-validator . packages/i18n/locales || true
 
 #===================#
 #     Security      #
@@ -356,7 +428,7 @@ audit: ## Audit dependencies for vulnerabilities
 #===================#
 
 .PHONY: validate
-validate: fmt-check lint vet test ## Run all validation checks
+validate: fmt-check lint vet test docs-check i18n-validate ## Run all validation checks
 	@echo "$(GREEN)================================$(NC)"
 	@echo "$(GREEN)All validation checks passed! ✓$(NC)"
 	@echo "$(GREEN)================================$(NC)"

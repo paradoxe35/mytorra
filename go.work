@@ -11,4 +11,5 @@ use (
 	./packages/logger
 	./packages/security
 	./services/core
+	./tools/i18n-validator
 )

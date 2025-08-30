@@ -17,7 +17,7 @@ jobs:
   # Check PR title and description
   pr-check:
     name: PR Standards Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Check PR title
         uses: amannn/action-semantic-pull-request@v5
@@ -60,7 +60,7 @@ jobs:
   # Run tests with coverage check
   test-coverage:
     name: Test Coverage Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -132,7 +132,7 @@ jobs:
   # Code quality analysis
   code-quality:
     name: Code Quality Analysis
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -174,7 +174,7 @@ jobs:
   # Documentation check
   docs-check:
     name: Documentation Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -204,22 +204,27 @@ jobs:
             fi
           done
 
-      - name: Validate OpenAPI specs
+      - name: Generate and validate API documentation
         run: |
-          if [ -d "docs/api" ]; then
-            npm install -g @apidevtools/swagger-cli
-            for spec in docs/api/*.yaml; do
-              if [ -f "$spec" ]; then
-                echo "Validating $spec..."
-                swagger-cli validate "$spec"
-              fi
-            done
-          fi
+          # Install swag for documentation generation
+          go install github.com/swaggo/swag/cmd/swag@latest
+
+          # Generate API documentation
+          make docs
+
+          # Install swagger-cli for validation
+          npm install -g @apidevtools/swagger-cli
+
+          # Validate generated documentation
+          make docs-validate
+
+          # Check if documentation is up to date
+          make docs-check
 
   # Dependencies check
   dependencies:
     name: Dependencies Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -246,11 +251,91 @@ jobs:
       #     go install github.com/google/go-licenses@latest
       #     go-licenses check ./... --disallowed_types=forbidden,restricted
 
+  # i18n validation
+  i18n-validation:
+    name: i18n Keys Validation
+    runs-on: arc-runner-set
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build i18n validator
+        run: make i18n-build
+
+      - name: Validate i18n keys
+        run: make i18n-validate
+
+      - name: Check for unused keys (warning only)
+        run: |
+          echo "Checking for unused i18n keys..."
+          make i18n-unused || echo "⚠️ Found unused keys (see output above)"
+
+      - name: Comment PR with i18n validation results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { execSync } = require('child_process');
+
+            try {
+              // Run validation and capture output
+              const output = execSync('make i18n-validate 2>&1', { encoding: 'utf8' });
+
+              const body = `## i18n Validation Report ✅
+
+              All i18n keys are properly validated!
+
+              <details>
+              <summary>Validation Details</summary>
+
+              \`\`\`
+              ${output}
+              \`\`\`
+              </details>`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } catch (error) {
+              const body = `## i18n Validation Report ❌
+
+              **Validation failed!** Please fix the following i18n key issues:
+
+              <details>
+              <summary>Error Details</summary>
+
+              \`\`\`
+              ${error.stdout || error.message}
+              \`\`\`
+              </details>
+
+              **How to fix:**
+              1. Add missing keys to locale files in \`packages/i18n/locales/\`
+              2. Remove unused i18n function calls
+              3. Run \`make i18n-validate\` locally to verify fixes`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }
+
   # Approval gate
   approval:
     name: Approval Requirements
-    runs-on: [self-hosted, linux, x64]
-    needs: [pr-check, test-coverage, code-quality, docs-check, dependencies]
+    runs-on: arc-runner-set
+    needs: [pr-check, test-coverage, code-quality, docs-check, dependencies, i18n-validation]
     steps:
       - name: Check approval status
         uses: actions/github-script@v7
