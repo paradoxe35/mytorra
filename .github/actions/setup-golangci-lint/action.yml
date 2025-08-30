@@ -1,0 +1,30 @@
+name: 'Setup golangci-lint'
+description: 'Install and run golangci-lint with Go 1.25 support'
+inputs:
+  config-file:
+    description: 'Path to golangci-lint config file'
+    required: false
+    default: '.golangci.yml'
+  timeout:
+    description: 'Timeout for golangci-lint'
+    required: false
+    default: '10m'
+  working-directory:
+    description: 'Working directory for golangci-lint'
+    required: false
+    default: '.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install golangci-lint
+      shell: bash
+      run: |
+        # Install latest golangci-lint that supports Go 1.25
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin latest
+
+    - name: Run golangci-lint
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        $(go env GOPATH)/bin/golangci-lint run --timeout=${{ inputs.timeout }} --config=${{ inputs.config-file }}

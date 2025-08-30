@@ -17,74 +17,64 @@ env:
   NODE_VERSION: "20"
 
 jobs:
-  # Build job - compiles all services
+  # Detect existing services dynamically
+  detect-services:
+    name: Detect Services
+    runs-on: arc-runner-set
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      services-count: ${{ steps.detect.outputs.count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect existing services
+        id: detect
+        run: |
+          # Make script executable and run it
+          chmod +x .github/scripts/detect-services.sh
+          SERVICES_JSON=$(.github/scripts/detect-services.sh json)
+          SERVICES_COUNT=$(echo "$SERVICES_JSON" | jq length)
+
+          echo "services=$SERVICES_JSON" >> $GITHUB_OUTPUT
+          echo "count=$SERVICES_COUNT" >> $GITHUB_OUTPUT
+
+          echo "🎯 Detected $SERVICES_COUNT service(s) to build"
+          echo "📋 Services: $SERVICES_JSON"
+
+  # Build services dynamically
   build:
     name: Build Services
     runs-on: arc-runner-set
+    needs: detect-services
+    if: needs.detect-services.outputs.services-count > 0
     strategy:
       matrix:
-        service:
-          [core, marketplace, delivery, booking, torracab, media, realtime]
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: |
-            go.work.sum
-            **/go.sum
+          cache-key-suffix: 'build-${{ matrix.service }}'
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
+      - name: Build service
+        uses: ./.github/actions/build-service
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: |
-          go mod download
-          go work sync
-
-      - name: Build ${{ matrix.service }} service
-        run: |
-          if [ -d "services/${{ matrix.service }}" ]; then
-            echo "Building ${{ matrix.service }} service..."
-            cd services/${{ matrix.service }}
-
-            # Build API if exists
-            if [ -d "cmd/api" ]; then
-              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-                -ldflags="-w -s -X main.Version=${{ github.sha }}" \
-                -o ../../bin/${{ matrix.service }}-api \
-                ./cmd/api
-            fi
-
-            # Build Worker if exists
-            if [ -d "cmd/worker" ]; then
-              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-                -ldflags="-w -s -X main.Version=${{ github.sha }}" \
-                -o ../../bin/${{ matrix.service }}-worker \
-                ./cmd/worker
-            fi
-          else
-            echo "Service ${{ matrix.service }} not yet implemented"
-          fi
+          service-name: ${{ matrix.service }}
+          go-version: ${{ env.GO_VERSION }}
+          build-version: ${{ github.sha }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.service }}-binaries
-          path: bin/
+          path: bin/${{ matrix.service }}-*
           retention-days: 7
 
   # Test job - runs all tests
@@ -179,23 +169,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache-key-suffix: 'docs'
 
-      - name: Install swag
-        run: go install github.com/swaggo/swag/cmd/swag@latest
-
-      - name: Generate API documentation
-        run: make docs
-
-      - name: Install swagger-cli for validation
-        run: npm install -g @apidevtools/swagger-cli
-
-      - name: Validate API documentation
-        run: make docs-validate
+      - name: Setup API Documentation
+        uses: ./.github/actions/setup-api-docs
+        with:
+          validate-docs: 'true'
+          check-up-to-date: 'true'
 
       - name: Upload API documentation
         uses: actions/upload-artifact@v4
@@ -203,9 +187,6 @@ jobs:
           name: api-documentation
           path: docs/api/
           retention-days: 30
-
-      - name: Check if docs are up to date
-        run: make docs-check
 
   # i18n validation
   i18n:
@@ -215,20 +196,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache-key-suffix: 'i18n'
 
-      - name: Build i18n validator
-        run: make i18n-build
-
-      - name: Validate i18n keys
-        run: make i18n-validate
-
-      - name: Check for unused keys (non-failing)
-        run: make i18n-unused
+      - name: Setup i18n Validation
+        uses: ./.github/actions/setup-i18n-validation
+        with:
+          fail-on-missing: 'true'
+          check-unused: 'true'
 
   # Lint job - code quality checks
   lint:
@@ -243,13 +221,11 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+      - name: Setup and Run golangci-lint
+        uses: ./.github/actions/setup-golangci-lint
         with:
-          version: latest
-          args: --timeout=10m --config=.golangci.yml
-          skip-cache: true
-          working-directory: .
+          config-file: '.golangci.yml'
+          timeout: '10m'
 
       - name: Check Go formatting
         run: |
@@ -310,52 +286,47 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-  # TODO: Enable Docker builds when ready to use GitHub Container Registry
-  # docker:
-  #   name: Build Docker Images
-  #   runs-on: arc-runner-set
-  #   needs: [build, test, lint]
-  #   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-  #   strategy:
-  #     matrix:
-  #       service:
-  #         [core, marketplace, delivery, booking, torracab, media, realtime]
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Set up Docker Buildx
-  #       uses: docker/setup-buildx-action@v3
-  #
-  #     - name: Log in to GitHub Container Registry
-  #       uses: docker/login-action@v3
-  #       with:
-  #         registry: ghcr.io
-  #         username: ${{ github.actor }}
-  #         password: ${{ secrets.GITHUB_TOKEN }}
-  #
-  #     - name: Extract metadata
-  #       id: meta
-  #       uses: docker/metadata-action@v5
-  #       with:
-  #         images: ghcr.io/${{ github.repository }}/torra-${{ matrix.service }}
-  #         tags: |
-  #           type=ref,event=branch
-  #           type=ref,event=pr
-  #           type=semver,pattern={{version}}
-  #           type=semver,pattern={{major}}.{{minor}}
-  #           type=sha,prefix={{branch}}-
-  #
-  #     - name: Build and push Docker image
-  #       uses: docker/build-push-action@v5
-  #       with:
-  #         context: ./services/${{ matrix.service }}
-  #         file: ./services/${{ matrix.service }}/Dockerfile.api
-  #         push: ${{ github.event_name != 'pull_request' }}
-  #         tags: ${{ steps.meta.outputs.tags }}
-  #         labels: ${{ steps.meta.outputs.labels }}
-  #         cache-from: type=gha
-  #         cache-to: type=gha,mode=max
+  # Docker build and push - uses dynamic service detection
+  docker:
+    name: Build Docker Images
+    runs-on: arc-runner-set
+    needs: [build, test, lint, detect-services]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && needs.detect-services.outputs.services-count > 0
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/torra-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push service images
+        uses: ./.github/actions/build-push-image
+        with:
+          service-name: ${{ matrix.service }}
+          registry: ghcr.io
+          repository: ${{ github.repository }}
+          tag: ${{ steps.meta.outputs.tags }}
+          push: ${{ github.event_name != 'pull_request' }}
+          platforms: linux/amd64
   #         build-args: |
   #           VERSION=${{ github.sha }}
   #           BUILD_DATE=${{ github.event.head_commit.timestamp }}
@@ -364,8 +335,8 @@ jobs:
   # deploy:
   #   name: Deploy to Environment
   #   runs-on: arc-runner-set
-  #   needs: [docker]
-  #   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+  #   needs: [docker, detect-services]
+  #   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && needs.detect-services.outputs.services-count > 0
   #   environment:
   #     name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
   #     url: ${{ github.ref == 'refs/heads/main' && 'https://torra.com' || 'https://staging.torra.com' }}
@@ -388,8 +359,9 @@ jobs:
   #         kubectl apply -f infra/kubernetes/configmaps/${ENVIRONMENT}/ -n ${NAMESPACE}
   #         kubectl apply -f infra/kubernetes/secrets/${ENVIRONMENT}/ -n ${NAMESPACE}
   #
-  #         # Update image tags
-  #         for service in core marketplace delivery booking torracab media realtime; do
+  #         # Update image tags for detected services
+  #         SERVICES=$(echo '${{ needs.detect-services.outputs.services }}' | jq -r '.[]')
+  #         for service in $SERVICES; do
   #           if [ -f "infra/kubernetes/deployments/${service}.yaml" ]; then
   #             kubectl set image deployment/${service} \
   #               ${service}=ghcr.io/${{ github.repository }}/torra-${service}:${{ github.sha }} \

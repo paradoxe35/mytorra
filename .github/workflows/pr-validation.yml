@@ -65,11 +65,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache-key-suffix: 'pr-check'
 
       - name: Run tests with coverage
         run: |
@@ -179,10 +179,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-key-suffix: 'docs-check'
 
       - name: Check Go doc comments
         run: |
@@ -204,22 +205,11 @@ jobs:
             fi
           done
 
-      - name: Generate and validate API documentation
-        run: |
-          # Install swag for documentation generation
-          go install github.com/swaggo/swag/cmd/swag@latest
-
-          # Generate API documentation
-          make docs
-
-          # Install swagger-cli for validation
-          npm install -g @apidevtools/swagger-cli
-
-          # Validate generated documentation
-          make docs-validate
-
-          # Check if documentation is up to date
-          make docs-check
+      - name: Setup API Documentation
+        uses: ./.github/actions/setup-api-docs
+        with:
+          validate-docs: 'true'
+          check-up-to-date: 'true'
 
   # Dependencies check
   dependencies:
@@ -259,21 +249,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-key-suffix: 'i18n-validation'
 
-      - name: Build i18n validator
-        run: make i18n-build
-
-      - name: Validate i18n keys
-        run: make i18n-validate
-
-      - name: Check for unused keys (warning only)
-        run: |
-          echo "Checking for unused i18n keys..."
-          make i18n-unused || echo "⚠️ Found unused keys (see output above)"
+      - name: Setup i18n Validation
+        uses: ./.github/actions/setup-i18n-validation
+        with:
+          fail-on-missing: 'true'
+          check-unused: 'true'
 
       - name: Comment PR with i18n validation results
         if: always()

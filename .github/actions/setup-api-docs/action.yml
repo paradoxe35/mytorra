@@ -1,0 +1,37 @@
+name: 'Setup API Documentation Tools'
+description: 'Install and setup tools for API documentation generation and validation'
+inputs:
+  validate-docs:
+    description: 'Whether to validate generated documentation'
+    required: false
+    default: 'true'
+  check-up-to-date:
+    description: 'Whether to check if docs are up to date'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install swag
+      shell: bash
+      run: go install github.com/swaggo/swag/cmd/swag@latest
+
+    - name: Generate API documentation
+      shell: bash
+      run: make docs
+
+    - name: Install swagger-cli for validation
+      if: inputs.validate-docs == 'true'
+      shell: bash
+      run: npm install -g @apidevtools/swagger-cli
+
+    - name: Validate API documentation
+      if: inputs.validate-docs == 'true'
+      shell: bash
+      run: make docs-validate
+
+    - name: Check if docs are up to date
+      if: inputs.check-up-to-date == 'true'
+      shell: bash
+      run: make docs-check
