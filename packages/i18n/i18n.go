@@ -2,15 +2,19 @@ package i18n
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"golang.org/x/text/message/catalog"
 )
+
+//go:embed locales/*.json
+var localesFS embed.FS
 
 type Translator struct {
 	printers    map[string]*message.Printer
@@ -171,7 +175,49 @@ func ParseAcceptLanguage(header string, supported []string) string {
 
 // initializeMessages initializes the message catalog with all translations
 func (t *Translator) initializeMessages() {
-	t.messages = getValidationMessages()
+	// Load messages from embedded JSON files
+	t.messages = make(map[string]map[string]string)
+
+	// Try to load from embedded files
+	if err := t.loadMessagesFromEmbedded(); err != nil {
+		// Fallback to hardcoded messages if embedded files fail
+		t.messages = getValidationMessages()
+	}
+}
+
+// loadMessagesFromEmbedded loads messages from embedded JSON files
+func (t *Translator) loadMessagesFromEmbedded() error {
+	entries, err := localesFS.ReadDir("locales")
+	if err != nil {
+		return fmt.Errorf("failed to read locales directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		// Extract language code from filename (e.g., "en.json" -> "en")
+		lang := strings.TrimSuffix(entry.Name(), ".json")
+
+		// Read the JSON file
+		data, err := localesFS.ReadFile(path.Join("locales", entry.Name()))
+		if err != nil {
+			fmt.Printf("Warning: failed to read %s: %v\n", entry.Name(), err)
+			continue
+		}
+
+		// Parse JSON
+		var messages map[string]string
+		if err := json.Unmarshal(data, &messages); err != nil {
+			fmt.Printf("Warning: failed to parse %s: %v\n", entry.Name(), err)
+			continue
+		}
+
+		t.messages[lang] = messages
+	}
+
+	return nil
 }
 
 // getValidationMessages returns common validation messages

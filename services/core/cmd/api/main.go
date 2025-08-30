@@ -10,63 +10,96 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/spf13/viper"
+	// Shared packages
+	"github.com/paradoxe35/torra/packages/cache"
+	"github.com/paradoxe35/torra/packages/config"
+	"github.com/paradoxe35/torra/packages/database"
+	"github.com/paradoxe35/torra/packages/i18n"
+	"github.com/paradoxe35/torra/packages/logger"
+
+	// Internal packages
+	adaptersHTTP "github.com/paradoxe35/torra/services/core/internal/adapters/http"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/repositories"
+	"github.com/paradoxe35/torra/services/core/internal/application/services"
 )
 
 func main() {
 	// Load configuration
-	cfg, err := loadConfig()
+	cfg, err := config.Load("configs/config.yaml")
 	if err != nil {
 		log.Fatal("Failed to load configuration:", err)
 	}
 
-	// Initialize router
-	r := chi.NewRouter()
+	// Initialize logger
+	appLogger := logger.New(cfg.Service.Name, cfg.Service.Environment)
 
-	// Global middleware
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Timeout(cfg.Server.ReadTimeout))
+	// Initialize translator
+	translator, err := i18n.New("en")
+	if err != nil {
+		appLogger.Fatal("Failed to initialize translator")
+	}
 
-	// Health check endpoints
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy"}`))
-	})
+	// Initialize database
+	db, err := database.New(&cfg.Database)
+	if err != nil {
+		appLogger.Fatal("Failed to connect to database")
+	}
+	defer db.Close()
 
-	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Check database, redis, etc.
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"ready"}`))
-	})
+	// Initialize cache
+	cacheClient, err := cache.NewRedisCache(&cfg.Redis, "core")
+	if err != nil {
+		appLogger.Fatal("Failed to connect to cache")
+	}
+	defer cacheClient.Close()
 
-	// API routes
-	r.Route("/api/v1", func(r chi.Router) {
-		// Authentication routes
-		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", handleRegister)
-			r.Post("/login", handleLogin)
-			r.Post("/refresh", handleRefresh)
-			r.Post("/logout", handleLogout)
-		})
+	// Initialize repositories
+	userRepo := repositories.NewUserRepository(db)
+	areaRepo := repositories.NewAreaRepository(db)
 
-		// Protected routes
-		r.Group(func(r chi.Router) {
-			// Add authentication middleware here
-			// r.Use(authMiddleware)
+	// Initialize event publisher (TODO: implement RabbitMQ adapter)
+	eventPublisher := &mockEventPublisher{logger: appLogger}
 
-			// User routes
-			r.Route("/users", func(r chi.Router) {
-				r.Get("/me", handleGetCurrentUser)
-				r.Put("/me", handleUpdateCurrentUser)
-				r.Delete("/me", handleDeleteCurrentUser)
-			})
-		})
-	})
+	// Initialize application services
+	areaService := services.NewAreaService(
+		areaRepo,
+		eventPublisher,
+		cacheClient,
+		appLogger,
+	)
+
+	userService := services.NewUserService(
+		userRepo,
+		areaService,
+		eventPublisher,
+		cacheClient,
+		appLogger,
+		translator,
+	)
+
+	authService := services.NewAuthService(
+		userRepo,
+		cacheClient,
+		appLogger,
+		translator,
+		cfg.JWT.Secret,
+		cfg.JWT.Issuer,
+		cfg.JWT.AccessDuration,
+		cfg.JWT.RefreshDuration,
+	)
+
+	// Initialize HTTP handlers
+	authHandler := handlers.NewAuthHandler(authService, userService, appLogger)
+	userHandler := handlers.NewUserHandler(userService, appLogger)
+
+	// Initialize middleware
+	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, appLogger)
+
+	// Setup router
+	router := adaptersHTTP.NewRouter(authHandler, userHandler, authMiddleware)
+	r := router.Setup()
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -79,9 +112,9 @@ func main() {
 
 	// Start server in goroutine
 	go func() {
-		log.Printf("Starting Core Service on port %d", cfg.Server.Port)
+		appLogger.Info(fmt.Sprintf("Starting %s on port %d", cfg.Service.Name, cfg.Server.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal("Failed to start server:", err)
+			appLogger.Fatal("Failed to start server")
 		}
 	}()
 
@@ -90,84 +123,36 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	appLogger.Info("Shutting down server...")
 
 	// Graceful shutdown with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	shutdownTimeout := 30 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown:", err)
+		appLogger.Fatal("Server forced to shutdown")
 	}
 
-	log.Println("Server exited")
+	appLogger.Info("Server exited")
 }
 
-type Config struct {
-	Server ServerConfig
+// Temporary mock event publisher until RabbitMQ adapter is implemented
+type mockEventPublisher struct {
+	logger *logger.Logger
 }
 
-type ServerConfig struct {
-	Port            int           `mapstructure:"port"`
-	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
-	IdleTimeout     time.Duration `mapstructure:"idle_timeout"`
-	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+func (m *mockEventPublisher) Publish(ctx context.Context, event interface{}) error {
+	m.logger.Debug(fmt.Sprintf("Publishing event: %+v", event))
+	return nil
 }
 
-func loadConfig() (*Config, error) {
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("./configs")
-	viper.AddConfigPath("../../configs")
-
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("MYTORRA")
-
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("failed to read config: %w", err)
-	}
-
-	var cfg Config
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
-	}
-
-	return &cfg, nil
+func (m *mockEventPublisher) PublishAsync(ctx context.Context, event interface{}) error {
+	m.logger.Debug(fmt.Sprintf("Publishing async event: %+v", event))
+	return nil
 }
 
-// Placeholder handlers - to be implemented
-func handleRegister(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"message":"Not implemented"}`))
-}
-
-func handleLogin(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"message":"Not implemented"}`))
-}
-
-func handleRefresh(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"message":"Not implemented"}`))
-}
-
-func handleLogout(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"message":"Not implemented"}`))
-}
-
-func handleGetCurrentUser(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"message":"Not implemented"}`))
-}
-
-func handleUpdateCurrentUser(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"message":"Not implemented"}`))
-}
-
-func handleDeleteCurrentUser(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write([]byte(`{"message":"Not implemented"}`))
+func (m *mockEventPublisher) PublishBatch(ctx context.Context, events []interface{}) error {
+	m.logger.Debug(fmt.Sprintf("Publishing batch events: %d events", len(events)))
+	return nil
 }

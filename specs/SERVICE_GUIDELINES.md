@@ -1218,7 +1218,92 @@ func SetupRouter() *chi.Mux {
 
 ## 13. Development Best Practices (CRITICAL)
 
-### 13.1 File and Directory Management (MANDATORY)
+### 13.1 Package Reuse Policy (CRITICAL - MANDATORY)
+
+**This is THE MOST IMPORTANT guideline for maintaining consistency across services**
+
+#### Available Shared Packages
+
+All services MUST use these shared packages from `/packages/` directory:
+
+1. **Core Infrastructure Packages:**
+   - `packages/database` - Database connections, transactions, query builders
+   - `packages/config` - Configuration management and validation
+   - `packages/logger` - Structured logging with context
+   - `packages/errors` - Error types and handling
+   - `packages/http` - HTTP response helpers and middleware
+
+2. **Business Logic Packages:**
+   - `packages/auth` - Authentication and authorization utilities
+   - `packages/security` - Security utilities (hashing, encryption, validation)
+   - `packages/cache` - Caching layer abstractions
+   - `packages/events` - Event bus and messaging
+   - `packages/i18n` - Internationalization support
+
+3. **Domain Packages:**
+   - `packages/dtos` - Shared DTOs across services
+   - `packages/geo` - Geolocation utilities
+
+#### Implementation Requirements
+
+**MANDATORY CHECKS before implementing ANY feature:**
+
+```bash
+# 1. Check if package exists
+ls -la /packages/
+
+# 2. Check if functionality exists in packages
+grep -r "YourFunctionality" /packages/
+
+# 3. Check other services for similar implementations
+grep -r "YourFunctionality" /services/
+```
+
+**Package Usage Example:**
+
+```go
+// CORRECT - Using shared packages
+import (
+    "github.com/paradoxe35/torra/packages/database"
+    "github.com/paradoxe35/torra/packages/http"
+    "github.com/paradoxe35/torra/packages/logger"
+    "github.com/paradoxe35/torra/packages/errors"
+    "github.com/paradoxe35/torra/packages/i18n"
+)
+
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    // Use shared http response
+    http.RespondJSON(w, 201, user)
+
+    // Use shared error handling
+    if err != nil {
+        http.RespondError(w, 400, "VALIDATION_ERROR", err.Error())
+    }
+}
+
+// INCORRECT - Duplicating functionality
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    // DON'T create custom response structures
+    w.WriteHeader(201)
+    json.NewEncoder(w).Encode(map[string]interface{}{...})
+}
+```
+
+#### When to Create New Packages
+
+Only create new shared packages when:
+1. Functionality is needed by 2+ services
+2. No existing package provides the functionality
+3. The functionality is generic enough to be reused
+
+Process for creating new packages:
+1. Propose in team discussion
+2. Create in `/packages/` directory
+3. Add proper go.mod file
+4. Include comprehensive tests
+5. Update all services to use the new package
+
+### 13.2 File and Directory Management (MANDATORY)
 
 **ALWAYS verify existence before creating files or directories:**
 

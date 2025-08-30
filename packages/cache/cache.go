@@ -11,7 +11,8 @@ import (
 	"github.com/paradoxe35/torra/packages/config"
 )
 
-type Cache interface {
+// BasicCache is the simple cache interface (keeping for backward compatibility)
+type BasicCache interface {
 	Get(ctx context.Context, key string) ([]byte, error)
 	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error
 	Delete(ctx context.Context, key string) error
