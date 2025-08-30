@@ -19,6 +19,7 @@ import (
 
 type UserService struct {
 	userRepo       ports.UserRepository
+	areaService    *AreaService
 	eventPublisher ports.EventPublisher
 	cache          ports.Cache
 	logger         ports.Logger
@@ -26,12 +27,14 @@ type UserService struct {
 
 func NewUserService(
 	userRepo ports.UserRepository,
+	areaService *AreaService,
 	eventPublisher ports.EventPublisher,
 	cache ports.Cache,
 	logger ports.Logger,
 ) *UserService {
 	return &UserService{
 		userRepo:       userRepo,
+		areaService:    areaService,
 		eventPublisher: eventPublisher,
 		cache:          cache,
 		logger:         logger,
@@ -56,6 +59,15 @@ func (s *UserService) CreateUser(ctx context.Context, req dtos.CreateUserRequest
 		return nil, errors.ErrUserAlreadyExists
 	}
 
+	// Validate area exists and is active
+	area, err := s.areaService.GetAreaByID(ctx, req.AreaID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid area: %w", err)
+	}
+	if !area.IsActive() {
+		return nil, fmt.Errorf("area is not active")
+	}
+
 	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
 	if err != nil {
@@ -69,7 +81,7 @@ func (s *UserService) CreateUser(ctx context.Context, req dtos.CreateUserRequest
 		Phone:             phone,
 		Name:              req.Name,
 		PasswordHash:      string(hashedPassword),
-		Area:              req.Area,
+		AreaID:            req.AreaID,
 		Status:            entities.UserStatusActive,
 		EmailVerified:     false,
 		PhoneVerified:     false,
@@ -85,7 +97,7 @@ func (s *UserService) CreateUser(ctx context.Context, req dtos.CreateUserRequest
 	}
 
 	// Publish event
-	event := events.NewUserCreatedEvent(user.ID, user.Email.String(), user.Area)
+	event := events.NewUserCreatedEvent(user.ID, user.Email.String(), user.AreaID.String())
 	if err := s.eventPublisher.PublishAsync(ctx, event); err != nil {
 		s.logger.Error("failed to publish user created event", "error", err, "user_id", user.ID)
 	}
@@ -141,8 +153,16 @@ func (s *UserService) UpdateUser(ctx context.Context, userID uuid.UUID, req dtos
 	if req.ProfileImageURL != nil {
 		user.ProfileImageURL = *req.ProfileImageURL
 	}
-	if req.Area != nil {
-		user.Area = *req.Area
+	if req.AreaID != nil {
+		// Validate area exists and is active
+		area, err := s.areaService.GetAreaByID(ctx, *req.AreaID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid area: %w", err)
+		}
+		if !area.IsActive() {
+			return nil, fmt.Errorf("area is not active")
+		}
+		user.AreaID = *req.AreaID
 	}
 	if req.LastKnownLat != nil && req.LastKnownLng != nil {
 		user.SetLocation(*req.LastKnownLat, *req.LastKnownLng)

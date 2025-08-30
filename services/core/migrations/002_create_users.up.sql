@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
     mfa_secret VARCHAR(255),
 
     -- Location
-    area VARCHAR(50) NOT NULL,
+    area_id UUID NOT NULL REFERENCES areas(id),
     last_known_lat DECIMAL(10, 8),
     last_known_lng DECIMAL(11, 8),
 
@@ -34,12 +34,11 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMP,
 
-    CONSTRAINT valid_area CHECK (area IN ('bukavu', 'goma')),
     CONSTRAINT valid_status CHECK (status IN ('active', 'suspended', 'banned', 'deleted'))
 );
 
 CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_phone ON users(phone) WHERE deleted_at IS NULL;
-CREATE INDEX idx_users_area ON users(area) WHERE deleted_at IS NULL;
+CREATE INDEX idx_users_area_id ON users(area_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_status ON users(status) WHERE deleted_at IS NULL;
 CREATE INDEX idx_users_created_at ON users(created_at);

@@ -9,6 +9,20 @@ import (
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
 )
 
+// AreaRepository defines the interface for area persistence
+type AreaRepository interface {
+	FindByID(ctx context.Context, id uuid.UUID) (*entities.Area, error)
+	FindByCode(ctx context.Context, code string) (*entities.Area, error)
+	FindByParentID(ctx context.Context, parentID *uuid.UUID) ([]*entities.Area, error)
+	FindByType(ctx context.Context, areaType valueobjects.AreaType) ([]*entities.Area, error)
+	FindActive(ctx context.Context) ([]*entities.Area, error)
+	FindByCoordinate(ctx context.Context, lat, lng float64) ([]*entities.Area, error)
+	Save(ctx context.Context, area *entities.Area) error
+	Update(ctx context.Context, area *entities.Area) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]*entities.Area, error)
+}
+
 // UserRepository defines the interface for user persistence
 type UserRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*entities.User, error)

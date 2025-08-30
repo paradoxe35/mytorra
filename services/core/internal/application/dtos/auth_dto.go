@@ -15,11 +15,11 @@ type LoginRequest struct {
 
 // RegisterRequest represents a registration request
 type RegisterRequest struct {
-	Email    string `json:"email" validate:"required,email,max=255"`
-	Phone    string `json:"phone" validate:"required,e164"`
-	Name     string `json:"name" validate:"required,min=2,max=100"`
-	Password string `json:"password" validate:"required,min=12"`
-	Area     string `json:"area" validate:"required,oneof=bukavu goma"`
+	Email    string    `json:"email" validate:"required,email,max=255"`
+	Phone    string    `json:"phone" validate:"required,e164"`
+	Name     string    `json:"name" validate:"required,min=2,max=100"`
+	Password string    `json:"password" validate:"required,min=12"`
+	AreaID   uuid.UUID `json:"area_id" validate:"required"`
 }
 
 // AuthResponse represents an authentication response
@@ -65,7 +65,7 @@ type TokenClaims struct {
 	UserID            uuid.UUID `json:"sub"`
 	Email             string    `json:"email"`
 	Name              string    `json:"name"`
-	Area              string    `json:"area"`
+	AreaID            uuid.UUID `json:"area_id"`
 	VerificationLevel int       `json:"verification_level"`
 	IssuedAt          time.Time `json:"iat"`
 	ExpiresAt         time.Time `json:"exp"`

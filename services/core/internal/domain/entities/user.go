@@ -31,9 +31,9 @@ type User struct {
 	MFASecret  *string `db:"mfa_secret" json:"-"`
 
 	// Location
-	Area         string   `db:"area" json:"area"` // "bukavu" or "goma"
-	LastKnownLat *float64 `db:"last_known_lat" json:"last_known_lat,omitempty"`
-	LastKnownLng *float64 `db:"last_known_lng" json:"last_known_lng,omitempty"`
+	AreaID       uuid.UUID `db:"area_id" json:"area_id"`
+	LastKnownLat *float64  `db:"last_known_lat" json:"last_known_lat,omitempty"`
+	LastKnownLng *float64  `db:"last_known_lng" json:"last_known_lng,omitempty"`
 
 	// Metadata
 	Status      UserStatus `db:"status" json:"status"`
@@ -76,8 +76,8 @@ func (u *User) UpdateVerificationLevel() {
 	u.VerificationLevel = level
 }
 
-func (u *User) IsFromArea(area string) bool {
-	return u.Area == area
+func (u *User) IsFromArea(areaID uuid.UUID) bool {
+	return u.AreaID == areaID
 }
 
 func (u *User) SetLocation(lat, lng float64) {

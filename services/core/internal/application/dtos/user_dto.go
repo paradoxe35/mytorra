@@ -8,21 +8,21 @@ import (
 
 // CreateUserRequest represents a user creation request
 type CreateUserRequest struct {
-	Email    string `json:"email" validate:"required,email,max=255"`
-	Phone    string `json:"phone" validate:"required,e164"`
-	Name     string `json:"name" validate:"required,min=2,max=100"`
-	Password string `json:"password" validate:"required,min=12"`
-	Area     string `json:"area" validate:"required,oneof=bukavu goma"`
+	Email    string    `json:"email" validate:"required,email,max=255"`
+	Phone    string    `json:"phone" validate:"required,e164"`
+	Name     string    `json:"name" validate:"required,min=2,max=100"`
+	Password string    `json:"password" validate:"required,min=12"`
+	AreaID   uuid.UUID `json:"area_id" validate:"required"`
 }
 
 // UpdateUserRequest represents a user update request
 type UpdateUserRequest struct {
-	Name            *string  `json:"name,omitempty" validate:"omitempty,min=2,max=100"`
-	Phone           *string  `json:"phone,omitempty" validate:"omitempty,e164"`
-	ProfileImageURL *string  `json:"profile_image_url,omitempty" validate:"omitempty,url"`
-	Area            *string  `json:"area,omitempty" validate:"omitempty,oneof=bukavu goma"`
-	LastKnownLat    *float64 `json:"last_known_lat,omitempty" validate:"omitempty,latitude"`
-	LastKnownLng    *float64 `json:"last_known_lng,omitempty" validate:"omitempty,longitude"`
+	Name            *string    `json:"name,omitempty" validate:"omitempty,min=2,max=100"`
+	Phone           *string    `json:"phone,omitempty" validate:"omitempty,e164"`
+	ProfileImageURL *string    `json:"profile_image_url,omitempty" validate:"omitempty,url"`
+	AreaID          *uuid.UUID `json:"area_id,omitempty" validate:"omitempty"`
+	LastKnownLat    *float64   `json:"last_known_lat,omitempty" validate:"omitempty,latitude"`
+	LastKnownLng    *float64   `json:"last_known_lng,omitempty" validate:"omitempty,longitude"`
 }
 
 // UserResponse represents a user response
@@ -36,7 +36,8 @@ type UserResponse struct {
 	PhoneVerified     bool       `json:"phone_verified"`
 	IDVerified        bool       `json:"id_verified"`
 	VerificationLevel int        `json:"verification_level"`
-	Area              string     `json:"area"`
+	AreaID            uuid.UUID  `json:"area_id"`
+	AreaName          string     `json:"area_name,omitempty"`
 	LastKnownLat      *float64   `json:"last_known_lat,omitempty"`
 	LastKnownLng      *float64   `json:"last_known_lng,omitempty"`
 	Status            string     `json:"status"`
