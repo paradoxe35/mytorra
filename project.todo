@@ -31,13 +31,13 @@
     [x] Configure PostgreSQL connection with sqlx
     [x] Setup database migration system with golang-migrate
     [x] Implement Area Management (Foundation for all services)
-    [] Implement structured logging with slog
+    [x] Implement structured logging with slog
     [] Setup OpenTelemetry for distributed tracing
 
 ### User Management & Authentication
 [x] Implement user account system
     [x] User registration with email/phone verification
-    [] JWT-based authentication with refresh tokens
+    [x] JWT-based authentication with refresh tokens
     [] OAuth2 integration (Google, Facebook)
     [] Multi-factor authentication (MFA) support
     [] Password reset and recovery flows

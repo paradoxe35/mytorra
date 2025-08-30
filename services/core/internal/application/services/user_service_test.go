@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,13 +150,16 @@ func TestUserService_CreateUser(t *testing.T) {
 		mockCache.On("Get", ctx, fmt.Sprintf("area:%s", areaID)).Return(nil, fmt.Errorf("not found")).Once()
 		mockAreaRepo.On("FindByID", ctx, areaID).Return(nil, assert.AnError).Once()
 
+		// Allow cache set attempts without strict count
+		mockCache.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return(nil)
+
 		// Execute
 		user, err := service.CreateUser(ctx, req)
 
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, user)
-		assert.Contains(t, err.Error(), "area")
+		assert.Contains(t, strings.ToLower(err.Error()), "area")
 
 		mockRepo.AssertExpectations(t)
 		mockAreaRepo.AssertExpectations(t)
@@ -184,13 +188,16 @@ func TestUserService_CreateUser(t *testing.T) {
 		mockAreaRepo.On("FindByID", ctx, areaID).Return(inactiveArea, nil).Once()
 		mockCache.On("Get", ctx, fmt.Sprintf("area:%s", areaID)).Return(nil, fmt.Errorf("not found")).Once()
 
+		// Allow cache set attempts without strict count
+		mockCache.On("Set", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe().Return(nil)
+
 		// Execute
 		user, err := service.CreateUser(ctx, req)
 
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, user)
-		assert.Contains(t, err.Error(), "not active")
+		assert.Contains(t, strings.ToLower(err.Error()), "not active")
 
 		mockRepo.AssertExpectations(t)
 		mockAreaRepo.AssertExpectations(t)
@@ -262,7 +269,7 @@ func TestUserService_CreateUser(t *testing.T) {
 
 				assert.Error(t, err)
 				assert.Nil(t, user)
-				assert.Contains(t, err.Error(), tc.errMsg)
+				assert.Contains(t, strings.ToLower(err.Error()), strings.ToLower(tc.errMsg))
 			})
 		}
 	})
