@@ -10,4 +10,5 @@ use (
     ./packages/events
     ./packages/errors
     ./packages/cache
+    ./packages/i18n
 )

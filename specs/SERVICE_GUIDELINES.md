@@ -1216,9 +1216,53 @@ func SetupRouter() *chi.Mux {
 
 ---
 
-## 13. Service Communication Guidelines
+## 13. Development Best Practices (CRITICAL)
 
-### 13.1 Inter-Service Communication
+### 13.1 File and Directory Management (MANDATORY)
+
+**ALWAYS verify existence before creating files or directories:**
+
+1. **Before Creating Any File:**
+   ```bash
+   # Check if file exists
+   ls -la /path/to/file.go
+   # OR use Read tool to verify
+   ```
+
+2. **Before Creating Directories:**
+   ```bash
+   # Check directory structure
+   ls -la /path/to/directory/
+   ```
+
+3. **Reuse Existing Packages:**
+   - **MANDATORY**: Always check `packages/` directory for existing implementations
+   - Import and use shared packages instead of duplicating code
+   - Common reusable packages:
+     ```go
+     import (
+         "github.com/paradoxe35/torra/packages/logger"
+         "github.com/paradoxe35/torra/packages/errors"
+         "github.com/paradoxe35/torra/packages/security"
+         "github.com/paradoxe35/torra/packages/http"
+         "github.com/paradoxe35/torra/packages/cache"
+         "github.com/paradoxe35/torra/packages/config"
+         "github.com/paradoxe35/torra/packages/i18n"
+     )
+     ```
+
+4. **Package Priority Order:**
+   ```
+   Existing packages/ → Adapt if needed → Create new only if absolutely necessary
+   ```
+
+5. **Before Writing New Code:**
+   - Search for similar implementations in the codebase
+   - Check if functionality exists in packages/
+   - Verify if another service already implements similar logic
+   - Only create new implementations when existing code cannot be adapted
+
+### 13.2 Inter-Service Communication
 
 **Synchronous (REST)**:
 
@@ -1234,7 +1278,7 @@ func SetupRouter() *chi.Mux {
 - Implement dead letter queues
 - Version event schemas
 
-### 13.2 Service Discovery
+### 13.3 Service Discovery
 
 ```go
 // Service registry interface

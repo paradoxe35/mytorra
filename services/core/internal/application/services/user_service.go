@@ -7,12 +7,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
+
+	// Use shared packages
+	appErrors "github.com/paradoxe35/torra/packages/errors"
+	"github.com/paradoxe35/torra/packages/i18n"
+	"github.com/paradoxe35/torra/packages/logger"
+	"github.com/paradoxe35/torra/packages/security"
 
 	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/errors"
 	"github.com/paradoxe35/torra/services/core/internal/domain/events"
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
 )
@@ -22,7 +26,8 @@ type UserService struct {
 	areaService    *AreaService
 	eventPublisher ports.EventPublisher
 	cache          ports.Cache
-	logger         ports.Logger
+	logger         *logger.Logger
+	translator     *i18n.Translator
 }
 
 func NewUserService(
@@ -30,7 +35,8 @@ func NewUserService(
 	areaService *AreaService,
 	eventPublisher ports.EventPublisher,
 	cache ports.Cache,
-	logger ports.Logger,
+	logger *logger.Logger,
+	translator *i18n.Translator,
 ) *UserService {
 	return &UserService{
 		userRepo:       userRepo,
@@ -38,40 +44,47 @@ func NewUserService(
 		eventPublisher: eventPublisher,
 		cache:          cache,
 		logger:         logger,
+		translator:     translator,
 	}
 }
 
-func (s *UserService) CreateUser(ctx context.Context, req dtos.CreateUserRequest) (*entities.User, error) {
+func (s *UserService) CreateUser(ctx context.Context, req dtos.RegisterRequest) (*entities.User, error) {
+	// Validate request with i18n support
+	if err := req.Validate(ctx, s.translator); err != nil {
+		return nil, err
+	}
+
 	// Create value objects
 	email, err := valueobjects.NewEmail(req.Email)
 	if err != nil {
-		return nil, fmt.Errorf("invalid email: %w", err)
+		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "validation.email"))
 	}
 
 	phone, err := valueobjects.NewPhone(req.Phone)
 	if err != nil {
-		return nil, fmt.Errorf("invalid phone: %w", err)
+		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "validation.phone"))
 	}
 
 	// Check if user exists
 	existing, _ := s.userRepo.FindByEmail(ctx, email)
 	if existing != nil {
-		return nil, errors.ErrUserAlreadyExists
+		return nil, appErrors.ConflictError(s.translator.TWithContext(ctx, "user.already_exists"))
 	}
 
 	// Validate area exists and is active
 	area, err := s.areaService.GetAreaByID(ctx, req.AreaID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid area: %w", err)
+		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_found"))
 	}
 	if !area.IsActive() {
-		return nil, fmt.Errorf("area is not active")
+		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_active"))
 	}
 
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	// Hash password using security package
+	hashedPassword, err := security.HashPassword(req.Password)
 	if err != nil {
-		return nil, fmt.Errorf("failed to hash password: %w", err)
+		s.logger.WithContext(ctx).WithError(err).Error("Failed to hash password")
+		return nil, appErrors.InternalError(s.translator.TWithContext(ctx, "error.internal"))
 	}
 
 	// Create user entity

@@ -46,16 +46,6 @@ type UserResponse struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
-// VerifyEmailRequest represents an email verification request
-type VerifyEmailRequest struct {
-	Token string `json:"token" validate:"required"`
-}
-
-// VerifyPhoneRequest represents a phone verification request
-type VerifyPhoneRequest struct {
-	Code string `json:"code" validate:"required,len=6"`
-}
-
 // VerifyIDRequest represents a government ID verification request
 type VerifyIDRequest struct {
 	IDType      string `json:"id_type" validate:"required,oneof=passport national_id driver_license"`
@@ -63,16 +53,4 @@ type VerifyIDRequest struct {
 	FrontImage  string `json:"front_image" validate:"required,base64"`
 	BackImage   string `json:"back_image,omitempty" validate:"omitempty,base64"`
 	SelfieImage string `json:"selfie_image" validate:"required,base64"`
-}
-
-// EnableMFARequest represents an MFA enablement request
-type EnableMFARequest struct {
-	Secret string `json:"secret" validate:"required"`
-	Code   string `json:"code" validate:"required,len=6"`
-}
-
-// DisableMFARequest represents an MFA disable request
-type DisableMFARequest struct {
-	Code     string `json:"code" validate:"required,len=6"`
-	Password string `json:"password" validate:"required"`
 }
