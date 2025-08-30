@@ -305,3 +305,17 @@ type MFASetupResponse struct {
 	QRCode      string   `json:"qr_code"`
 	BackupCodes []string `json:"backup_codes"`
 }
+
+// EnableMFAResponse represents the response after enabling MFA
+type EnableMFAResponse struct {
+	Secret string `json:"secret"`
+	QRCode string `json:"qr_code"`
+}
+
+// VerificationStatusResponse represents the user's verification status
+type VerificationStatusResponse struct {
+	EmailVerified     bool `json:"email_verified"`
+	PhoneVerified     bool `json:"phone_verified"`
+	IDVerified        bool `json:"id_verified"`
+	VerificationLevel int  `json:"verification_level"`
+}

@@ -18,6 +18,7 @@ import (
 	"github.com/paradoxe35/torra/packages/logger"
 
 	// Internal packages
+	"github.com/paradoxe35/torra/packages/events"
 	adaptersHTTP "github.com/paradoxe35/torra/services/core/internal/adapters/http"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
@@ -49,18 +50,27 @@ func main() {
 	defer db.Close()
 
 	// Initialize cache
-	cacheClient, err := cache.NewRedisCache(&cfg.Redis, "core")
+	cacheClient, err := cache.NewRedisCacheAdapter(&cfg.Redis, "core")
 	if err != nil {
 		appLogger.Fatal("Failed to connect to cache")
 	}
-	defer cacheClient.Close()
+	defer func() {
+		if closer, ok := cacheClient.(interface{ Close() error }); ok {
+			closer.Close()
+		}
+	}()
 
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository(db)
 	areaRepo := repositories.NewAreaRepository(db)
 
-	// Initialize event publisher (TODO: implement RabbitMQ adapter)
-	eventPublisher := &mockEventPublisher{logger: appLogger}
+	// Initialize event publisher
+	eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, appLogger)
+	if err != nil {
+		appLogger.Warn(fmt.Sprintf("Failed to connect to RabbitMQ: %v. Using mock publisher", err))
+		eventPublisher = &mockEventPublisher{logger: appLogger}
+	}
+	defer eventPublisher.Close()
 
 	// Initialize application services
 	areaService := services.NewAreaService(
@@ -154,5 +164,10 @@ func (m *mockEventPublisher) PublishAsync(ctx context.Context, event interface{}
 
 func (m *mockEventPublisher) PublishBatch(ctx context.Context, events []interface{}) error {
 	m.logger.Debug(fmt.Sprintf("Publishing batch events: %d events", len(events)))
+	return nil
+}
+
+func (m *mockEventPublisher) Close() error {
+	m.logger.Debug("Closing mock event publisher")
 	return nil
 }

@@ -120,3 +120,13 @@ func GetAppError(err error) *AppError {
 	}
 	return nil
 }
+
+// Common error variables
+var (
+	ErrInvalidToken       = UnauthorizedError("Invalid or expired token")
+	ErrInvalidCredentials = UnauthorizedError("Invalid credentials")
+	ErrAccountSuspended   = UnauthorizedError("Account is suspended")
+	ErrUserNotFound       = NotFoundError("User")
+	ErrEmailExists        = ConflictError("Email already exists")
+	ErrPhoneExists        = ConflictError("Phone already exists")
+)

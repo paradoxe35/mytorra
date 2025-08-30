@@ -173,8 +173,14 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *userRepository) ListByArea(ctx context.Context, areaID uuid.UUID, limit, offset int) ([]*entities.User, error) {
+func (r *userRepository) ListByArea(ctx context.Context, area string, limit, offset int) ([]*entities.User, error) {
 	var users []*entities.User
+
+	// Parse area string to UUID
+	areaID, err := uuid.Parse(area)
+	if err != nil {
+		return nil, fmt.Errorf("invalid area ID format: %w", err)
+	}
 
 	query := `
 		SELECT id, email, phone, name, password_hash,
@@ -187,7 +193,7 @@ func (r *userRepository) ListByArea(ctx context.Context, areaID uuid.UUID, limit
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3`
 
-	err := r.db.SelectContext(ctx, &users, query, areaID, limit, offset)
+	err = r.db.SelectContext(ctx, &users, query, areaID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users by area: %w", err)
 	}

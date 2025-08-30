@@ -8,13 +8,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
+	"github.com/paradoxe35/torra/packages/errors"
 	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 	"github.com/paradoxe35/torra/packages/security"
 	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/errors"
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
 )
 
@@ -53,7 +53,7 @@ func NewAuthService(
 
 func (s *AuthService) Login(ctx context.Context, req dtos.LoginRequest) (*dtos.AuthResponse, error) {
 	// Validate request
-	if err := req.Validate(); err != nil {
+	if err := req.Validate(ctx, s.translator); err != nil {
 		return nil, err
 	}
 
@@ -121,7 +121,7 @@ func (s *AuthService) Login(ctx context.Context, req dtos.LoginRequest) (*dtos.A
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ExpiresIn:    int(s.accessDuration.Seconds()),
-		User:         user,
+		User:         s.toUserResponse(user),
 		RequiresMFA:  false,
 	}, nil
 }
@@ -189,7 +189,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, req dtos.RefreshTokenReq
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
 		ExpiresIn:    int(s.accessDuration.Seconds()),
-		User:         user,
+		User:         s.toUserResponse(user),
 	}, nil
 }
 
@@ -207,7 +207,7 @@ func (s *AuthService) Logout(ctx context.Context, userID string) error {
 
 func (s *AuthService) ForgotPassword(ctx context.Context, req dtos.ForgotPasswordRequest) error {
 	// Validate request
-	if err := req.Validate(); err != nil {
+	if err := req.Validate(ctx, s.translator); err != nil {
 		return err
 	}
 
@@ -240,7 +240,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, req dtos.ForgotPasswor
 
 func (s *AuthService) ResetPassword(ctx context.Context, req dtos.ResetPasswordRequest) error {
 	// Validate request
-	if err := req.Validate(); err != nil {
+	if err := req.Validate(ctx, s.translator); err != nil {
 		return err
 	}
 
@@ -263,7 +263,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, req dtos.ResetPasswordR
 	}
 
 	// Hash new password
-	hashedPassword, err := security.HashPassword(req.NewPassword)
+	hashedPassword, err := security.HashPassword(req.Password)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
@@ -324,7 +324,7 @@ func (s *AuthService) VerifyEmail(ctx context.Context, token string) error {
 
 func (s *AuthService) VerifyPhone(ctx context.Context, req dtos.VerifyPhoneRequest) error {
 	// Validate request
-	if err := req.Validate(); err != nil {
+	if err := req.Validate(ctx, s.translator); err != nil {
 		return err
 	}
 
@@ -360,4 +360,26 @@ func (s *AuthService) generateRefreshToken(user *entities.User) (string, error) 
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(s.jwtSecret)
+}
+
+// toUserResponse converts a User entity to UserResponse DTO
+func (s *AuthService) toUserResponse(user *entities.User) *dtos.UserResponse {
+	return &dtos.UserResponse{
+		ID:                user.ID,
+		Email:             user.Email.String(),
+		Phone:             user.Phone.String(),
+		Name:              user.Name,
+		ProfileImageURL:   user.ProfileImageURL,
+		EmailVerified:     user.EmailVerified,
+		PhoneVerified:     user.PhoneVerified,
+		IDVerified:        user.IDVerified,
+		VerificationLevel: user.VerificationLevel,
+		AreaID:            user.AreaID,
+		LastKnownLat:      user.LastKnownLat,
+		LastKnownLng:      user.LastKnownLng,
+		Status:            string(user.Status),
+		LastLoginAt:       user.LastLoginAt,
+		CreatedAt:         user.CreatedAt,
+		UpdatedAt:         user.UpdatedAt,
+	}
 }

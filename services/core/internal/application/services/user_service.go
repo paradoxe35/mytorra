@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"time"
 
 	"github.com/google/uuid"
@@ -285,6 +286,162 @@ func (s *UserService) GetUserCount(ctx context.Context) (int64, error) {
 	}
 
 	return count, nil
+}
+
+// EnableMFA enables multi-factor authentication for a user
+func (s *UserService) EnableMFA(ctx context.Context, userID uuid.UUID) (*dtos.EnableMFAResponse, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if user.MFAEnabled {
+		return nil, appErrors.ConflictError(s.translator.TWithContext(ctx, "mfa.already_enabled"))
+	}
+
+	// Generate MFA secret using security package
+	secret, err := security.GenerateMFASecret()
+	if err != nil {
+		s.logger.WithContext(ctx).WithError(err).Error("Failed to generate MFA secret")
+		return nil, appErrors.InternalError(s.translator.TWithContext(ctx, "error.internal"))
+	}
+
+	user.MFASecret = string(secret)
+	user.MFAEnabled = true
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to enable MFA: %w", err)
+	}
+
+	// Invalidate cache
+	s.invalidateUserCache(ctx, userID)
+
+	return &dtos.EnableMFAResponse{
+		Secret: string(secret),
+		QRCode: fmt.Sprintf("otpauth://totp/Torra:%s?secret=%s&issuer=Torra", user.Email.String(), secret),
+	}, nil
+}
+
+// DisableMFA disables multi-factor authentication for a user
+func (s *UserService) DisableMFA(ctx context.Context, userID uuid.UUID, req dtos.DisableMFARequest) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if !user.MFAEnabled {
+		return appErrors.ConflictError(s.translator.TWithContext(ctx, "mfa.not_enabled"))
+	}
+
+	// Verify current password or MFA code
+	if req.Password != "" {
+		if err := security.CheckPassword(req.Password, user.PasswordHash); err != nil {
+			return appErrors.ValidationError(s.translator.TWithContext(ctx, "auth.invalid_password"))
+		}
+	} else if req.Code != "" {
+		valid, err := security.VerifyMFACode(req.Code, user.MFASecret)
+		if err != nil || !valid {
+			return appErrors.ValidationError(s.translator.TWithContext(ctx, "mfa.invalid_code"))
+		}
+	} else {
+		return appErrors.ValidationError(s.translator.TWithContext(ctx, "validation.password_or_mfa_required"))
+	}
+
+	user.MFAEnabled = false
+	user.MFASecret = ""
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return fmt.Errorf("failed to disable MFA: %w", err)
+	}
+
+	// Invalidate cache
+	s.invalidateUserCache(ctx, userID)
+
+	return nil
+}
+
+// UpdateUserArea updates the user's area
+func (s *UserService) UpdateUserArea(ctx context.Context, userID, areaID uuid.UUID) (*entities.User, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate area exists and is active
+	area, err := s.areaService.GetAreaByID(ctx, areaID)
+	if err != nil {
+		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_found"))
+	}
+	if !area.IsActive() {
+		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_active"))
+	}
+
+	user.AreaID = areaID
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to update user area: %w", err)
+	}
+
+	// Invalidate cache
+	s.invalidateUserCache(ctx, userID)
+
+	return user, nil
+}
+
+// GetVerificationStatus returns the user's verification status
+func (s *UserService) GetVerificationStatus(ctx context.Context, userID uuid.UUID) (*dtos.VerificationStatusResponse, error) {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dtos.VerificationStatusResponse{
+		EmailVerified:     user.EmailVerified,
+		PhoneVerified:     user.PhoneVerified,
+		IDVerified:        user.IDVerified,
+		VerificationLevel: user.VerificationLevel,
+	}, nil
+}
+
+// VerifyGovernmentID verifies a user's government ID
+func (s *UserService) VerifyGovernmentID(ctx context.Context, userID uuid.UUID, file multipart.File, header *multipart.FileHeader) error {
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	if user.IDVerified {
+		return appErrors.ConflictError(s.translator.TWithContext(ctx, "verification.already_verified"))
+	}
+
+	// TODO: Implement actual ID verification logic
+	// This would typically involve:
+	// 1. Upload file to secure storage (S3, etc.)
+	// 2. Queue verification job for manual or automated review
+	// 3. Store verification status
+
+	// For now, we'll mark as pending verification
+	user.IDVerified = false // Will be set to true after manual verification
+	user.UpdatedAt = time.Now()
+
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return fmt.Errorf("failed to submit ID for verification: %w", err)
+	}
+
+	// Publish event for ID verification submission
+	event := events.NewIDVerificationSubmittedEvent(userID, header.Filename)
+	if err := s.eventPublisher.PublishAsync(ctx, event); err != nil {
+		s.logger.Error("failed to publish ID verification submitted event", "error", err, "user_id", userID)
+	}
+
+	// Invalidate cache
+	s.invalidateUserCache(ctx, userID)
+
+	s.logger.Info("ID verification submitted", "user_id", userID, "filename", header.Filename)
+	return nil
 }
 
 // Helper methods
