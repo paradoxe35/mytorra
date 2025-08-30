@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 env:
   GO_VERSION: '1.25'
   MIN_COVERAGE: 80
@@ -99,7 +104,6 @@ jobs:
         if: always()
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const coverage = '${{ steps.coverage.outputs.coverage }}';
             const minCoverage = '${{ env.MIN_COVERAGE }}';
@@ -249,7 +253,6 @@ jobs:
       - name: Check approval status
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { data: reviews } = await github.rest.pulls.listReviews({
               owner: context.repo.owner,
@@ -273,7 +276,7 @@ jobs:
       - name: Auto-merge if approved
         if: success() && github.event.pull_request.auto_merge == null
         uses: pascalgn/merge-action@v0.15.0
-        env:
+        with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MERGE_METHOD: squash
           MERGE_COMMIT_MESSAGE: pull-request-title

@@ -7,9 +7,13 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+  security-events: write
+
 env:
   GO_VERSION: '1.25'
-  GOLANGCI_LINT_VERSION: 'v1.61.0'
   NODE_VERSION: '20'
 
 jobs:
@@ -180,7 +184,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          version: latest
           args: --timeout=10m --config=.golangci.yml
           skip-cache: true
           working-directory: .
