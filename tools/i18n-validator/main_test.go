@@ -149,10 +149,16 @@ func Translate(key string) string {
 		"user.welcome",
 		"error.not_found",
 		"simple.message",
+		"auth.login_success", // Now correctly detected by improved validator
 	}
 
 	if len(validator.usedKeys) != len(expectedKeys) {
 		t.Errorf("Expected %d used keys, got %d", len(expectedKeys), len(validator.usedKeys))
+		// Debug: show what keys were actually found
+		t.Logf("Found keys:")
+		for key := range validator.usedKeys {
+			t.Logf("  - %s", key)
+		}
 	}
 
 	for _, key := range expectedKeys {

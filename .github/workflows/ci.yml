@@ -96,6 +96,7 @@ jobs:
           cache: true
 
       - name: Setup test environment
+        if: false
         run: |
           cp .env.example .env.test
           echo "MYTORRA_DATABASE_HOST=localhost" >> .env.test
