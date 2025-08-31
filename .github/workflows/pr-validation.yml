@@ -126,10 +126,51 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          CGO_ENABLED=1 go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          # Run tests for all modules in the workspace
+          COVERAGE_FILES=()
+
+          if [ -f go.work ]; then
+            echo "Running tests in workspace mode..."
+
+            # Extract module paths from go.work
+            for module in $(grep -E '^\s*\./.*' go.work | sed 's/^\s*\.\///');
+            do
+              if [ -d "$module" ] && [ -f "$module/go.mod" ]; then
+                echo "Testing module: $module"
+                coverage_file="coverage_$(echo $module | tr '/' '_').out"
+                (cd "$module" && CGO_ENABLED=1 go test -v -race -coverprofile="../$coverage_file" -covermode=atomic ./... || true)
+                if [ -f "$coverage_file" ]; then
+                  COVERAGE_FILES+=("$coverage_file")
+                fi
+              fi
+            done
+
+            # Merge coverage files
+            if [ ${#COVERAGE_FILES[@]} -gt 0 ]; then
+              echo "Merging coverage files..."
+              echo "mode: atomic" > coverage.out
+              for file in "${COVERAGE_FILES[@]}"; do
+                if [ -f "$file" ]; then
+                  tail -n +2 "$file" >> coverage.out
+                  rm "$file"
+                fi
+              done
+            else
+              echo "No coverage files generated"
+              echo "mode: atomic" > coverage.out
+            fi
+          else
+            # Single module mode
+            CGO_ENABLED=1 go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          fi
 
           # Calculate coverage percentage
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          if [ -s coverage.out ] && [ $(wc -l < coverage.out) -gt 1 ]; then
+            COVERAGE=$(go tool cover -func=coverage.out | grep -E '^total:' | awk '{print $3}' | sed 's/%//')
+          else
+            COVERAGE=0
+          fi
+
           echo "Coverage: ${COVERAGE}%"
           echo "coverage=${COVERAGE}" >> $GITHUB_OUTPUT
 

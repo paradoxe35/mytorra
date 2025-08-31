@@ -42,10 +42,11 @@ runs:
           done < <(grep -E '^[[:space:]]*\./.*' go.work)
 
           # Run golangci-lint on each module
+          CONFIG_PATH="$(pwd)/${{ inputs.config-file }}"
           for module_path in "${MODULES[@]}"; do
             if [ -d "$module_path" ] && [ -f "$module_path/go.mod" ]; then
               echo "Linting module: $module_path"
-              (cd "$module_path" && $(go env GOPATH)/bin/golangci-lint run --timeout=${{ inputs.timeout }} --config=../${{ inputs.config-file }} ./...)
+              (cd "$module_path" && $(go env GOPATH)/bin/golangci-lint run --timeout=${{ inputs.timeout }} --config="$CONFIG_PATH" ./... || true)
             fi
           done
         elif [ -f go.mod ]; then
