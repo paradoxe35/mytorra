@@ -278,14 +278,18 @@ jobs:
 
       - name: Install and Run Trivy vulnerability scanner
         run: |
-          # Install trivy using the install script
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin latest
+          # Install trivy to user's local bin directory
+          mkdir -p $HOME/.local/bin
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b $HOME/.local/bin latest
+
+          # Add to PATH
+          export PATH=$HOME/.local/bin:$PATH
 
           # Run trivy filesystem scan
-          /usr/local/bin/trivy fs --severity CRITICAL,HIGH --format sarif --output trivy-results.sarif . || true
+          trivy fs --severity CRITICAL,HIGH --format sarif --output trivy-results.sarif . || true
 
           # Also create a human-readable report
-          /usr/local/bin/trivy fs --severity CRITICAL,HIGH . || true
+          trivy fs --severity CRITICAL,HIGH . || true
 
       - name: Upload Trivy results
         if: always() && github.event_name == 'pull_request' && hashFiles('trivy-results.sarif') != ''

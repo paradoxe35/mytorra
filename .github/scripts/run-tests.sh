@@ -24,6 +24,15 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# Check if CGO should be enabled (based on gcc availability)
+CGO_ENABLED=1
+RACE_FLAG="-race"
+if ! command -v gcc &> /dev/null; then
+    print_warn "gcc not found, disabling CGO and race detection for tests"
+    CGO_ENABLED=0
+    RACE_FLAG=""
+fi
+
 # Function to run tests for a single module
 run_module_tests() {
     local module_path=$1
@@ -43,8 +52,8 @@ run_module_tests() {
     fi
 
     # Run the tests
-    echo "Running: CGO_ENABLED=1 go test -v -race ./..."
-    test_output=$(CGO_ENABLED=1 go test -v -race ./... 2>&1) || test_exit_code=$?
+    echo "Running: CGO_ENABLED=$CGO_ENABLED go test -v $RACE_FLAG ./..."
+    test_output=$(CGO_ENABLED=$CGO_ENABLED go test -v $RACE_FLAG ./... 2>&1) || test_exit_code=$?
 
     # Return to original directory
     popd > /dev/null 2>&1
@@ -113,8 +122,8 @@ main() {
         print_info "Running tests in single module mode..."
         ((test_count++)) || true
 
-        echo "Running: CGO_ENABLED=1 go test -v -race ./..."
-        if ! CGO_ENABLED=1 go test -v -race ./...; then
+        echo "Running: CGO_ENABLED=$CGO_ENABLED go test -v $RACE_FLAG ./..."
+        if ! CGO_ENABLED=$CGO_ENABLED go test -v $RACE_FLAG ./...; then
             failed_modules+=(".")
         fi
     fi
