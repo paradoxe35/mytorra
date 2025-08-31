@@ -10,6 +10,13 @@ MIN_COVERAGE="${MIN_COVERAGE:-80}"
 COVERAGE_FILES=()
 COVERAGE_MODE="atomic"
 
+# Check if CGO should be enabled (based on gcc availability)
+CGO_ENABLED=1
+if ! command -v gcc &> /dev/null; then
+    print_warn "gcc not found, disabling CGO for tests"
+    CGO_ENABLED=0
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -57,7 +64,12 @@ run_module_tests() {
 
     pushd "$module_path" > /dev/null 2>&1
     # Use -count=1 to avoid cached results that don't generate coverage files
-    test_output=$(CGO_ENABLED=1 go test -count=1 -race -coverprofile="$abs_coverage_file" -covermode=$COVERAGE_MODE ./... 2>&1) || test_exit_code=$?
+    # Note: -race flag requires CGO, so only use it when CGO is enabled
+    if [ $CGO_ENABLED -eq 1 ]; then
+        test_output=$(CGO_ENABLED=1 go test -count=1 -race -coverprofile="$abs_coverage_file" -covermode=$COVERAGE_MODE ./... 2>&1) || test_exit_code=$?
+    else
+        test_output=$(CGO_ENABLED=0 go test -count=1 -coverprofile="$abs_coverage_file" -covermode=$COVERAGE_MODE ./... 2>&1) || test_exit_code=$?
+    fi
     popd > /dev/null 2>&1
 
     # Show test output
@@ -178,7 +190,11 @@ main() {
         # Single module mode
         print_info "Running tests in single module mode..."
         if has_test_files "."; then
-            CGO_ENABLED=1 go test -v -race -coverprofile=coverage.out -covermode=$COVERAGE_MODE ./...
+            if [ $CGO_ENABLED -eq 1 ]; then
+                CGO_ENABLED=1 go test -v -race -coverprofile=coverage.out -covermode=$COVERAGE_MODE ./...
+            else
+                CGO_ENABLED=0 go test -v -coverprofile=coverage.out -covermode=$COVERAGE_MODE ./...
+            fi
         else
             print_warn "No test files found"
             echo "mode: $COVERAGE_MODE" > coverage.out
