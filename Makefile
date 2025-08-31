@@ -131,14 +131,18 @@ vet: ## Run go vet on all code
 .PHONY: test
 test: ## Run all tests
 	@echo "$(GREEN)Running tests...$(NC)"
-	@for pkg in $(PACKAGES); do \
-		echo "Testing package/$$pkg..."; \
-		cd packages/$$pkg && $(GO) test ./... $(GOFLAGS) && cd ../..; \
-	done
-	@for svc in $(SERVICES); do \
-		if [ -d "services/$$svc" ]; then \
-			echo "Testing service/$$svc..."; \
-			cd services/$$svc && $(GO) test ./... $(GOFLAGS) && cd ../..; \
+	@if [ -f .github/scripts/run-tests.sh ]; then \
+		chmod +x .github/scripts/run-tests.sh && \
+		.github/scripts/run-tests.sh; \
+	else \
+		for pkg in $(PACKAGES); do \
+			echo "Testing package/$$pkg..."; \
+			cd packages/$$pkg && $(GO) test ./... $(GOFLAGS) && cd ../..; \
+		done; \
+		for svc in $(SERVICES); do \
+			if [ -d "services/$$svc" ]; then \
+				echo "Testing service/$$svc..."; \
+				cd services/$$svc && $(GO) test ./... $(GOFLAGS) && cd ../..; \
 		fi \
 	done
 
