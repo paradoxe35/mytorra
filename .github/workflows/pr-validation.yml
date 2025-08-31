@@ -43,19 +43,72 @@ jobs:
             didn't match the configured pattern. Please ensure that the subject
             doesn't start with an uppercase character.
 
-      - name: Check PR size
-        uses: CodelyTV/pr-size-labeler@v1
+      - name: Check PR size and add labels
+        uses: actions/github-script@v7
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          xs_label: "size/xs"
-          xs_max_size: 10
-          s_label: "size/s"
-          s_max_size: 100
-          m_label: "size/m"
-          m_max_size: 500
-          l_label: "size/l"
-          l_max_size: 1000
-          xl_label: "size/xl"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo, number } = context.issue;
+
+            // Get PR diff stats
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: number
+            });
+
+            const additions = pr.additions;
+            const deletions = pr.deletions;
+            const changes = additions + deletions;
+
+            // Define size thresholds
+            const sizes = [
+              { label: 'size/xs', max: 10 },
+              { label: 'size/s', max: 100 },
+              { label: 'size/m', max: 500 },
+              { label: 'size/l', max: 1000 },
+              { label: 'size/xl', max: Infinity }
+            ];
+
+            // Determine size label
+            let sizeLabel = 'size/xl';
+            for (const size of sizes) {
+              if (changes <= size.max) {
+                sizeLabel = size.label;
+                break;
+              }
+            }
+
+            // Get current labels
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number: number
+            });
+
+            // Remove existing size labels
+            const sizeLabels = currentLabels.filter(l => l.name.startsWith('size/'));
+            for (const label of sizeLabels) {
+              await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number: number,
+                name: label.name
+              }).catch(() => {}); // Ignore if label doesn't exist
+            }
+
+            // Add new size label
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: number,
+              labels: [sizeLabel]
+            }).catch(() => {
+              console.log(`Label ${sizeLabel} might not exist in the repo`);
+            });
+
+            console.log(`PR has ${changes} changes (${additions} additions, ${deletions} deletions)`);
+            console.log(`Applied label: ${sizeLabel}`);
 
   # Run tests with coverage check
   test-coverage:
@@ -69,7 +122,7 @@ jobs:
         uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-key-suffix: 'pr-check'
+          cache-key-suffix: "pr-check"
 
       - name: Run tests with coverage
         run: |
@@ -91,14 +144,29 @@ jobs:
 
       - name: Generate coverage badge
         if: always()
-        uses: cicirello/jacoco-badge-generator@v2
-        with:
-          generate-coverage-badge: true
-          coverage-badge-filename: coverage.svg
-          coverage-label: Coverage
-          coverage-percentage: ${{ steps.coverage.outputs.coverage }}
-          colors: "#4c1 #97ca00 #a4a61d #dfb317 #fe7d37 #e05d44"
-          intervals: 90 80 70 60 50 0
+        run: |
+          COVERAGE=${{ steps.coverage.outputs.coverage }}
+
+          # Determine color based on coverage percentage
+          if (( $(echo "$COVERAGE >= 90" | bc -l) )); then
+            COLOR="4c1"
+          elif (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+            COLOR="97ca00"
+          elif (( $(echo "$COVERAGE >= 70" | bc -l) )); then
+            COLOR="a4a61d"
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+            COLOR="dfb317"
+          elif (( $(echo "$COVERAGE >= 50" | bc -l) )); then
+            COLOR="fe7d37"
+          else
+            COLOR="e05d44"
+          fi
+
+          # Generate badge using shields.io
+          mkdir -p badges
+          curl -s "https://img.shields.io/badge/Coverage-${COVERAGE}%25-${COLOR}" > badges/coverage.svg
+
+          echo "Coverage badge generated: ${COVERAGE}% with color #${COLOR}"
 
       - name: Comment PR with coverage
         if: always()
@@ -183,7 +251,7 @@ jobs:
         uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-key-suffix: 'docs-check'
+          cache-key-suffix: "docs-check"
 
       - name: Check Go doc comments
         run: |
@@ -208,8 +276,8 @@ jobs:
       - name: Setup API Documentation
         uses: ./.github/actions/setup-api-docs
         with:
-          validate-docs: 'true'
-          check-up-to-date: 'true'
+          validate-docs: "true"
+          check-up-to-date: "true"
 
   # Dependencies check
   dependencies:
@@ -253,13 +321,13 @@ jobs:
         uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-key-suffix: 'i18n-validation'
+          cache-key-suffix: "i18n-validation"
 
       - name: Setup i18n Validation
         uses: ./.github/actions/setup-i18n-validation
         with:
-          fail-on-missing: 'true'
-          check-unused: 'true'
+          fail-on-missing: "true"
+          check-unused: "true"
 
       - name: Comment PR with i18n validation results
         if: always()
@@ -321,7 +389,15 @@ jobs:
   approval:
     name: Approval Requirements
     runs-on: arc-runner-set
-    needs: [pr-check, test-coverage, code-quality, docs-check, dependencies, i18n-validation]
+    needs:
+      [
+        pr-check,
+        test-coverage,
+        code-quality,
+        docs-check,
+        dependencies,
+        i18n-validation,
+      ]
     steps:
       - name: Check approval status
         uses: actions/github-script@v7
