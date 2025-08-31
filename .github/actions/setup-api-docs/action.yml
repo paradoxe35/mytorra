@@ -1,17 +1,17 @@
-name: 'Setup API Documentation Tools'
-description: 'Install and setup tools for API documentation generation and validation'
+name: "Setup API Documentation Tools"
+description: "Install and setup tools for API documentation generation and validation"
 inputs:
   validate-docs:
-    description: 'Whether to validate generated documentation'
+    description: "Whether to validate generated documentation"
     required: false
-    default: 'true'
+    default: "true"
   check-up-to-date:
-    description: 'Whether to check if docs are up to date'
+    description: "Whether to check if docs are up to date"
     required: false
-    default: 'true'
+    default: "true"
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Install swag
       shell: bash
@@ -20,6 +20,12 @@ runs:
     - name: Generate API documentation
       shell: bash
       run: make docs
+
+    - name: Setup Node.js
+      if: inputs.validate-docs == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
 
     - name: Install swagger-cli for validation
       if: inputs.validate-docs == 'true'

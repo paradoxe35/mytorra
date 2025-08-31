@@ -1,21 +1,21 @@
-name: 'Setup golangci-lint'
-description: 'Install and run golangci-lint with Go 1.25 support'
+name: "Setup golangci-lint"
+description: "Install and run golangci-lint with Go 1.25 support"
 inputs:
   config-file:
-    description: 'Path to golangci-lint config file'
+    description: "Path to golangci-lint config file"
     required: false
-    default: '.golangci.yml'
+    default: ".golangci.yml"
   timeout:
-    description: 'Timeout for golangci-lint'
+    description: "Timeout for golangci-lint"
     required: false
-    default: '10m'
+    default: "10m"
   working-directory:
-    description: 'Working directory for golangci-lint'
+    description: "Working directory for golangci-lint"
     required: false
-    default: '.'
+    default: "."
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Install golangci-lint
       shell: bash
@@ -27,4 +27,31 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
-        $(go env GOPATH)/bin/golangci-lint run --timeout=${{ inputs.timeout }} --config=${{ inputs.config-file }}
+        # Check if we're in a Go module or workspace
+        if [ -f go.work ]; then
+          # In a workspace, we need to run golangci-lint on each module separately
+          echo "Running golangci-lint in workspace mode..."
+
+          # Parse go.work to get module directories
+          MODULES=()
+          while IFS= read -r line; do
+            # Extract paths from use directive (e.g., ./packages/cache -> packages/cache)
+            if [[ "$line" =~ ^[[:space:]]*\./(.+)$ ]]; then
+              MODULES+=("${BASH_REMATCH[1]}")
+            fi
+          done < <(grep -E '^[[:space:]]*\./.*' go.work)
+
+          # Run golangci-lint on each module
+          for module_path in "${MODULES[@]}"; do
+            if [ -d "$module_path" ] && [ -f "$module_path/go.mod" ]; then
+              echo "Linting module: $module_path"
+              (cd "$module_path" && $(go env GOPATH)/bin/golangci-lint run --timeout=${{ inputs.timeout }} --config=../${{ inputs.config-file }} ./...)
+            fi
+          done
+        elif [ -f go.mod ]; then
+          # Single module
+          echo "Running golangci-lint for single module..."
+          $(go env GOPATH)/bin/golangci-lint run --timeout=${{ inputs.timeout }} --config=${{ inputs.config-file }} ./...
+        else
+          echo "Warning: No go.mod or go.work found in $PWD"
+        fi

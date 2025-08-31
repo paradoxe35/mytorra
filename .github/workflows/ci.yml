@@ -61,7 +61,7 @@ jobs:
         uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-key-suffix: 'build-${{ matrix.service }}'
+          cache-key-suffix: "build-${{ matrix.service }}"
 
       - name: Build service
         uses: ./.github/actions/build-service
@@ -173,13 +173,13 @@ jobs:
         uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-key-suffix: 'docs'
+          cache-key-suffix: "docs"
 
       - name: Setup API Documentation
         uses: ./.github/actions/setup-api-docs
         with:
-          validate-docs: 'true'
-          check-up-to-date: 'true'
+          validate-docs: "true"
+          check-up-to-date: "true"
 
       - name: Upload API documentation
         uses: actions/upload-artifact@v4
@@ -200,13 +200,13 @@ jobs:
         uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-key-suffix: 'i18n'
+          cache-key-suffix: "i18n"
 
       - name: Setup i18n Validation
         uses: ./.github/actions/setup-i18n-validation
         with:
-          fail-on-missing: 'true'
-          check-unused: 'true'
+          fail-on-missing: "true"
+          check-unused: "true"
 
   # Lint job - code quality checks
   lint:
@@ -224,8 +224,8 @@ jobs:
       - name: Setup and Run golangci-lint
         uses: ./.github/actions/setup-golangci-lint
         with:
-          config-file: '.golangci.yml'
-          timeout: '10m'
+          config-file: ".golangci.yml"
+          timeout: "10m"
 
       - name: Check Go formatting
         run: |
@@ -257,12 +257,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: "-no-fail -fmt sarif -out gosec-results.sarif ./..."
+      - name: Install and Run Gosec Security Scanner
+        run: |
+          # Install gosec
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          # Run gosec and output SARIF format
+          $(go env GOPATH)/bin/gosec -no-fail -fmt sarif -out gosec-results.sarif ./... || true
 
       - name: Upload SARIF file
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gosec-results.sarif
@@ -272,16 +275,18 @@ jobs:
           go install github.com/sonatype-nexus-community/nancy@latest
           go list -json -deps ./... | nancy sleuth
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          format: "sarif"
-          output: "trivy-results.sarif"
-          severity: "CRITICAL,HIGH"
+      - name: Install and Run Trivy vulnerability scanner
+        run: |
+          # Install trivy
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install trivy -y
+          # Run trivy
+          trivy fs --severity CRITICAL,HIGH --format sarif --output trivy-results.sarif . || true
 
       - name: Upload Trivy results
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif

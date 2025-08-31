@@ -16,7 +16,8 @@ fi
 # Find all service directories that contain Go modules
 EXISTING_SERVICES=()
 
-echo "🔍 Scanning for existing services in $SERVICES_DIR..."
+# Redirect diagnostic output to stderr so it doesn't interfere with JSON output
+echo "🔍 Scanning for existing services in $SERVICES_DIR..." >&2
 
 for service_dir in "$SERVICES_DIR"/*; do
     if [ -d "$service_dir" ]; then
@@ -37,18 +38,18 @@ for service_dir in "$SERVICES_DIR"/*; do
 
             if [ ${#components[@]} -gt 0 ]; then
                 EXISTING_SERVICES+=("$service_name")
-                echo "  ✅ $service_name (${components[*]})"
+                echo "  ✅ $service_name (${components[*]})" >&2
             else
-                echo "  ⚠️ $service_name (no cmd/api or cmd/worker found)"
+                echo "  ⚠️ $service_name (no cmd/api or cmd/worker found)" >&2
             fi
         else
-            echo "  ❌ $service_name (missing go.mod or cmd directory)"
+            echo "  ❌ $service_name (missing go.mod or cmd directory)" >&2
         fi
     fi
 done
 
 if [ ${#EXISTING_SERVICES[@]} -eq 0 ]; then
-    echo "⚠️ No valid services found!"
+    echo "⚠️ No valid services found!" >&2
     case $OUTPUT_FORMAT in
         json)
             echo "[]"
@@ -63,8 +64,8 @@ if [ ${#EXISTING_SERVICES[@]} -eq 0 ]; then
     exit 0
 fi
 
-echo ""
-echo "📋 Found ${#EXISTING_SERVICES[@]} valid service(s): ${EXISTING_SERVICES[*]}"
+echo "" >&2
+echo "📋 Found ${#EXISTING_SERVICES[@]} valid service(s): ${EXISTING_SERVICES[*]}" >&2
 
 # Output in requested format
 case $OUTPUT_FORMAT in
@@ -88,8 +89,8 @@ case $OUTPUT_FORMAT in
         printf '%s\n' "${EXISTING_SERVICES[@]}"
         ;;
     *)
-        echo "❌ Unknown output format: $OUTPUT_FORMAT"
-        echo "Available formats: json, array, list"
+        echo "❌ Unknown output format: $OUTPUT_FORMAT" >&2
+        echo "Available formats: json, array, list" >&2
         exit 1
         ;;
 esac
