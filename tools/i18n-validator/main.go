@@ -136,12 +136,17 @@ func (v *I18nValidator) scanGoFile(filePath string) error {
 
 // extractI18nKeys extracts i18n keys from function calls
 func (v *I18nValidator) extractI18nKeys(call *ast.CallExpr, filePath string, fset *token.FileSet) {
-	// Look for calls like: translator.T("key"), i18n.T("key"), T("key"), TWithContext(ctx, "key")
+	// Look for calls like: translator.T("key"), translator.TWithContext(ctx, "key"), i18n.T("key"), T("key")
 	var funcName string
+	var receiverName string
 
 	switch fun := call.Fun.(type) {
 	case *ast.SelectorExpr:
 		funcName = fun.Sel.Name
+		// Check if receiver is "translator" or similar
+		if ident, ok := fun.X.(*ast.Ident); ok {
+			receiverName = ident.Name
+		}
 	case *ast.Ident:
 		funcName = fun.Name
 	default:
@@ -153,41 +158,56 @@ func (v *I18nValidator) extractI18nKeys(call *ast.CallExpr, filePath string, fse
 		return
 	}
 
+	// Skip if receiver doesn't look like a translator
+	if receiverName != "" && !v.isTranslatorReceiver(receiverName) {
+		return
+	}
+
 	// Extract string literals from arguments
 	for i, arg := range call.Args {
 		if lit, ok := arg.(*ast.BasicLit); ok && lit.Kind == token.STRING {
 			// Remove quotes from string literal
 			key := strings.Trim(lit.Value, `"`)
+			key = strings.Trim(key, `'`)
 
-			// Skip if it's likely a language code (first argument for some functions)
-			if i == 0 && v.isLanguageCode(key) {
+			// Skip empty keys
+			if key == "" {
 				continue
 			}
 
-			// Skip if it's likely a language code and this is the second argument
-			if i == 1 && funcName == "T" && len(call.Args) > 1 {
-				if firstArg, ok := call.Args[0].(*ast.BasicLit); ok &&
-					firstArg.Kind == token.STRING && v.isLanguageCode(strings.Trim(firstArg.Value, `"`)) {
-					// This is the key argument
+			// Skip if it's likely a language code (first argument for some functions)
+			if i == 0 && v.isLanguageCode(key) && funcName == "T" {
+				continue
+			}
+
+			// For TWithContext, the key is the second argument (after context)
+			if funcName == "TWithContext" && i != 1 {
+				continue
+			}
+
+			// For T function when called on translator object, the first string is usually a language code
+			// and the second is the key. But if first arg is not a language code, it's the key.
+			if funcName == "T" {
+				if i == 0 && !v.isLanguageCode(key) {
+					// This is the key (first argument is not a language code)
+				} else if i == 1 {
+					// This is the key (second argument after language)
 				} else {
 					continue
 				}
 			}
 
-			// For TWithContext, the key is usually the second argument
-			if funcName == "TWithContext" && i != 1 {
+			// Skip format specifiers (like %d, %s)
+			if strings.Contains(key, "%") && len(key) <= 3 {
 				continue
 			}
 
-			// For T function, if first arg is not a language code, it's the key
-			if funcName == "T" && i == 0 && !v.isLanguageCode(key) {
-				// This is the key
-			} else if funcName == "T" && i == 1 {
-				// This is the key (second argument after language)
-			} else if funcName == "TWithContext" && i == 1 {
-				// This is the key for TWithContext
-			} else {
-				continue
+			// Skip if key looks like a variable name or placeholder
+			if !strings.Contains(key, ".") && !strings.Contains(key, "_") {
+				// Most i18n keys have dots or underscores
+				if len(key) < 5 { // Skip very short keys that might be placeholders
+					continue
+				}
 			}
 
 			pos := fset.Position(lit.Pos())
@@ -199,7 +219,7 @@ func (v *I18nValidator) extractI18nKeys(call *ast.CallExpr, filePath string, fse
 
 // isI18nFunction checks if a function name is an i18n function
 func (v *I18nValidator) isI18nFunction(name string) bool {
-	i18nFunctions := []string{"T", "TWithContext", "Translate", "GetMessage"}
+	i18nFunctions := []string{"T", "TWithContext", "Translate", "GetMessage", "Localize", "MustLocalize"}
 	for _, fn := range i18nFunctions {
 		if name == fn {
 			return true
@@ -208,9 +228,33 @@ func (v *I18nValidator) isI18nFunction(name string) bool {
 	return false
 }
 
+// isTranslatorReceiver checks if a receiver name looks like a translator
+func (v *I18nValidator) isTranslatorReceiver(name string) bool {
+	translatorNames := []string{"translator", "trans", "t", "i18n", "l10n", "locale", "localizer"}
+	lowerName := strings.ToLower(name)
+	for _, tn := range translatorNames {
+		if strings.Contains(lowerName, tn) {
+			return true
+		}
+	}
+	// Also check for common service/struct receiver names that might have translators
+	if strings.HasSuffix(lowerName, "service") || strings.HasSuffix(lowerName, "handler") ||
+		strings.HasSuffix(lowerName, "controller") || name == "s" || name == "h" || name == "c" {
+		return true
+	}
+	return false
+}
+
 // isLanguageCode checks if a string looks like a language code
 func (v *I18nValidator) isLanguageCode(s string) bool {
-	// Simple check for common language codes (2-3 characters)
+	// Common language codes
+	langCodes := []string{"en", "fr", "es", "de", "it", "pt", "sw", "ar", "zh", "ja", "ko", "ru", "hi"}
+	for _, code := range langCodes {
+		if s == code {
+			return true
+		}
+	}
+	// Check for locale format (e.g., en-US, fr-CA)
 	matched, _ := regexp.MatchString(`^[a-z]{2,3}(-[A-Z]{2})?$`, s)
 	return matched
 }

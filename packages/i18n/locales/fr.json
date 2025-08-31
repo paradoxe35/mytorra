@@ -12,6 +12,7 @@
   "auth.password_reset_success": "Réinitialisation du mot de passe réussie",
   "auth.email_verified": "Email vérifié avec succès",
   "auth.phone_verified": "Numéro de téléphone vérifié avec succès",
+  "auth.invalid_password": "Mot de passe invalide",
 
   "user.not_found": "Utilisateur non trouvé",
   "user.already_exists": "Un utilisateur avec cet email existe déjà",
@@ -57,6 +58,14 @@
   "validation.terms_required": "Vous devez accepter les conditions générales",
   "validation.password_mismatch": "Les mots de passe ne correspondent pas",
   "validation.invalid_input": "Entrée invalide fournie",
+  "validation.invalid_code": "Code de vérification invalide",
+  "validation.password_or_mfa_required": "Mot de passe ou code MFA requis",
+
+  "mfa.already_enabled": "L'authentification à deux facteurs est déjà activée",
+  "mfa.not_enabled": "L'authentification à deux facteurs n'est pas activée",
+  "mfa.invalid_code": "Code d'authentification à deux facteurs invalide",
+
+  "verification.already_verified": "Déjà vérifié",
 
   "error.internal": "Une erreur interne s'est produite. Veuillez réessayer plus tard.",
   "error.unauthorized": "Vous n'êtes pas autorisé à effectuer cette action",

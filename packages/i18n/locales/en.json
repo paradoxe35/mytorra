@@ -12,6 +12,7 @@
   "auth.password_reset_success": "Password reset successful",
   "auth.email_verified": "Email verified successfully",
   "auth.phone_verified": "Phone number verified successfully",
+  "auth.invalid_password": "Invalid password",
 
   "user.not_found": "User not found",
   "user.already_exists": "User with this email already exists",
@@ -57,6 +58,14 @@
   "validation.terms_required": "You must accept the terms and conditions",
   "validation.password_mismatch": "Passwords do not match",
   "validation.invalid_input": "Invalid input provided",
+  "validation.invalid_code": "Invalid verification code",
+  "validation.password_or_mfa_required": "Either password or MFA code is required",
+
+  "mfa.already_enabled": "Two-factor authentication is already enabled",
+  "mfa.not_enabled": "Two-factor authentication is not enabled",
+  "mfa.invalid_code": "Invalid two-factor authentication code",
+
+  "verification.already_verified": "Already verified",
 
   "error.internal": "An internal error occurred. Please try again later.",
   "error.unauthorized": "You are not authorized to perform this action",
