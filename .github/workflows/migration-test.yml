@@ -100,11 +100,11 @@ jobs:
       postgres:
         image: postgis/postgis:17-3.5-alpine
         env:
-          POSTGRES_USER: ${{ env.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: torra
+          POSTGRES_PASSWORD: torra_test_password
+          POSTGRES_DB: torra_test
         options: >-
-          --health-cmd "pg_isready -U ${{ env.POSTGRES_USER }}"
+          --health-cmd "pg_isready -U torra"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
