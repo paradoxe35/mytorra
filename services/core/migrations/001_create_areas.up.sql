@@ -74,7 +74,7 @@ WITH RECURSIVE area_path AS (
         parent_id,
         name,
         type,
-        ARRAY[name] as path,
+        ARRAY[name]::VARCHAR[] as path,
         1 as level
     FROM areas
     WHERE parent_id IS NULL
@@ -86,7 +86,7 @@ WITH RECURSIVE area_path AS (
         a.parent_id,
         a.name,
         a.type,
-        ap.path || a.name,
+        ap.path || a.name::VARCHAR,
         ap.level + 1
     FROM areas a
     INNER JOIN area_path ap ON a.parent_id = ap.id
