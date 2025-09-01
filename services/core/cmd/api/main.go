@@ -37,7 +37,7 @@ func main() {
 	appLogger := logger.New(cfg.Service.Name, cfg.Service.Environment)
 
 	// Initialize translator
-	translator, err := i18n.New("en", "fr")
+	translator, err := i18n.New(cfg.I18n.DefaultLanguage, cfg.I18n.SupportedLanguages...)
 	if err != nil {
 		appLogger.Fatal("Failed to initialize translator")
 	}
@@ -125,7 +125,16 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(jwtKeyRepo, appLogger, translator)
 
 	// Setup router
-	router := adaptersHTTP.NewRouter(authHandler, userHandler, areaHandler, jwksHandler, authMiddleware, translator)
+	router := adaptersHTTP.NewRouter(
+		authHandler,
+		userHandler,
+		areaHandler,
+		jwksHandler,
+		authMiddleware,
+		translator,
+		cfg.I18n.DefaultLanguage,
+	)
+
 	r := router.Setup()
 
 	// Create HTTP server

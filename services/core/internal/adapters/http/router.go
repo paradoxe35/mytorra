@@ -14,12 +14,13 @@ import (
 )
 
 type Router struct {
-	authHandler    *handlers.AuthHandler
-	userHandler    *handlers.UserHandler
-	areaHandler    *handlers.AreaHandler
-	jwksHandler    *handlers.JWKSHandler
-	authMiddleware *httpMiddleware.AuthMiddleware
-	translator     *i18n.Translator
+	authHandler     *handlers.AuthHandler
+	userHandler     *handlers.UserHandler
+	areaHandler     *handlers.AreaHandler
+	jwksHandler     *handlers.JWKSHandler
+	authMiddleware  *httpMiddleware.AuthMiddleware
+	translator      *i18n.Translator
+	defaultLanguage string
 }
 
 func NewRouter(
@@ -29,14 +30,16 @@ func NewRouter(
 	jwksHandler *handlers.JWKSHandler,
 	authMiddleware *httpMiddleware.AuthMiddleware,
 	translator *i18n.Translator,
+	defaultLanguage string,
 ) *Router {
 	return &Router{
-		authHandler:    authHandler,
-		userHandler:    userHandler,
-		areaHandler:    areaHandler,
-		jwksHandler:    jwksHandler,
-		authMiddleware: authMiddleware,
-		translator:     translator,
+		authHandler:     authHandler,
+		userHandler:     userHandler,
+		areaHandler:     areaHandler,
+		jwksHandler:     jwksHandler,
+		authMiddleware:  authMiddleware,
+		translator:      translator,
+		defaultLanguage: defaultLanguage,
 	}
 }
 
@@ -51,7 +54,7 @@ func (rt *Router) Setup() *chi.Mux {
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(httpPkg.SecurityHeaders)
 	r.Use(httpPkg.CORS)
-	r.Use(httpPkg.Language(rt.translator, "en")) // Add language middleware
+	r.Use(httpPkg.Language(rt.translator, rt.defaultLanguage)) // Add language middleware
 
 	// Health check endpoints
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

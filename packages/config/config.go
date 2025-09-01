@@ -16,6 +16,7 @@ type Config struct {
 	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	AWS      AWSConfig      `mapstructure:"aws"`
+	I18n     I18nConfig     `mapstructure:"i18n"`
 }
 
 type ServiceConfig struct {
@@ -76,6 +77,11 @@ type AWSConfig struct {
 	AccessKeyID     string `mapstructure:"access_key_id"`
 	SecretAccessKey string `mapstructure:"secret_access_key"`
 	S3Bucket        string `mapstructure:"s3_bucket"`
+}
+
+type I18nConfig struct {
+	DefaultLanguage    string   `mapstructure:"default_language"`
+	SupportedLanguages []string `mapstructure:"supported_languages"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -144,6 +150,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.access_duration", "15m")
 	v.SetDefault("jwt.refresh_duration", "7d")
 	v.SetDefault("jwt.issuer", "mytorra")
+
+	v.SetDefault("i18n.default_language", "en")
+	v.SetDefault("i18n.supported_languages", []string{"en", "fr"})
 }
 
 func validate(cfg *Config) error {
