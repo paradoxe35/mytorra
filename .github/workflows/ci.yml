@@ -303,7 +303,8 @@ jobs:
     name: Build Docker Images
     runs-on: arc-runner-set
     needs: [build, test, lint, detect-services]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && needs.detect-services.outputs.services-count > 0
+    if: false
+    # if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && needs.detect-services.outputs.services-count > 0
     strategy:
       matrix:
         service: ${{ fromJson(needs.detect-services.outputs.services) }}
@@ -336,76 +337,9 @@ jobs:
           service-name: ${{ matrix.service }}
           registry: ghcr.io
           repository: ${{ github.repository }}
-          tag: ${{ steps.meta.outputs.tags }}
+          tag: ${{ steps.meta.outputs.version }}
           push: ${{ github.event_name != 'pull_request' }}
           platforms: linux/amd64
-  #         build-args: |
-  #           VERSION=${{ github.sha }}
-  #           BUILD_DATE=${{ github.event.head_commit.timestamp }}
-
-  # TODO: Enable deployment when Kubernetes infrastructure is ready
-  # deploy:
-  #   name: Deploy to Environment
-  #   runs-on: arc-runner-set
-  #   needs: [docker, detect-services]
-  #   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && needs.detect-services.outputs.services-count > 0
-  #   environment:
-  #     name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-  #     url: ${{ github.ref == 'refs/heads/main' && 'https://torra.com' || 'https://staging.torra.com' }}
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Configure kubectl
-  #       run: |
-  #         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
-  #         export KUBECONFIG=kubeconfig
-  #
-  #     - name: Deploy to Kubernetes
-  #       run: |
-  #         ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-  #         NAMESPACE=torra-${ENVIRONMENT}
-  #
-  #         # Apply configurations
-  #         kubectl apply -f infra/kubernetes/namespaces/${NAMESPACE}.yaml
-  #         kubectl apply -f infra/kubernetes/configmaps/${ENVIRONMENT}/ -n ${NAMESPACE}
-  #         kubectl apply -f infra/kubernetes/secrets/${ENVIRONMENT}/ -n ${NAMESPACE}
-  #
-  #         # Update image tags for detected services
-  #         SERVICES=$(echo '${{ needs.detect-services.outputs.services }}' | jq -r '.[]')
-  #         for service in $SERVICES; do
-  #           if [ -f "infra/kubernetes/deployments/${service}.yaml" ]; then
-  #             kubectl set image deployment/${service} \
-  #               ${service}=ghcr.io/${{ github.repository }}/torra-${service}:${{ github.sha }} \
-  #               -n ${NAMESPACE}
-  #           fi
-  #         done
-  #
-  #         # Wait for rollout
-  #         kubectl rollout status deployment --timeout=10m -n ${NAMESPACE}
-  #
-  #     - name: Run smoke tests
-  #       run: |
-  #         ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-  #         URL=${{ github.ref == 'refs/heads/main' && 'https://api.torra.com' || 'https://api.staging.torra.com' }}
-  #
-  #         # Health check
-  #         curl -f ${URL}/health || exit 1
-  #
-  #         # Run smoke test suite
-  #         go test -v -tags=smoke ./tests/smoke/... -env=${ENVIRONMENT}
-  #
-  #     - name: Notify deployment status
-  #       if: always()
-  #       uses: 8398a7/action-slack@v3
-  #       with:
-  #         status: ${{ job.status }}
-  #         text: |
-  #           Deployment to ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }} ${{ job.status }}
-  #           Service: Torra Platform
-  #           Commit: ${{ github.sha }}
-  #           Author: ${{ github.actor }}
-  #         webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
   # Basic cleanup job - keep artifacts management
   cleanup:
