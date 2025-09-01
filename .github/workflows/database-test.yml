@@ -329,14 +329,31 @@ jobs:
       - name: Run database integration tests
         run: |
           echo "🧪 Running database integration tests for ${{ matrix.service }}"
+          echo "⏰ Started at: $(date)"
+          echo ""
 
-          # Run tests with database integration enabled
+          # Run tests with database integration enabled and stream output
           cd services/${{ matrix.service }}
-          if ! go test -v -race -timeout=10m ./internal/adapters/postgres/repositories/...; then
-            echo "❌ Some database integration tests failed"
+          set -o pipefail
+
+          # Use unbuffered output to stream results in real-time with timestamps
+          if ! go test -v -race -timeout=10m ./internal/adapters/postgres/repositories/... 2>&1 | \
+               while IFS= read -r line; do
+                 echo "[$(date '+%H:%M:%S')] $line"
+               done | tee test_output.log; then
+            echo ""
+            echo "❌ Some database integration tests failed at: $(date)"
+            echo "---"
+            echo "Test failure summary:"
+            echo "---"
+            # Show failed tests summary
+            grep -E "(FAIL|panic|Error|error)" test_output.log | head -20 || echo "No specific error patterns found in output"
+            echo ""
+            echo "Full test output is available in the logs above"
             exit 1
           else
-            echo "✅ All database integration tests passed"
+            echo ""
+            echo "✅ All database integration tests passed at: $(date)"
           fi
         env:
           # Database testing environment variables
@@ -351,6 +368,9 @@ jobs:
           TEST_DB_SSL_MODE: "disable"
           TEST_DB_ISOLATE: "false" # Use shared database since we set it up with migrations
           TEST_DB_MIGRATE: "false" # Migrations already applied
+          # Force unbuffered output for real-time streaming
+          GOMAXPROCS: "2"
+          GOTRACEBACK: "all"
 
   database-test-summary:
     name: Database Integration Test Summary

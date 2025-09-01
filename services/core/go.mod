@@ -20,13 +20,14 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/lib/pq v1.10.9
 	github.com/paradoxe35/torra/packages/cache v0.0.0-00010101000000-000000000000
 	github.com/paradoxe35/torra/packages/config v0.0.0
 	github.com/paradoxe35/torra/packages/database v0.0.0-00010101000000-000000000000
 	github.com/paradoxe35/torra/packages/errors v0.0.0-00010101000000-000000000000
 	github.com/paradoxe35/torra/packages/events v0.0.0-00010101000000-000000000000
 	github.com/paradoxe35/torra/packages/http v0.0.0-00010101000000-000000000000
-	github.com/paradoxe35/torra/packages/i18n v0.0.0-00010101000000-000000000000
+	github.com/paradoxe35/torra/packages/i18n v0.0.0
 	github.com/paradoxe35/torra/packages/logger v0.0.0
 	github.com/paradoxe35/torra/packages/security v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.11.1
@@ -44,7 +45,6 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/pquerna/otp v1.5.0 // indirect

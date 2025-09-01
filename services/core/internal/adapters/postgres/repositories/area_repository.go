@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"github.com/paradoxe35/torra/packages/database"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/models"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
@@ -23,7 +24,7 @@ func NewAreaRepository(db *database.DB) ports.AreaRepository {
 }
 
 func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.Area, error) {
-	var area entities.Area
+	var areaModel models.AreaModel
 	query := `
 		SELECT id, parent_id, type, name, code, boundary_polygon,
 		       center_lat, center_lng, operational_radius, status,
@@ -35,7 +36,7 @@ func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 		FROM areas
 		WHERE id = $1`
 
-	err := r.db.GetContext(ctx, &area, query, id)
+	err := r.db.GetContext(ctx, &areaModel, query, id)
 	if err != nil {
 		if database.IsNoRowsError(err) {
 			return nil, fmt.Errorf("area not found: %w", err)
@@ -43,11 +44,11 @@ func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 		return nil, fmt.Errorf("failed to find area by id: %w", err)
 	}
 
-	return &area, nil
+	return areaModel.ToEntity()
 }
 
 func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities.Area, error) {
-	var area entities.Area
+	var areaModel models.AreaModel
 	query := `
 		SELECT id, parent_id, type, name, code, boundary_polygon,
 		       center_lat, center_lng, operational_radius, status,
@@ -59,7 +60,7 @@ func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities
 		FROM areas
 		WHERE code = $1`
 
-	err := r.db.GetContext(ctx, &area, query, code)
+	err := r.db.GetContext(ctx, &areaModel, query, code)
 	if err != nil {
 		if database.IsNoRowsError(err) {
 			return nil, fmt.Errorf("area not found: %w", err)
@@ -67,11 +68,11 @@ func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities
 		return nil, fmt.Errorf("failed to find area by code: %w", err)
 	}
 
-	return &area, nil
+	return areaModel.ToEntity()
 }
 
 func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID) ([]*entities.Area, error) {
-	var areas []*entities.Area
+	var areaModels []models.AreaModel
 
 	qb := database.NewQueryBuilder(`
 		SELECT id, parent_id, type, name, code, boundary_polygon,
@@ -92,16 +93,25 @@ func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID
 	qb.OrderBy("name ASC")
 
 	query, args := qb.Build()
-	err := r.db.SelectContext(ctx, &areas, query, args...)
+	err := r.db.SelectContext(ctx, &areaModels, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find areas by parent id: %w", err)
+	}
+
+	areas := make([]*entities.Area, len(areaModels))
+	for i, model := range areaModels {
+		area, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert area model: %w", err)
+		}
+		areas[i] = area
 	}
 
 	return areas, nil
 }
 
 func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.AreaType) ([]*entities.Area, error) {
-	var areas []*entities.Area
+	var areaModels []models.AreaModel
 	query := `
 		SELECT id, parent_id, type, name, code, boundary_polygon,
 		       center_lat, center_lng, operational_radius, status,
@@ -114,16 +124,25 @@ func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.A
 		WHERE type = $1
 		ORDER BY name ASC`
 
-	err := r.db.SelectContext(ctx, &areas, query, areaType)
+	err := r.db.SelectContext(ctx, &areaModels, query, areaType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find areas by type: %w", err)
+	}
+
+	areas := make([]*entities.Area, len(areaModels))
+	for i, model := range areaModels {
+		area, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert area model: %w", err)
+		}
+		areas[i] = area
 	}
 
 	return areas, nil
 }
 
 func (r *areaRepository) FindActive(ctx context.Context) ([]*entities.Area, error) {
-	var areas []*entities.Area
+	var areaModels []models.AreaModel
 	query := `
 		SELECT id, parent_id, type, name, code, boundary_polygon,
 		       center_lat, center_lng, operational_radius, status,
@@ -136,16 +155,25 @@ func (r *areaRepository) FindActive(ctx context.Context) ([]*entities.Area, erro
 		WHERE status = $1
 		ORDER BY type, name ASC`
 
-	err := r.db.SelectContext(ctx, &areas, query, valueobjects.AreaStatusActive)
+	err := r.db.SelectContext(ctx, &areaModels, query, valueobjects.AreaStatusActive)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find active areas: %w", err)
+	}
+
+	areas := make([]*entities.Area, len(areaModels))
+	for i, model := range areaModels {
+		area, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert area model: %w", err)
+		}
+		areas[i] = area
 	}
 
 	return areas, nil
 }
 
 func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64) ([]*entities.Area, error) {
-	var areas []*entities.Area
+	var areaModels []models.AreaModel
 
 	// Use the PostGIS function created in migration 006
 	// This provides better encapsulation and reusability
@@ -173,9 +201,18 @@ func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64)
 			END,
 			f.distance_km ASC`
 
-	err := r.db.SelectContext(ctx, &areas, query, lat, lng)
+	err := r.db.SelectContext(ctx, &areaModels, query, lat, lng)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find areas by coordinate: %w", err)
+	}
+
+	areas := make([]*entities.Area, len(areaModels))
+	for i, model := range areaModels {
+		area, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert area model: %w", err)
+		}
+		areas[i] = area
 	}
 
 	return areas, nil
@@ -201,7 +238,8 @@ func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 			:created_at, :updated_at
 		)`
 
-	_, err := r.db.NamedExecContext(ctx, query, area)
+	areaModel := models.FromEntity(area)
+	_, err := r.db.NamedExecContext(ctx, query, areaModel)
 	if err != nil {
 		return fmt.Errorf("failed to save area: %w", err)
 	}
@@ -240,7 +278,8 @@ func (r *areaRepository) Update(ctx context.Context, area *entities.Area) error 
 			deactivated_at = :deactivated_at
 		WHERE id = :id`
 
-	result, err := r.db.NamedExecContext(ctx, query, area)
+	areaModel := models.FromEntity(area)
+	result, err := r.db.NamedExecContext(ctx, query, areaModel)
 	if err != nil {
 		return fmt.Errorf("failed to update area: %w", err)
 	}
@@ -278,7 +317,7 @@ func (r *areaRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]*entities.Area, error) {
-	var areas []*entities.Area
+	var areaModels []models.AreaModel
 
 	// Recursive CTE to get the full hierarchy from child to parent
 	query := `
@@ -315,9 +354,18 @@ func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]
 		FROM area_hierarchy
 		ORDER BY level DESC`
 
-	err := r.db.SelectContext(ctx, &areas, query, areaID)
+	err := r.db.SelectContext(ctx, &areaModels, query, areaID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get area hierarchy: %w", err)
+	}
+
+	areas := make([]*entities.Area, len(areaModels))
+	for i, model := range areaModels {
+		area, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert area model: %w", err)
+		}
+		areas[i] = area
 	}
 
 	return areas, nil
