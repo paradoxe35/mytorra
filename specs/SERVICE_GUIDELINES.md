@@ -313,6 +313,18 @@ import (
 ### 4.3 Database Pattern
 
 ```go
+// Entity struct tags for database mapping (IMPORTANT)
+// When using sqlx with named queries or direct scanning, entities need db tags
+type User struct {
+    ID        uuid.UUID `db:"id"`
+    Email     string    `db:"email"`
+    Name      string    `db:"name"`
+    CreatedAt time.Time `db:"created_at"`
+}
+
+// Note: If entity has a separate model in adapters/postgres/models/,
+// use the model for database operations instead of adding tags to domain entity
+
 // Repository implementation using shared database package
 type userRepository struct {
     db *database.DB

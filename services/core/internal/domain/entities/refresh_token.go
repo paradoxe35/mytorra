@@ -8,18 +8,18 @@ import (
 
 // RefreshToken represents a refresh token in the system
 type RefreshToken struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	TokenHash  string     // Hashed version of the actual token
-	DeviceID   string     // Optional: track device/client
-	DeviceName string     // Optional: human-readable device name
-	IPAddress  string     // IP address when token was created
-	UserAgent  string     // User agent string
-	ExpiresAt  time.Time  // When the token expires
-	LastUsedAt *time.Time // Track last usage
-	RevokedAt  *time.Time // If revoked before expiry
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID         uuid.UUID  `db:"id"`
+	UserID     uuid.UUID  `db:"user_id"`
+	TokenHash  string     `db:"token_hash"`   // Hashed version of the actual token
+	DeviceID   string     `db:"device_id"`    // Optional: track device/client
+	DeviceName string     `db:"device_name"`  // Optional: human-readable device name
+	IPAddress  string     `db:"ip_address"`   // IP address when token was created
+	UserAgent  string     `db:"user_agent"`   // User agent string
+	ExpiresAt  time.Time  `db:"expires_at"`   // When the token expires
+	LastUsedAt *time.Time `db:"last_used_at"` // Track last usage
+	RevokedAt  *time.Time `db:"revoked_at"`   // If revoked before expiry
+	CreatedAt  time.Time  `db:"created_at"`
+	UpdatedAt  time.Time  `db:"updated_at"`
 }
 
 // IsValid checks if the refresh token is still valid

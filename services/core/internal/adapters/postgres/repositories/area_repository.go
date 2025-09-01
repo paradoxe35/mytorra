@@ -355,7 +355,7 @@ func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]
 		       delivery_fee_structure, cross_area_fees, operational_hours,
 		       created_at, updated_at, activated_at, deactivated_at
 		FROM area_hierarchy
-		ORDER BY level DESC`
+		ORDER BY level ASC`
 
 	err := r.db.SelectContext(ctx, &areaModels, query, areaID)
 	if err != nil {

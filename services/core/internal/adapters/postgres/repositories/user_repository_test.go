@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,7 +17,7 @@ import (
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
 )
 
-func setupUserRepo(t *testing.T) (*userRepository, func()) {
+func setupUserRepo(t *testing.T) (*userRepository, *sqlx.DB, func()) {
 	// Skip test if database testing is not enabled
 	if !database.IsTestingEnabled() {
 		t.Skip("Skipping test: database testing not enabled. Set ENABLE_DB_TESTS=true or run in CI")
@@ -36,10 +37,10 @@ func setupUserRepo(t *testing.T) (*userRepository, func()) {
 		}
 	}
 
-	return repo, cleanup
+	return repo, testDB.DB.DB, cleanup
 }
 
-func createTestUser(t *testing.T) *entities.User {
+func createTestUser(t *testing.T, areaID uuid.UUID) *entities.User {
 	email, err := valueobjects.NewEmail("test@example.com")
 	require.NoError(t, err)
 
@@ -61,7 +62,7 @@ func createTestUser(t *testing.T) *entities.User {
 		FacebookID:        nil,
 		MFAEnabled:        false,
 		MFASecret:         nil,
-		AreaID:            uuid.New(),
+		AreaID:            areaID,
 		LastKnownLat:      nil,
 		LastKnownLng:      nil,
 		Status:            entities.UserStatusActive,
@@ -72,12 +73,45 @@ func createTestUser(t *testing.T) *entities.User {
 	}
 }
 
+func createTestAreaForUser(t *testing.T, db *sqlx.DB) uuid.UUID {
+	areaID := uuid.New()
+	// Use UUID in code to ensure uniqueness
+	areaCode := fmt.Sprintf("TEST_%s", areaID.String()[:8])
+
+	query := `
+		INSERT INTO areas (
+			id, type, name, code, center_lat, center_lng,
+			center_point, operational_radius, status,
+			service_availability, settings, switching_mode,
+			allow_cross_trade, nearby_area_ids, transition_zones,
+			timezone, languages, currency, tax_rate, min_order_value,
+			delivery_fee_structure, cross_area_fees, operational_hours,
+			created_at, updated_at
+		) VALUES (
+			$1, 'town', 'Test Area', $2, 0, 0,
+			ST_SetSRID(ST_MakePoint(0, 0), 4326), 10, 'active',
+			'{}', '{}', 'manual',
+			false, '{}', '[]',
+			'UTC', '["en"]', 'USD', 0, 0,
+			'{}', '{}', '{}',
+			NOW(), NOW()
+		)`
+
+	_, err := db.Exec(query, areaID, areaCode)
+	require.NoError(t, err)
+
+	return areaID
+}
+
 func TestUserRepository_Save(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Test: Save user
 	err := repo.Save(ctx, user)
@@ -93,11 +127,14 @@ func TestUserRepository_Save(t *testing.T) {
 }
 
 func TestUserRepository_FindByID(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
@@ -117,11 +154,13 @@ func TestUserRepository_FindByID(t *testing.T) {
 }
 
 func TestUserRepository_FindByEmail(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
@@ -143,11 +182,13 @@ func TestUserRepository_FindByEmail(t *testing.T) {
 }
 
 func TestUserRepository_FindByPhone(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
@@ -169,11 +210,13 @@ func TestUserRepository_FindByPhone(t *testing.T) {
 }
 
 func TestUserRepository_Update(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
@@ -195,7 +238,7 @@ func TestUserRepository_Update(t *testing.T) {
 	assert.True(t, updatedUser.EmailVerified)
 
 	// Test: Update non-existent user
-	nonExistentUser := createTestUser(t)
+	nonExistentUser := createTestUser(t, areaID)
 	nonExistentUser.ID = uuid.New()
 	err = repo.Update(ctx, nonExistentUser)
 	assert.Error(t, err)
@@ -203,11 +246,13 @@ func TestUserRepository_Update(t *testing.T) {
 }
 
 func TestUserRepository_Delete(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
@@ -229,25 +274,27 @@ func TestUserRepository_Delete(t *testing.T) {
 }
 
 func TestUserRepository_ListByArea(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	areaID := uuid.New()
+
+	// Create test areas
+	areaID := createTestAreaForUser(t, db)
+	areaID2 := createTestAreaForUser(t, db)
 
 	// Create multiple users in the same area
-	user1 := createTestUser(t)
-	user1.AreaID = areaID
+	user1 := createTestUser(t, areaID)
 	user1.Email, _ = valueobjects.NewEmail("user1@example.com")
 
-	user2 := createTestUser(t)
-	user2.AreaID = areaID
+	user2 := createTestUser(t, areaID)
 	user2.Email, _ = valueobjects.NewEmail("user2@example.com")
+	user2.Phone, _ = valueobjects.NewPhone("+1234567891")
 
 	// Create user in different area
-	user3 := createTestUser(t)
-	user3.AreaID = uuid.New()
+	user3 := createTestUser(t, areaID2)
 	user3.Email, _ = valueobjects.NewEmail("user3@example.com")
+	user3.Phone, _ = valueobjects.NewPhone("+1234567892")
 
 	// Save all users
 	require.NoError(t, repo.Save(ctx, user1))
@@ -275,11 +322,13 @@ func TestUserRepository_ListByArea(t *testing.T) {
 }
 
 func TestUserRepository_ExistsByEmail(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Test: Email doesn't exist initially
 	exists, err := repo.ExistsByEmail(ctx, user.Email)
@@ -304,11 +353,13 @@ func TestUserRepository_ExistsByEmail(t *testing.T) {
 }
 
 func TestUserRepository_ExistsByPhone(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Test: Phone doesn't exist initially
 	exists, err := repo.ExistsByPhone(ctx, user.Phone)
@@ -333,11 +384,13 @@ func TestUserRepository_ExistsByPhone(t *testing.T) {
 }
 
 func TestUserRepository_UpdateLastLogin(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
@@ -361,11 +414,13 @@ func TestUserRepository_UpdateLastLogin(t *testing.T) {
 }
 
 func TestUserRepository_UpdateLocation(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
@@ -392,11 +447,13 @@ func TestUserRepository_UpdateLocation(t *testing.T) {
 }
 
 func TestUserRepository_ConcurrentOperations(t *testing.T) {
-	repo, cleanup := setupUserRepo(t)
+	repo, db, cleanup := setupUserRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	user := createTestUser(t)
+	// Create test area first
+	areaID := createTestAreaForUser(t, db)
+	user := createTestUser(t, areaID)
 
 	// Create user first
 	err := repo.Save(ctx, user)
