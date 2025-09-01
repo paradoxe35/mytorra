@@ -10,6 +10,7 @@ import (
 
 	"github.com/paradoxe35/torra/packages/database"
 	"github.com/paradoxe35/torra/packages/errors"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/models"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
@@ -25,7 +26,7 @@ func NewUserRepository(db *database.DB) ports.UserRepository {
 }
 
 func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.User, error) {
-	var user entities.User
+	var userModel models.UserModel
 	query := `
 		SELECT id, email, phone, name, password_hash,
 		       profile_image_url, email_verified, phone_verified,
@@ -35,7 +36,7 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL`
 
-	err := r.db.GetContext(ctx, &user, query, id)
+	err := r.db.GetContext(ctx, &userModel, query, id)
 	if err != nil {
 		if database.IsNoRowsError(err) {
 			return nil, fmt.Errorf("user not found: %w", err)
@@ -43,11 +44,11 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 		return nil, fmt.Errorf("failed to find user by id: %w", err)
 	}
 
-	return &user, nil
+	return userModel.ToEntity()
 }
 
 func (r *userRepository) FindByEmail(ctx context.Context, email valueobjects.Email) (*entities.User, error) {
-	var user entities.User
+	var userModel models.UserModel
 	query := `
 		SELECT id, email, phone, name, password_hash,
 		       profile_image_url, email_verified, phone_verified,
@@ -57,7 +58,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email valueobjects.Ema
 		FROM users
 		WHERE email = $1 AND deleted_at IS NULL`
 
-	err := r.db.GetContext(ctx, &user, query, email.String())
+	err := r.db.GetContext(ctx, &userModel, query, email.String())
 	if err != nil {
 		if database.IsNoRowsError(err) {
 			return nil, nil // Return nil, nil when user not found
@@ -65,11 +66,11 @@ func (r *userRepository) FindByEmail(ctx context.Context, email valueobjects.Ema
 		return nil, fmt.Errorf("failed to find user by email: %w", err)
 	}
 
-	return &user, nil
+	return userModel.ToEntity()
 }
 
 func (r *userRepository) FindByPhone(ctx context.Context, phone valueobjects.Phone) (*entities.User, error) {
-	var user entities.User
+	var userModel models.UserModel
 	query := `
 		SELECT id, email, phone, name, password_hash,
 		       profile_image_url, email_verified, phone_verified,
@@ -79,7 +80,7 @@ func (r *userRepository) FindByPhone(ctx context.Context, phone valueobjects.Pho
 		FROM users
 		WHERE phone = $1 AND deleted_at IS NULL`
 
-	err := r.db.GetContext(ctx, &user, query, phone.String())
+	err := r.db.GetContext(ctx, &userModel, query, phone.String())
 	if err != nil {
 		if database.IsNoRowsError(err) {
 			return nil, nil
@@ -87,7 +88,7 @@ func (r *userRepository) FindByPhone(ctx context.Context, phone valueobjects.Pho
 		return nil, fmt.Errorf("failed to find user by phone: %w", err)
 	}
 
-	return &user, nil
+	return userModel.ToEntity()
 }
 
 func (r *userRepository) Save(ctx context.Context, user *entities.User) error {
@@ -176,8 +177,6 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *userRepository) ListByArea(ctx context.Context, area string, limit, offset int) ([]*entities.User, error) {
-	var users []*entities.User
-
 	// Parse area string to UUID
 	areaID, err := uuid.Parse(area)
 	if err != nil {
@@ -195,9 +194,19 @@ func (r *userRepository) ListByArea(ctx context.Context, area string, limit, off
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3`
 
-	err = r.db.SelectContext(ctx, &users, query, areaID, limit, offset)
+	var userModels []models.UserModel
+	err = r.db.SelectContext(ctx, &userModels, query, areaID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users by area: %w", err)
+	}
+
+	users := make([]*entities.User, len(userModels))
+	for i, model := range userModels {
+		user, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert user model: %w", err)
+		}
+		users[i] = user
 	}
 
 	return users, nil

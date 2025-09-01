@@ -359,6 +359,7 @@ jobs:
           # Database testing environment variables
           ENABLE_DB_TESTS: "true"
           CI: "true"
+          SERVICE_NAME: ${{ matrix.service }}
           GITHUB_ACTIONS: "true"
           TEST_DB_HOST: "localhost"
           TEST_DB_PORT: "5432"

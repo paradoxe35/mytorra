@@ -24,10 +24,10 @@ func NewRefreshTokenRepository(db *database.DB) ports.RefreshTokenRepository {
 const createRefreshTokenQuery = `
 	INSERT INTO refresh_tokens (
 		id, user_id, token_hash, device_id, device_name,
-		ip_address, user_agent, expires_at, created_at, updated_at
+		ip_address, user_agent, expires_at, last_used_at, revoked_at, created_at, updated_at
 	) VALUES (
 		:id, :user_id, :token_hash, :device_id, :device_name,
-		:ip_address, :user_agent, :expires_at, :created_at, :updated_at
+		:ip_address, :user_agent, :expires_at, :last_used_at, :revoked_at, :created_at, :updated_at
 	)
 `
 
