@@ -3,7 +3,6 @@ package repositories
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -132,55 +131,36 @@ func (r *areaRepository) FindActive(ctx context.Context) ([]*entities.Area, erro
 func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64) ([]*entities.Area, error) {
 	var areas []*entities.Area
 
-	// Using Haversine formula to find areas within their radius
-	// This query finds all areas where the given coordinate is within the area's radius
+	// Use the PostGIS function created in migration 006
+	// This provides better encapsulation and reusability
 	query := `
-		SELECT id, name, code, type, parent_id, boundaries,
-		       center_lat, center_lng, radius_km, status, metadata,
-		       created_at, updated_at,
-		       (6371 * acos(
-		           cos(radians($1)) * cos(radians(center_lat)) *
-		           cos(radians(center_lng) - radians($2)) +
-		           sin(radians($1)) * sin(radians(center_lat))
-		       )) AS distance_km
-		FROM areas
-		WHERE status = $3
-		  AND (6371 * acos(
-		      cos(radians($1)) * cos(radians(center_lat)) *
-		      cos(radians(center_lng) - radians($2)) +
-		      sin(radians($1)) * sin(radians(center_lat))
-		  )) <= radius_km
-		ORDER BY type DESC, distance_km ASC`
+		SELECT
+			f.id, f.name, f.code, f.type, f.parent_id,
+			a.boundary_polygon AS boundaries,
+			f.center_lat, f.center_lng,
+			f.operational_radius AS radius_km,
+			f.status,
+			a.service_availability AS metadata,
+			a.switching_mode, a.allow_cross_trade, a.nearby_area_ids,
+			a.transition_zones, a.timezone, a.languages, a.currency,
+			a.tax_rate, a.min_order_value, a.delivery_fee_structure,
+			a.cross_area_fees, a.operational_hours,
+			a.created_at, a.updated_at, a.activated_at, a.deactivated_at,
+			f.distance_km
+		FROM find_areas_by_coordinate($1, $2, 50) f
+		JOIN areas a ON a.id = f.id
+		ORDER BY
+			CASE f.type
+				WHEN 'subarea' THEN 1
+				WHEN 'town' THEN 2
+				WHEN 'province' THEN 3
+				WHEN 'country' THEN 4
+			END,
+			f.distance_km ASC`
 
-	err := r.db.SelectContext(ctx, &areas, query, lat, lng, valueobjects.AreaStatusActive)
+	err := r.db.SelectContext(ctx, &areas, query, lat, lng)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find areas by coordinate: %w", err)
-	}
-
-	// If no areas found using radius, find the nearest area
-	if len(areas) == 0 {
-		nearestQuery := `
-			SELECT id, name, code, type, parent_id, boundaries,
-			       center_lat, center_lng, radius_km, status, metadata,
-			       created_at, updated_at,
-			       (6371 * acos(
-			           cos(radians($1)) * cos(radians(center_lat)) *
-			           cos(radians(center_lng) - radians($2)) +
-			           sin(radians($1)) * sin(radians(center_lat))
-			       )) AS distance_km
-			FROM areas
-			WHERE status = $3
-			ORDER BY distance_km ASC
-			LIMIT 1`
-
-		var nearestArea entities.Area
-		err = r.db.GetContext(ctx, &nearestArea, nearestQuery, lat, lng, valueobjects.AreaStatusActive)
-		if err != nil && !database.IsNoRowsError(err) {
-			return nil, fmt.Errorf("failed to find nearest area: %w", err)
-		}
-		if err == nil {
-			areas = append(areas, &nearestArea)
-		}
 	}
 
 	return areas, nil
@@ -293,24 +273,8 @@ func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]
 	return areas, nil
 }
 
-// Helper function to calculate distance between two coordinates
-func calculateDistance(lat1, lng1, lat2, lng2 float64) float64 {
-	const earthRadius = 6371 // Earth's radius in kilometers
-
-	// Convert to radians
-	lat1Rad := lat1 * math.Pi / 180
-	lat2Rad := lat2 * math.Pi / 180
-	deltaLat := (lat2 - lat1) * math.Pi / 180
-	deltaLng := (lng2 - lng1) * math.Pi / 180
-
-	// Haversine formula
-	a := math.Sin(deltaLat/2)*math.Sin(deltaLat/2) +
-		math.Cos(lat1Rad)*math.Cos(lat2Rad)*
-			math.Sin(deltaLng/2)*math.Sin(deltaLng/2)
-	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
-
-	return earthRadius * c
-}
+// Note: calculateDistance function removed as it's no longer needed
+// PostGIS ST_Distance function provides more accurate distance calculations
 
 // InTransaction executes a function within a database transaction
 func (r *areaRepository) InTransaction(ctx context.Context, fn func(*sqlx.Tx) error) error {

@@ -1,3 +1,6 @@
+-- Enable PostGIS extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 CREATE TABLE IF NOT EXISTS areas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     parent_id UUID REFERENCES areas(id),
@@ -7,11 +10,15 @@ CREATE TABLE IF NOT EXISTS areas (
     name VARCHAR(255) NOT NULL,
     code VARCHAR(50) UNIQUE,
 
-    -- Geographic data
-    boundary_polygon JSONB, -- GeoJSON polygon for area boundaries
-    center_lat DECIMAL(10, 8),
-    center_lng DECIMAL(11, 8),
+    -- Geographic data using PostGIS types
+    boundary GEOMETRY(POLYGON, 4326), -- PostGIS polygon for area boundaries
+    center_point GEOMETRY(POINT, 4326), -- PostGIS point for center location
     operational_radius INT, -- in kilometers
+
+    -- Keep legacy columns for backward compatibility (can be removed later)
+    boundary_polygon JSONB, -- GeoJSON polygon for area boundaries (deprecated)
+    center_lat DECIMAL(10, 8), -- deprecated, use center_point
+    center_lng DECIMAL(11, 8), -- deprecated, use center_point
 
     -- Configuration
     status VARCHAR(20) NOT NULL DEFAULT 'active',
@@ -59,12 +66,17 @@ CREATE TABLE IF NOT EXISTS area_relationships (
     CONSTRAINT unique_area_relationship UNIQUE (area_id, related_area_id, relationship_type)
 );
 
+-- Regular indexes
 CREATE INDEX idx_areas_parent_id ON areas(parent_id);
 CREATE INDEX idx_areas_type ON areas(type);
 CREATE INDEX idx_areas_status ON areas(status);
 CREATE INDEX idx_areas_name ON areas(name);
 CREATE INDEX idx_areas_code ON areas(code);
 CREATE INDEX idx_areas_center_location ON areas(center_lat, center_lng);
+
+-- Spatial indexes for PostGIS columns
+CREATE INDEX idx_areas_center_point ON areas USING GIST (center_point);
+CREATE INDEX idx_areas_boundary ON areas USING GIST (boundary);
 
 -- Create hierarchical path view for easier querying
 CREATE OR REPLACE VIEW area_hierarchy AS
@@ -94,14 +106,14 @@ WITH RECURSIVE area_path AS (
 SELECT * FROM area_path;
 
 -- Insert initial areas for DRC (Democratic Republic of Congo)
-INSERT INTO areas (type, name, code, center_lat, center_lng, operational_radius, currency, languages, status) VALUES
-    ('country', 'Democratic Republic of Congo', 'CD', -2.5, 23.5, 2000, 'CDF', ARRAY['fr', 'sw', 'ln', 'kg'], 'active');
+INSERT INTO areas (type, name, code, center_lat, center_lng, center_point, operational_radius, currency, languages, status) VALUES
+    ('country', 'Democratic Republic of Congo', 'CD', -2.5, 23.5, ST_SetSRID(ST_MakePoint(23.5, -2.5), 4326), 2000, 'CDF', ARRAY['fr', 'sw', 'ln', 'kg'], 'active');
 
 -- Get the country ID for inserting provinces
 WITH country AS (
     SELECT id FROM areas WHERE code = 'CD' LIMIT 1
 )
-INSERT INTO areas (parent_id, type, name, code, center_lat, center_lng, operational_radius, currency, languages, status)
+INSERT INTO areas (parent_id, type, name, code, center_lat, center_lng, center_point, operational_radius, currency, languages, status)
 SELECT
     country.id,
     'province',
@@ -109,6 +121,7 @@ SELECT
     province.code,
     province.lat,
     province.lng,
+    ST_SetSRID(ST_MakePoint(province.lng, province.lat), 4326),
     province.radius,
     'CDF',
     ARRAY['fr', 'sw'],
@@ -122,7 +135,7 @@ FROM country, (VALUES
 WITH south_kivu AS (
     SELECT id FROM areas WHERE code = 'CD-SK' LIMIT 1
 )
-INSERT INTO areas (parent_id, type, name, code, center_lat, center_lng, operational_radius, currency, languages, status)
+INSERT INTO areas (parent_id, type, name, code, center_lat, center_lng, center_point, operational_radius, currency, languages, status)
 SELECT
     south_kivu.id,
     'town',
@@ -130,6 +143,7 @@ SELECT
     town.code,
     town.lat,
     town.lng,
+    ST_SetSRID(ST_MakePoint(town.lng, town.lat), 4326),
     town.radius,
     'CDF',
     ARRAY['fr', 'sw'],
@@ -144,7 +158,7 @@ FROM south_kivu, (VALUES
 WITH north_kivu AS (
     SELECT id FROM areas WHERE code = 'CD-NK' LIMIT 1
 )
-INSERT INTO areas (parent_id, type, name, code, center_lat, center_lng, operational_radius, currency, languages, status)
+INSERT INTO areas (parent_id, type, name, code, center_lat, center_lng, center_point, operational_radius, currency, languages, status)
 SELECT
     north_kivu.id,
     'town',
@@ -152,6 +166,7 @@ SELECT
     town.code,
     town.lat,
     town.lng,
+    ST_SetSRID(ST_MakePoint(town.lng, town.lat), 4326),
     town.radius,
     'CDF',
     ARRAY['fr', 'sw'],
