@@ -63,6 +63,8 @@ func main() {
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository(db)
 	areaRepo := repositories.NewAreaRepository(db)
+	refreshTokenRepo := repositories.NewRefreshTokenRepository(db)
+	jwtKeyRepo := repositories.NewJWTKeyRepository(db)
 
 	// Initialize event publisher
 	eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, appLogger)
@@ -89,26 +91,34 @@ func main() {
 		translator,
 	)
 
+	// Initialize key management service first to ensure keys exist
+	keyManagementService := services.NewKeyManagementService(jwtKeyRepo, appLogger)
+
+	// Ensure at least one active JWT key exists
+	if err := keyManagementService.InitializeKeys(context.Background()); err != nil {
+		appLogger.Fatal("Failed to initialize JWT keys", "error", err)
+	}
+
 	authService := services.NewAuthService(
 		userRepo,
+		refreshTokenRepo,
+		jwtKeyRepo,
 		cacheClient,
 		appLogger,
 		translator,
-		cfg.JWT.Secret,
-		cfg.JWT.Issuer,
-		cfg.JWT.AccessDuration,
-		cfg.JWT.RefreshDuration,
+		cfg.JWT,
 	)
 
 	// Initialize HTTP handlers
 	authHandler := handlers.NewAuthHandler(authService, userService, appLogger)
 	userHandler := handlers.NewUserHandler(userService, appLogger)
+	jwksHandler := handlers.NewJWKSHandler(jwtKeyRepo, appLogger, cacheClient)
 
 	// Initialize middleware
-	authMiddleware := middleware.NewAuthMiddleware(cfg.JWT.Secret, appLogger)
+	authMiddleware := middleware.NewAuthMiddleware(jwtKeyRepo, appLogger)
 
 	// Setup router
-	router := adaptersHTTP.NewRouter(authHandler, userHandler, authMiddleware)
+	router := adaptersHTTP.NewRouter(authHandler, userHandler, jwksHandler, authMiddleware)
 	r := router.Setup()
 
 	// Create HTTP server

@@ -66,7 +66,6 @@ type RabbitMQConfig struct {
 }
 
 type JWTConfig struct {
-	Secret          string        `mapstructure:"secret"`
 	AccessDuration  time.Duration `mapstructure:"access_duration"`
 	RefreshDuration time.Duration `mapstructure:"refresh_duration"`
 	Issuer          string        `mapstructure:"issuer"`
@@ -154,10 +153,6 @@ func validate(cfg *Config) error {
 
 	if cfg.Database.Host != "" && cfg.Database.Database == "" {
 		return fmt.Errorf("database name is required when host is specified")
-	}
-
-	if cfg.JWT.Secret == "" && cfg.Service.Environment == "production" {
-		return fmt.Errorf("JWT secret is required in production")
 	}
 
 	return nil

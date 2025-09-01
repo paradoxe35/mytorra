@@ -15,17 +15,20 @@ import (
 type Router struct {
 	authHandler    *handlers.AuthHandler
 	userHandler    *handlers.UserHandler
+	jwksHandler    *handlers.JWKSHandler
 	authMiddleware *httpMiddleware.AuthMiddleware
 }
 
 func NewRouter(
 	authHandler *handlers.AuthHandler,
 	userHandler *handlers.UserHandler,
+	jwksHandler *handlers.JWKSHandler,
 	authMiddleware *httpMiddleware.AuthMiddleware,
 ) *Router {
 	return &Router{
 		authHandler:    authHandler,
 		userHandler:    userHandler,
+		jwksHandler:    jwksHandler,
 		authMiddleware: authMiddleware,
 	}
 }
@@ -54,6 +57,13 @@ func (rt *Router) Setup() *chi.Mux {
 		httpPkg.RespondJSON(w, http.StatusOK, map[string]string{
 			"status": "ready",
 		})
+	})
+
+	// JWKS endpoints (public - for other services to verify JWTs)
+	r.Route("/.well-known", func(r chi.Router) {
+		r.Get("/jwks.json", rt.jwksHandler.GetJWKS)       // JSON Web Key Set
+		r.Get("/public-key", rt.jwksHandler.GetPublicKey) // Current active public key in PEM format
+		r.Get("/keys/info", rt.jwksHandler.GetKeyInfo)    // Key information (without actual keys)
 	})
 
 	// API routes
