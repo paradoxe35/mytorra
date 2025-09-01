@@ -49,9 +49,13 @@ func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities.Area, error) {
 	var area entities.Area
 	query := `
-		SELECT id, name, code, type, parent_id, boundaries,
-		       center_lat, center_lng, radius_km, status, metadata,
-		       created_at, updated_at
+		SELECT id, parent_id, type, name, code, boundary_polygon,
+		       center_lat, center_lng, operational_radius, status,
+		       service_availability, settings, switching_mode,
+		       allow_cross_trade, nearby_area_ids, transition_zones,
+		       timezone, languages, currency, tax_rate, min_order_value,
+		       delivery_fee_structure, cross_area_fees, operational_hours,
+		       created_at, updated_at, activated_at, deactivated_at
 		FROM areas
 		WHERE code = $1`
 
@@ -70,9 +74,13 @@ func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID
 	var areas []*entities.Area
 
 	qb := database.NewQueryBuilder(`
-		SELECT id, name, code, type, parent_id, boundaries,
-		       center_lat, center_lng, radius_km, status, metadata,
-		       created_at, updated_at
+		SELECT id, parent_id, type, name, code, boundary_polygon,
+		       center_lat, center_lng, operational_radius, status,
+		       service_availability, settings, switching_mode,
+		       allow_cross_trade, nearby_area_ids, transition_zones,
+		       timezone, languages, currency, tax_rate, min_order_value,
+		       delivery_fee_structure, cross_area_fees, operational_hours,
+		       created_at, updated_at, activated_at, deactivated_at
 		FROM areas`)
 
 	if parentID == nil {
@@ -95,9 +103,13 @@ func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID
 func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.AreaType) ([]*entities.Area, error) {
 	var areas []*entities.Area
 	query := `
-		SELECT id, name, code, type, parent_id, boundaries,
-		       center_lat, center_lng, radius_km, status, metadata,
-		       created_at, updated_at
+		SELECT id, parent_id, type, name, code, boundary_polygon,
+		       center_lat, center_lng, operational_radius, status,
+		       service_availability, settings, switching_mode,
+		       allow_cross_trade, nearby_area_ids, transition_zones,
+		       timezone, languages, currency, tax_rate, min_order_value,
+		       delivery_fee_structure, cross_area_fees, operational_hours,
+		       created_at, updated_at, activated_at, deactivated_at
 		FROM areas
 		WHERE type = $1
 		ORDER BY name ASC`
@@ -113,9 +125,13 @@ func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.A
 func (r *areaRepository) FindActive(ctx context.Context) ([]*entities.Area, error) {
 	var areas []*entities.Area
 	query := `
-		SELECT id, name, code, type, parent_id, boundaries,
-		       center_lat, center_lng, radius_km, status, metadata,
-		       created_at, updated_at
+		SELECT id, parent_id, type, name, code, boundary_polygon,
+		       center_lat, center_lng, operational_radius, status,
+		       service_availability, settings, switching_mode,
+		       allow_cross_trade, nearby_area_ids, transition_zones,
+		       timezone, languages, currency, tax_rate, min_order_value,
+		       delivery_fee_structure, cross_area_fees, operational_hours,
+		       created_at, updated_at, activated_at, deactivated_at
 		FROM areas
 		WHERE status = $1
 		ORDER BY type, name ASC`
@@ -135,18 +151,17 @@ func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64)
 	// This provides better encapsulation and reusability
 	query := `
 		SELECT
-			f.id, f.name, f.code, f.type, f.parent_id,
-			a.boundary_polygon AS boundaries,
+			f.id, f.parent_id, f.type, f.name, f.code,
+			a.boundary_polygon,
 			f.center_lat, f.center_lng,
-			f.operational_radius AS radius_km,
+			f.operational_radius,
 			f.status,
-			a.service_availability AS metadata,
-			a.switching_mode, a.allow_cross_trade, a.nearby_area_ids,
+			a.service_availability,
+			a.settings, a.switching_mode, a.allow_cross_trade, a.nearby_area_ids,
 			a.transition_zones, a.timezone, a.languages, a.currency,
 			a.tax_rate, a.min_order_value, a.delivery_fee_structure,
 			a.cross_area_fees, a.operational_hours,
-			a.created_at, a.updated_at, a.activated_at, a.deactivated_at,
-			f.distance_km
+			a.created_at, a.updated_at, a.activated_at, a.deactivated_at
 		FROM find_areas_by_coordinate($1, $2, 50) f
 		JOIN areas a ON a.id = f.id
 		ORDER BY
@@ -169,12 +184,20 @@ func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64)
 func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 	query := `
 		INSERT INTO areas (
-			id, name, code, type, parent_id, boundaries,
-			center_lat, center_lng, radius_km, status, metadata,
+			id, parent_id, type, name, code, boundary_polygon,
+			center_lat, center_lng, operational_radius, status,
+			service_availability, settings, switching_mode,
+			allow_cross_trade, nearby_area_ids, transition_zones,
+			timezone, languages, currency, tax_rate, min_order_value,
+			delivery_fee_structure, cross_area_fees, operational_hours,
 			created_at, updated_at
 		) VALUES (
-			:id, :name, :code, :type, :parent_id, :boundaries,
-			:center_lat, :center_lng, :radius_km, :status, :metadata,
+			:id, :parent_id, :type, :name, :code, :boundary_polygon,
+			:center_lat, :center_lng, :operational_radius, :status,
+			:service_availability, :settings, :switching_mode,
+			:allow_cross_trade, :nearby_area_ids, :transition_zones,
+			:timezone, :languages, :currency, :tax_rate, :min_order_value,
+			:delivery_fee_structure, :cross_area_fees, :operational_hours,
 			:created_at, :updated_at
 		)`
 
@@ -189,17 +212,32 @@ func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 func (r *areaRepository) Update(ctx context.Context, area *entities.Area) error {
 	query := `
 		UPDATE areas SET
+			parent_id = :parent_id,
+			type = :type,
 			name = :name,
 			code = :code,
-			type = :type,
-			parent_id = :parent_id,
-			boundaries = :boundaries,
+			boundary_polygon = :boundary_polygon,
 			center_lat = :center_lat,
 			center_lng = :center_lng,
-			radius_km = :radius_km,
+			operational_radius = :operational_radius,
 			status = :status,
-			metadata = :metadata,
-			updated_at = :updated_at
+			service_availability = :service_availability,
+			settings = :settings,
+			switching_mode = :switching_mode,
+			allow_cross_trade = :allow_cross_trade,
+			nearby_area_ids = :nearby_area_ids,
+			transition_zones = :transition_zones,
+			timezone = :timezone,
+			languages = :languages,
+			currency = :currency,
+			tax_rate = :tax_rate,
+			min_order_value = :min_order_value,
+			delivery_fee_structure = :delivery_fee_structure,
+			cross_area_fees = :cross_area_fees,
+			operational_hours = :operational_hours,
+			updated_at = :updated_at,
+			activated_at = :activated_at,
+			deactivated_at = :deactivated_at
 		WHERE id = :id`
 
 	result, err := r.db.NamedExecContext(ctx, query, area)
@@ -245,23 +283,35 @@ func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]
 	// Recursive CTE to get the full hierarchy from child to parent
 	query := `
 		WITH RECURSIVE area_hierarchy AS (
-			SELECT id, name, code, type, parent_id, boundaries,
-			       center_lat, center_lng, radius_km, status, metadata,
-			       created_at, updated_at, 0 as level
+			SELECT id, parent_id, type, name, code, boundary_polygon,
+			       center_lat, center_lng, operational_radius, status,
+			       service_availability, settings, switching_mode,
+			       allow_cross_trade, nearby_area_ids, transition_zones,
+			       timezone, languages, currency, tax_rate, min_order_value,
+			       delivery_fee_structure, cross_area_fees, operational_hours,
+			       created_at, updated_at, activated_at, deactivated_at, 0 as level
 			FROM areas
 			WHERE id = $1
 
 			UNION ALL
 
-			SELECT a.id, a.name, a.code, a.type, a.parent_id, a.boundaries,
-			       a.center_lat, a.center_lng, a.radius_km, a.status, a.metadata,
-			       a.created_at, a.updated_at, ah.level + 1
+			SELECT a.id, a.parent_id, a.type, a.name, a.code, a.boundary_polygon,
+			       a.center_lat, a.center_lng, a.operational_radius, a.status,
+			       a.service_availability, a.settings, a.switching_mode,
+			       a.allow_cross_trade, a.nearby_area_ids, a.transition_zones,
+			       a.timezone, a.languages, a.currency, a.tax_rate, a.min_order_value,
+			       a.delivery_fee_structure, a.cross_area_fees, a.operational_hours,
+			       a.created_at, a.updated_at, a.activated_at, a.deactivated_at, ah.level + 1
 			FROM areas a
 			INNER JOIN area_hierarchy ah ON a.id = ah.parent_id
 		)
-		SELECT id, name, code, type, parent_id, boundaries,
-		       center_lat, center_lng, radius_km, status, metadata,
-		       created_at, updated_at
+		SELECT id, parent_id, type, name, code, boundary_polygon,
+		       center_lat, center_lng, operational_radius, status,
+		       service_availability, settings, switching_mode,
+		       allow_cross_trade, nearby_area_ids, transition_zones,
+		       timezone, languages, currency, tax_rate, min_order_value,
+		       delivery_fee_structure, cross_area_fees, operational_hours,
+		       created_at, updated_at, activated_at, deactivated_at
 		FROM area_hierarchy
 		ORDER BY level DESC`
 
@@ -272,9 +322,6 @@ func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]
 
 	return areas, nil
 }
-
-// Note: calculateDistance function removed as it's no longer needed
-// PostGIS ST_Distance function provides more accurate distance calculations
 
 // InTransaction executes a function within a database transaction
 func (r *areaRepository) InTransaction(ctx context.Context, fn func(*sqlx.Tx) error) error {

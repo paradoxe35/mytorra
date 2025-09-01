@@ -332,15 +332,11 @@ jobs:
 
           # Run tests with database integration enabled
           cd services/${{ matrix.service }}
-          go test -v -race -timeout=10m ./internal/adapters/postgres/repositories/... || TEST_EXIT_CODE=$?
-
-          # Don't fail the build immediately, capture results
-          if [ "${TEST_EXIT_CODE:-0}" -ne 0 ]; then
+          if ! go test -v -race -timeout=10m ./internal/adapters/postgres/repositories/...; then
             echo "❌ Some database integration tests failed"
-            echo "test-result=failed" >> $GITHUB_OUTPUT
+            exit 1
           else
             echo "✅ All database integration tests passed"
-            echo "test-result=passed" >> $GITHUB_OUTPUT
           fi
         env:
           # Database testing environment variables
@@ -412,4 +408,6 @@ jobs:
             echo "✅ Migration tests passed (integration tests skipped)" >> $GITHUB_STEP_SUMMARY
           else
             echo "⚠️ Some tests failed or were skipped" >> $GITHUB_STEP_SUMMARY
+            echo "Failing the workflow due to test failures"
+            exit 1
           fi
