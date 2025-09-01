@@ -148,7 +148,7 @@ jobs:
 
           # Enable PostGIS extension if needed
           psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "CREATE EXTENSION IF NOT EXISTS uuid-ossp;"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
           psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
 
       - name: Run migrations up
