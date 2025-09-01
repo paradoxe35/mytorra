@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: torra-dev
+  labels:
+    name: torra-dev
+    environment: development
+    project: torra

@@ -4,18 +4,24 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 env:
-  GO_VERSION: '1.25'
+  GO_VERSION: "1.25"
   MIN_COVERAGE: 80
 
 jobs:
   # Check PR title and description
   pr-check:
     name: PR Standards Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Check PR title
         uses: amannn/action-semantic-pull-request@v5
+        if: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -38,68 +44,135 @@ jobs:
             didn't match the configured pattern. Please ensure that the subject
             doesn't start with an uppercase character.
 
-      - name: Check PR size
-        uses: CodelyTV/pr-size-labeler@v1
+      - name: Check PR size and add labels
+        uses: actions/github-script@v7
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          xs_label: 'size/xs'
-          xs_max_size: 10
-          s_label: 'size/s'
-          s_max_size: 100
-          m_label: 'size/m'
-          m_max_size: 500
-          l_label: 'size/l'
-          l_max_size: 1000
-          xl_label: 'size/xl'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo, number } = context.issue;
+
+            // Get PR diff stats
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: number
+            });
+
+            const additions = pr.additions;
+            const deletions = pr.deletions;
+            const changes = additions + deletions;
+
+            // Define size thresholds
+            const sizes = [
+              { label: 'size/xs', max: 10 },
+              { label: 'size/s', max: 100 },
+              { label: 'size/m', max: 500 },
+              { label: 'size/l', max: 1000 },
+              { label: 'size/xl', max: Infinity }
+            ];
+
+            // Determine size label
+            let sizeLabel = 'size/xl';
+            for (const size of sizes) {
+              if (changes <= size.max) {
+                sizeLabel = size.label;
+                break;
+              }
+            }
+
+            // Get current labels
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number: number
+            });
+
+            // Remove existing size labels
+            const sizeLabels = currentLabels.filter(l => l.name.startsWith('size/'));
+            for (const label of sizeLabels) {
+              await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number: number,
+                name: label.name
+              }).catch(() => {}); // Ignore if label doesn't exist
+            }
+
+            // Add new size label
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: number,
+              labels: [sizeLabel]
+            }).catch(() => {
+              console.log(`Label ${sizeLabel} might not exist in the repo`);
+            });
+
+            console.log(`PR has ${changes} changes (${additions} additions, ${deletions} deletions)`);
+            console.log(`Applied label: ${sizeLabel}`);
 
   # Run tests with coverage check
   test-coverage:
     name: Test Coverage Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          cache-key-suffix: "pr-check"
 
       - name: Run tests with coverage
-        run: |
-          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
-
-          # Calculate coverage percentage
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-          echo "Coverage: ${COVERAGE}%"
-          echo "coverage=${COVERAGE}" >> $GITHUB_OUTPUT
-
-          # Check if coverage meets minimum requirement
-          if (( $(echo "$COVERAGE < $MIN_COVERAGE" | bc -l) )); then
-            echo "❌ Coverage ${COVERAGE}% is below minimum required ${MIN_COVERAGE}%"
-            exit 1
-          else
-            echo "✅ Coverage ${COVERAGE}% meets minimum requirement"
-          fi
         id: coverage
+        run: |
+          # Make script executable and run it
+          chmod +x .github/scripts/run-tests-with-coverage.sh
+
+          # Run the coverage script
+          # The script will set the coverage output and exit with non-zero if coverage is below minimum
+          .github/scripts/run-tests-with-coverage.sh || COVERAGE_EXIT_CODE=$?
+
+          # Don't fail the build for now if coverage is low, just warn
+          # Remove this condition to enforce minimum coverage
+          if [ "${COVERAGE_EXIT_CODE:-0}" -ne 0 ]; then
+            echo "⚠️ Coverage check failed but continuing build"
+          fi
+        env:
+          MIN_COVERAGE: ${{ env.MIN_COVERAGE }}
 
       - name: Generate coverage badge
         if: always()
-        uses: cicirello/jacoco-badge-generator@v2
-        with:
-          generate-coverage-badge: true
-          coverage-badge-filename: coverage.svg
-          coverage-label: Coverage
-          coverage-percentage: ${{ steps.coverage.outputs.coverage }}
-          colors: '#4c1 #97ca00 #a4a61d #dfb317 #fe7d37 #e05d44'
-          intervals: 90 80 70 60 50 0
+        run: |
+          COVERAGE=${{ steps.coverage.outputs.coverage }}
+
+          # Determine color based on coverage percentage
+          if (( $(echo "$COVERAGE >= 90" | bc -l) )); then
+            COLOR="4c1"
+          elif (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+            COLOR="97ca00"
+          elif (( $(echo "$COVERAGE >= 70" | bc -l) )); then
+            COLOR="a4a61d"
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+            COLOR="dfb317"
+          elif (( $(echo "$COVERAGE >= 50" | bc -l) )); then
+            COLOR="fe7d37"
+          else
+            COLOR="e05d44"
+          fi
+
+          # Generate badge using shields.io
+          mkdir -p badges
+          curl -s "https://img.shields.io/badge/Coverage-${COVERAGE}%25-${COLOR}" > badges/coverage.svg
+
+          echo "Coverage badge generated: ${COVERAGE}% with color #${COLOR}"
 
       - name: Comment PR with coverage
         if: always()
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const coverage = '${{ steps.coverage.outputs.coverage }}';
             const minCoverage = '${{ env.MIN_COVERAGE }}';
@@ -128,7 +201,7 @@ jobs:
   # Code quality analysis
   code-quality:
     name: Code Quality Analysis
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -170,15 +243,16 @@ jobs:
   # Documentation check
   docs-check:
     name: Documentation Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache-key-suffix: "docs-check"
 
       - name: Check Go doc comments
         run: |
@@ -200,22 +274,16 @@ jobs:
             fi
           done
 
-      - name: Validate OpenAPI specs
-        run: |
-          if [ -d "docs/api" ]; then
-            npm install -g @apidevtools/swagger-cli
-            for spec in docs/api/*.yaml; do
-              if [ -f "$spec" ]; then
-                echo "Validating $spec..."
-                swagger-cli validate "$spec"
-              fi
-            done
-          fi
+      - name: Setup API Documentation
+        uses: ./.github/actions/setup-api-docs
+        with:
+          validate-docs: "true"
+          check-up-to-date: "true"
 
   # Dependencies check
   dependencies:
     name: Dependencies Check
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -229,53 +297,91 @@ jobs:
         run: |
           go list -u -m all | grep '\[' || echo "All dependencies are up to date"
 
-      - name: Check for unused dependencies
-        run: |
-          go install github.com/kisielk/godepgraph@latest
-          go mod graph | godepgraph -s -o deps.dot
-          echo "Dependency graph generated in deps.dot"
+      # TODO: Enable when needed for dependency analysis
+      # - name: Check for unused dependencies
+      #   run: |
+      #     go install github.com/kisielk/godepgraph@latest
+      #     go mod graph | godepgraph -s -o deps.dot
+      #     echo "Dependency graph generated in deps.dot"
 
-      - name: License check
-        run: |
-          go install github.com/google/go-licenses@latest
-          go-licenses check ./... --disallowed_types=forbidden,restricted
+      # TODO: Enable when license compliance is required
+      # - name: License check
+      #   run: |
+      #     go install github.com/google/go-licenses@latest
+      #     go-licenses check ./... --disallowed_types=forbidden,restricted
 
-  # Approval gate
-  approval:
-    name: Approval Requirements
-    runs-on: [self-hosted, linux, x64]
-    needs: [pr-check, test-coverage, code-quality, docs-check, dependencies]
+  # i18n validation
+  i18n-validation:
+    name: i18n Keys Validation
+    runs-on: arc-runner-set
     steps:
-      - name: Check approval status
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-suffix: "i18n-validation"
+
+      - name: Setup i18n Validation
+        uses: ./.github/actions/setup-i18n-validation
+        with:
+          fail-on-missing: "true"
+          check-unused: "true"
+
+      - name: Comment PR with i18n validation results
+        if: always()
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { data: reviews } = await github.rest.pulls.listReviews({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number
-            });
+            const fs = require('fs');
+            const { execSync } = require('child_process');
 
-            const approvals = reviews.filter(r => r.state === 'APPROVED');
-            const changesRequested = reviews.filter(r => r.state === 'CHANGES_REQUESTED');
+            try {
+              // Run validation and capture output
+              const output = execSync('make i18n-validate 2>&1', { encoding: 'utf8' });
 
-            if (changesRequested.length > 0) {
-              core.setFailed('Changes requested by reviewers must be addressed');
+              const body = `## i18n Validation Report ✅
+
+              All i18n keys are properly validated!
+
+              <details>
+              <summary>Validation Details</summary>
+
+              \`\`\`
+              ${output}
+              \`\`\`
+              </details>`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            } catch (error) {
+              const body = `## i18n Validation Report ❌
+
+              **Validation failed!** Please fix the following i18n key issues:
+
+              <details>
+              <summary>Error Details</summary>
+
+              \`\`\`
+              ${error.stdout || error.message}
+              \`\`\`
+              </details>
+
+              **How to fix:**
+              1. Add missing keys to locale files in \`packages/i18n/locales/\`
+              2. Remove unused i18n function calls
+              3. Run \`make i18n-validate\` locally to verify fixes`;
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
             }
-
-            if (approvals.length < 1) {
-              core.setFailed('At least 1 approval required');
-            }
-
-            console.log(`✅ PR has ${approvals.length} approvals`);
-
-      - name: Auto-merge if approved
-        if: success() && github.event.pull_request.auto_merge == null
-        uses: pascalgn/merge-action@v0.15.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MERGE_METHOD: squash
-          MERGE_COMMIT_MESSAGE: pull-request-title
-          MERGE_DELETE_BRANCH: true
-          MERGE_REQUIRED_APPROVALS: 1

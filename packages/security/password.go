@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -52,4 +53,28 @@ func GenerateResetToken() (string, error) {
 
 func GenerateAPIKey() (string, error) {
 	return GenerateSecureToken(48)
+}
+
+// GenerateMFASecret generates a base32 secret for MFA/TOTP
+func GenerateMFASecret() (string, error) {
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "Torra",
+		AccountName: "",
+		SecretSize:  32,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to generate TOTP key: %w", err)
+	}
+	return key.Secret(), nil
+}
+
+// VerifyMFACode verifies a TOTP code against a secret
+func VerifyMFACode(code, secret string) (bool, error) {
+	if len(code) != 6 {
+		return false, errors.New("invalid code length")
+	}
+
+	// Validate the TOTP code using the library
+	valid := totp.Validate(code, secret)
+	return valid, nil
 }

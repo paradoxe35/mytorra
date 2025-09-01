@@ -1,13 +1,15 @@
 go 1.25
 
 use (
-    ./services/core
-    ./packages/config
-    ./packages/logger
-    ./packages/security
-    ./packages/http
-    ./packages/database
-    ./packages/events
-    ./packages/errors
-    ./packages/cache
+	./packages/cache
+	./packages/config
+	./packages/database
+	./packages/errors
+	./packages/events
+	./packages/http
+	./packages/i18n
+	./packages/logger
+	./packages/security
+	./services/core
+	./tools/i18n-validator
 )

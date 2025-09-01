@@ -1,0 +1,67 @@
+name: "Setup Go Environment"
+description: "Setup Go with caching and build tools"
+inputs:
+  go-version:
+    description: "Go version to use"
+    required: true
+    default: "1.25"
+  install-tools:
+    description: "Whether to install build tools (make, etc.)"
+    required: false
+    default: "true"
+  cache-key-suffix:
+    description: "Additional suffix for cache key"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false # Disable built-in cache to avoid conflicts
+
+    - name: Install build tools
+      if: inputs.install-tools == 'true'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y make
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-${{ inputs.go-version }}-${{ hashFiles('go.work.sum', '**/go.sum') }}-${{ inputs.cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ inputs.go-version }}-${{ hashFiles('go.work.sum', '**/go.sum') }}
+          ${{ runner.os }}-go-${{ inputs.go-version }}-
+        enableCrossOsArchive: false
+
+    - name: Download dependencies
+      shell: bash
+      run: |
+        # Clean any corrupted cache
+        if [ -d ~/go/pkg/mod ]; then
+          find ~/go/pkg/mod -type f -name "*.tmp" -delete 2>/dev/null || true
+        fi
+
+        # Download dependencies for all modules in workspace
+        if [ -f go.work ]; then
+          echo "Downloading dependencies for workspace..."
+          go work sync
+          # Download deps for each module
+          for module in $(grep -E '^\s*\./.*' go.work | sed 's/^\s*\.\///');
+          do
+            if [ -d "$module" ] && [ -f "$module/go.mod" ]; then
+              echo "Downloading dependencies for $module"
+              (cd "$module" && go mod download)
+            fi
+          done
+        elif [ -f go.mod ]; then
+          go mod download
+        fi

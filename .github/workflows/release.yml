@@ -3,23 +3,23 @@ name: Release Pipeline
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., v1.0.0)'
+        description: "Release version (e.g., v1.0.0)"
         required: true
         type: string
 
 env:
-  GO_VERSION: '1.25'
-  REGISTRY: docker.io
+  GO_VERSION: "1.25"
+  REGISTRY: ghcr.io
 
 jobs:
   # Prepare release
   prepare:
     name: Prepare Release
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     outputs:
       version: ${{ steps.version.outputs.version }}
       changelog: ${{ steps.changelog.outputs.changelog }}
@@ -69,11 +69,12 @@ jobs:
   # Build release binaries
   build-binaries:
     name: Build Release Binaries
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     needs: prepare
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service:
+          [core, marketplace, delivery, booking, torracab, media, realtime]
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
         exclude:
@@ -140,11 +141,12 @@ jobs:
   # Build and push Docker images
   docker-release:
     name: Build and Push Docker Images
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     needs: prepare
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service:
+          [core, marketplace, delivery, booking, torracab, media, realtime]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -155,11 +157,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v5
@@ -169,8 +172,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
-            ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository }}/torra-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/torra-${{ matrix.service }}:latest
           labels: |
             org.opencontainers.image.title=torra-${{ matrix.service }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
@@ -183,57 +186,57 @@ jobs:
             COMMIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
 
-  # Create Helm charts
-  helm-charts:
-    name: Package Helm Charts
-    runs-on: [self-hosted, linux, x64]
-    needs: prepare
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'latest'
-
-      - name: Update chart versions
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-
-          # Update Chart.yaml versions
-          for chart in infra/helm/*/; do
-            if [ -f "${chart}Chart.yaml" ]; then
-              sed -i "s/^version:.*/version: ${VERSION#v}/" "${chart}Chart.yaml"
-              sed -i "s/^appVersion:.*/appVersion: ${VERSION}/" "${chart}Chart.yaml"
-            fi
-          done
-
-      - name: Package charts
-        run: |
-          mkdir -p helm-packages
-
-          for chart in infra/helm/*/; do
-            if [ -f "${chart}Chart.yaml" ]; then
-              helm package "$chart" -d helm-packages/
-            fi
-          done
-
-          # Create index
-          helm repo index helm-packages/
-
-      - name: Upload Helm charts
-        uses: actions/upload-artifact@v4
-        with:
-          name: helm-charts
-          path: helm-packages/
-          retention-days: 30
+  # TODO: Enable Helm charts when infra/helm/ directory is created
+  # helm-charts:
+  #   name: Package Helm Charts
+  #   runs-on: arc-runner-set
+  #   needs: prepare
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup Helm
+  #       uses: azure/setup-helm@v4
+  #       with:
+  #         version: "latest"
+  #
+  #     - name: Update chart versions
+  #       run: |
+  #         VERSION="${{ needs.prepare.outputs.version }}"
+  #
+  #         # Update Chart.yaml versions
+  #         for chart in infra/helm/*/; do
+  #           if [ -f "${chart}Chart.yaml" ]; then
+  #             sed -i "s/^version:.*/version: ${VERSION#v}/" "${chart}Chart.yaml"
+  #             sed -i "s/^appVersion:.*/appVersion: ${VERSION}/" "${chart}Chart.yaml"
+  #           fi
+  #         done
+  #
+  #     - name: Package charts
+  #       run: |
+  #         mkdir -p helm-packages
+  #
+  #         for chart in infra/helm/*/; do
+  #           if [ -f "${chart}Chart.yaml" ]; then
+  #             helm package "$chart" -d helm-packages/
+  #           fi
+  #         done
+  #
+  #         # Create index
+  #         helm repo index helm-packages/
+  #
+  #     - name: Upload Helm charts
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: helm-charts
+  #         path: helm-packages/
+  #         retention-days: 30
 
   # Create GitHub release
   github-release:
     name: Create GitHub Release
-    runs-on: [self-hosted, linux, x64]
-    needs: [prepare, build-binaries, docker-release, helm-charts]
+    runs-on: arc-runner-set
+    needs: [prepare, build-binaries, docker-release]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -251,8 +254,8 @@ jobs:
           find release-artifacts -name "*.sha256" -o -name "*-linux-*" -o -name "*-darwin-*" -o -name "*-windows-*" | \
             xargs -I {} cp {} release-files/
 
-          # Collect Helm charts
-          cp release-artifacts/helm-charts/*.tgz release-files/ || true
+          # TODO: Collect Helm charts when available
+          # cp release-artifacts/helm-charts/*.tgz release-files/ || true
 
           # Create release archive
           tar czf release-files/torra-platform-${{ needs.prepare.outputs.version }}.tar.gz \
@@ -270,18 +273,21 @@ jobs:
             ${{ needs.prepare.outputs.changelog }}
 
             ### 🐳 Docker Images
-            All services are available on Docker Hub:
+            All services are available on GitHub Container Registry:
             ```bash
-            docker pull ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-core:${{ needs.prepare.outputs.version }}
-            docker pull ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-marketplace:${{ needs.prepare.outputs.version }}
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/torra-core:${{ needs.prepare.outputs.version }}
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/torra-marketplace:${{ needs.prepare.outputs.version }}
             # ... and other services
             ```
 
             ### ⎈ Helm Charts
+            Helm charts will be available in future releases.
+            <!--
             Install using Helm:
             ```bash
             helm install torra ./torra-platform-${{ needs.prepare.outputs.version }}.tgz
             ```
+            -->
 
             ### 📦 Binary Downloads
             See attached files for platform-specific binaries.
@@ -295,61 +301,61 @@ jobs:
           draft: false
           prerelease: ${{ contains(needs.prepare.outputs.version, '-rc') || contains(needs.prepare.outputs.version, '-beta') || contains(needs.prepare.outputs.version, '-alpha') }}
 
-  # Deploy to production
-  deploy-production:
-    name: Deploy to Production
-    runs-on: [self-hosted, linux, x64]
-    needs: [github-release, prepare]
-    environment:
-      name: production
-      url: https://torra.com
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure kubectl
-        run: |
-          echo "${{ secrets.PROD_KUBE_CONFIG }}" | base64 -d > kubeconfig
-          export KUBECONFIG=kubeconfig
-
-      - name: Deploy to production
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          NAMESPACE="torra-production"
-
-          # Update deployments with new version
-          for service in core marketplace delivery booking torracab media realtime; do
-            kubectl set image deployment/${service} \
-              ${service}=${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/torra-${service}:${VERSION} \
-              -n ${NAMESPACE}
-          done
-
-          # Wait for rollout
-          kubectl rollout status deployment --timeout=15m -n ${NAMESPACE}
-
-      - name: Run production tests
-        run: |
-          # Run smoke tests
-          ./scripts/test-production.sh
-
-          # Check service health
-          kubectl get pods -n torra-production
-          kubectl top pods -n torra-production
-
-      - name: Update DNS and CDN
-        run: |
-          # Update CDN cache
-          curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CF_ZONE_ID }}/purge_cache" \
-            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            --data '{"purge_everything":true}'
-
-      - name: Notify release
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          text: |
-            🎉 Release ${{ needs.prepare.outputs.version }} deployed to production!
-            Status: ${{ job.status }}
-            Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }}
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+  # TODO: Enable production deployment when Kubernetes infrastructure is ready
+  # deploy-production:
+  #   name: Deploy to Production
+  #   runs-on: arc-runner-set
+  #   needs: [github-release, prepare]
+  #   environment:
+  #     name: production
+  #     url: https://torra.com
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Configure kubectl
+  #       run: |
+  #         echo "${{ secrets.PROD_KUBE_CONFIG }}" | base64 -d > kubeconfig
+  #         export KUBECONFIG=kubeconfig
+  #
+  #     - name: Deploy to production
+  #       run: |
+  #         VERSION="${{ needs.prepare.outputs.version }}"
+  #         NAMESPACE="torra-production"
+  #
+  #         # Update deployments with new version
+  #         for service in core marketplace delivery booking torracab media realtime; do
+  #           kubectl set image deployment/${service} \
+  #             ${service}=${{ env.REGISTRY }}/${{ github.repository }}/torra-${service}:${VERSION} \
+  #             -n ${NAMESPACE}
+  #         done
+  #
+  #         # Wait for rollout
+  #         kubectl rollout status deployment --timeout=15m -n ${NAMESPACE}
+  #
+  #     - name: Run production tests
+  #       run: |
+  #         # Run smoke tests
+  #         ./scripts/test-production.sh
+  #
+  #         # Check service health
+  #         kubectl get pods -n torra-production
+  #         kubectl top pods -n torra-production
+  #
+  #     - name: Update DNS and CDN
+  #       run: |
+  #         # Update CDN cache
+  #         curl -X POST "https://api.cloudflare.com/client/v4/zones/${{ secrets.CF_ZONE_ID }}/purge_cache" \
+  #           -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+  #           -H "Content-Type: application/json" \
+  #           --data '{"purge_everything":true}'
+  #
+  #     - name: Notify release
+  #       uses: 8398a7/action-slack@v3
+  #       with:
+  #         status: ${{ job.status }}
+  #         text: |
+  #           🎉 Release ${{ needs.prepare.outputs.version }} deployed to production!
+  #           Status: ${{ job.status }}
+  #           Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }}
+  #         webhook_url: ${{ secrets.SLACK_WEBHOOK }}

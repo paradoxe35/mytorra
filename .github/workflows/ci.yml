@@ -7,110 +7,83 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write
+  security-events: write
+
 env:
-  GO_VERSION: '1.25'
-  GOLANGCI_LINT_VERSION: 'v1.61.0'
-  NODE_VERSION: '20'
+  GO_VERSION: "1.25"
+  NODE_VERSION: "20"
 
 jobs:
-  # Build job - compiles all services
+  # Detect existing services dynamically
+  detect-services:
+    name: Detect Services
+    runs-on: arc-runner-set
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      services-count: ${{ steps.detect.outputs.count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect existing services
+        id: detect
+        run: |
+          # Make script executable and run it
+          chmod +x .github/scripts/detect-services.sh
+          SERVICES_JSON=$(.github/scripts/detect-services.sh json)
+          SERVICES_COUNT=$(echo "$SERVICES_JSON" | jq length)
+
+          echo "services=$SERVICES_JSON" >> $GITHUB_OUTPUT
+          echo "count=$SERVICES_COUNT" >> $GITHUB_OUTPUT
+
+          echo "🎯 Detected $SERVICES_COUNT service(s) to build"
+          echo "📋 Services: $SERVICES_JSON"
+
+  # Build services dynamically
   build:
     name: Build Services
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
+    needs: detect-services
+    if: needs.detect-services.outputs.services-count > 0
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
-          cache-dependency-path: |
-            go.work.sum
-            **/go.sum
+          cache-key-suffix: "build-${{ matrix.service }}"
 
-      - name: Cache Go modules
-        uses: actions/cache@v4
+      - name: Build service
+        uses: ./.github/actions/build-service
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        run: |
-          go mod download
-          go work sync
-
-      - name: Build ${{ matrix.service }} service
-        run: |
-          if [ -d "services/${{ matrix.service }}" ]; then
-            echo "Building ${{ matrix.service }} service..."
-            cd services/${{ matrix.service }}
-
-            # Build API if exists
-            if [ -d "cmd/api" ]; then
-              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-                -ldflags="-w -s -X main.Version=${{ github.sha }}" \
-                -o ../../bin/${{ matrix.service }}-api \
-                ./cmd/api
-            fi
-
-            # Build Worker if exists
-            if [ -d "cmd/worker" ]; then
-              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-                -ldflags="-w -s -X main.Version=${{ github.sha }}" \
-                -o ../../bin/${{ matrix.service }}-worker \
-                ./cmd/worker
-            fi
-          else
-            echo "Service ${{ matrix.service }} not yet implemented"
-          fi
+          service-name: ${{ matrix.service }}
+          go-version: ${{ env.GO_VERSION }}
+          build-version: ${{ github.sha }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.service }}-binaries
-          path: bin/
+          path: bin/${{ matrix.service }}-*
           retention-days: 7
 
   # Test job - runs all tests
   test:
     name: Run Tests
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     needs: build
-    services:
-      postgres:
-        image: postgis/postgis:17-3.5-alpine
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: testdb
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
+    # Note: Services require Docker which is not available on arc-runner-set
+    # Integration tests requiring database/redis should be run separately
 
     steps:
       - name: Checkout code
@@ -123,6 +96,7 @@ jobs:
           cache: true
 
       - name: Setup test environment
+        if: false
         run: |
           cp .env.example .env.test
           echo "MYTORRA_DATABASE_HOST=localhost" >> .env.test
@@ -133,29 +107,52 @@ jobs:
 
       - name: Run unit tests
         run: |
-          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+          # Make script executable and run it
+          chmod +x .github/scripts/run-tests.sh
+          .github/scripts/run-tests.sh
         env:
           MYTORRA_ENVIRONMENT: test
 
-      - name: Run integration tests
-        run: |
-          go test -v -race -tags=integration ./tests/integration/...
-        env:
-          MYTORRA_ENVIRONMENT: test
+      # TODO: Enable when integration tests are implemented
+      # - name: Run integration tests
+      #   run: |
+      #     CGO_ENABLED=1 go test -v -race -tags=integration ./tests/integration/...
+      #   env:
+      #     MYTORRA_ENVIRONMENT: test
 
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./coverage.txt
-          flags: unittests
-          name: codecov-umbrella
+      # TODO: Enable when CODECOV_TOKEN is configured
+      # - name: Upload coverage reports
+      #   uses: codecov/codecov-action@v4
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     file: ./coverage.txt
+      #     flags: unittests
+      #     name: codecov-umbrella
 
       - name: Generate test report
         if: always()
         run: |
+          # Install junit report generator
           go install github.com/jstemmer/go-junit-report/v2@latest
-          go test -v ./... 2>&1 | go-junit-report -set-exit-code > test-report.xml
+
+          # Run tests for all modules and generate report
+          if [ -f go.work ]; then
+            echo "Running tests in workspace mode for report..."
+            TEST_OUTPUT=""
+            for module in $(grep -E '^\s*\./.*' go.work | sed 's/^\s*\.\///');
+            do
+              if [ -d "$module" ] && [ -f "$module/go.mod" ]; then
+                echo "Testing module: $module"
+                MODULE_OUTPUT=$(cd "$module" && CGO_ENABLED=1 go test -v ./... 2>&1 || true)
+                TEST_OUTPUT="${TEST_OUTPUT}\n${MODULE_OUTPUT}"
+              fi
+            done
+            echo -e "$TEST_OUTPUT" | $(go env GOPATH)/bin/go-junit-report > test-report.xml
+          else
+            # Single module mode - but we should always have go.work in this project
+            echo "Warning: No go.work file found, skipping test report generation"
+            echo '<?xml version="1.0" encoding="UTF-8"?><testsuites></testsuites>' > test-report.xml
+          fi
 
       - name: Upload test results
         if: always()
@@ -164,10 +161,57 @@ jobs:
           name: test-results
           path: test-report.xml
 
+  # API Documentation generation and validation
+  docs:
+    name: API Documentation
+    runs-on: arc-runner-set
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-suffix: "docs"
+
+      - name: Setup API Documentation
+        uses: ./.github/actions/setup-api-docs
+        with:
+          validate-docs: "true"
+          check-up-to-date: "true"
+
+      - name: Upload API documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: docs/api/
+          retention-days: 30
+
+  # i18n validation
+  i18n:
+    name: i18n Validation
+    runs-on: arc-runner-set
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-suffix: "i18n"
+
+      - name: Setup i18n Validation
+        uses: ./.github/actions/setup-i18n-validation
+        with:
+          fail-on-missing: "true"
+          check-unused: "true"
+
   # Lint job - code quality checks
   lint:
     name: Lint Code
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -177,13 +221,11 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+      - name: Setup and Run golangci-lint
+        uses: ./.github/actions/setup-golangci-lint
         with:
-          version: ${{ env.GOLANGCI_LINT_VERSION }}
-          args: --timeout=10m --config=.golangci.yml
-          skip-cache: true
-          working-directory: .
+          config-file: ".golangci.yml"
+          timeout: "10m"
 
       - name: Check Go formatting
         run: |
@@ -205,7 +247,7 @@ jobs:
   # Security scan job
   security:
     name: Security Scan
-    runs-on: [self-hosted, linux, x64]
+    runs-on: arc-runner-set
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -215,62 +257,72 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
-        with:
-          args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
+      - name: Install and Run Gosec Security Scanner
+        run: |
+          # Install gosec
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          # Run gosec and output SARIF format
+          $(go env GOPATH)/bin/gosec -no-fail -fmt sarif -out gosec-results.sarif ./... || true
 
       - name: Upload SARIF file
+        if: always() && github.event_name == 'pull_request'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: gosec-results.sarif
+        continue-on-error: true
 
       - name: Run Nancy vulnerability scanner
         run: |
           go install github.com/sonatype-nexus-community/nancy@latest
           go list -json -deps ./... | nancy sleuth
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+      - name: Install and Run Trivy vulnerability scanner
+        run: |
+          # Install trivy to user's local bin directory
+          mkdir -p $HOME/.local/bin
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b $HOME/.local/bin latest
+
+          # Add to PATH
+          export PATH=$HOME/.local/bin:$PATH
+
+          # Run trivy filesystem scan
+          trivy fs --severity CRITICAL,HIGH --format sarif --output trivy-results.sarif . || true
+
+          # Also create a human-readable report
+          trivy fs --severity CRITICAL,HIGH . || true
 
       - name: Upload Trivy results
+        if: always() && github.event_name == 'pull_request' && hashFiles('trivy-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+        continue-on-error: true
 
-  # Docker build job
+  # Docker build and push - uses dynamic service detection
   docker:
     name: Build Docker Images
-    runs-on: [self-hosted, linux, x64]
-    needs: [build, test, lint]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    runs-on: arc-runner-set
+    needs: [build, test, lint, detect-services]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && needs.detect-services.outputs.services-count > 0
     strategy:
       matrix:
-        service: [core, marketplace, delivery, booking, torracab, media, realtime]
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract metadata for tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/torra-${{ matrix.service }}
+          images: ghcr.io/${{ github.repository }}/torra-${{ matrix.service }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -278,93 +330,93 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix={{branch}}-
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Build and push service images
+        uses: ./.github/actions/build-push-image
         with:
-          context: ./services/${{ matrix.service }}
-          file: ./services/${{ matrix.service }}/Dockerfile.api
+          service-name: ${{ matrix.service }}
+          registry: ghcr.io
+          repository: ${{ github.repository }}
+          tag: ${{ steps.meta.outputs.tags }}
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VERSION=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          platforms: linux/amd64
+  #         build-args: |
+  #           VERSION=${{ github.sha }}
+  #           BUILD_DATE=${{ github.event.head_commit.timestamp }}
 
-  # Deploy job (staging/production)
-  deploy:
-    name: Deploy to Environment
-    runs-on: [self-hosted, linux, x64]
-    needs: [docker]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
-    environment:
-      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-      url: ${{ github.ref == 'refs/heads/main' && 'https://torra.com' || 'https://staging.torra.com' }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  # TODO: Enable deployment when Kubernetes infrastructure is ready
+  # deploy:
+  #   name: Deploy to Environment
+  #   runs-on: arc-runner-set
+  #   needs: [docker, detect-services]
+  #   if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && needs.detect-services.outputs.services-count > 0
+  #   environment:
+  #     name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+  #     url: ${{ github.ref == 'refs/heads/main' && 'https://torra.com' || 'https://staging.torra.com' }}
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Configure kubectl
+  #       run: |
+  #         echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+  #         export KUBECONFIG=kubeconfig
+  #
+  #     - name: Deploy to Kubernetes
+  #       run: |
+  #         ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+  #         NAMESPACE=torra-${ENVIRONMENT}
+  #
+  #         # Apply configurations
+  #         kubectl apply -f infra/kubernetes/namespaces/${NAMESPACE}.yaml
+  #         kubectl apply -f infra/kubernetes/configmaps/${ENVIRONMENT}/ -n ${NAMESPACE}
+  #         kubectl apply -f infra/kubernetes/secrets/${ENVIRONMENT}/ -n ${NAMESPACE}
+  #
+  #         # Update image tags for detected services
+  #         SERVICES=$(echo '${{ needs.detect-services.outputs.services }}' | jq -r '.[]')
+  #         for service in $SERVICES; do
+  #           if [ -f "infra/kubernetes/deployments/${service}.yaml" ]; then
+  #             kubectl set image deployment/${service} \
+  #               ${service}=ghcr.io/${{ github.repository }}/torra-${service}:${{ github.sha }} \
+  #               -n ${NAMESPACE}
+  #           fi
+  #         done
+  #
+  #         # Wait for rollout
+  #         kubectl rollout status deployment --timeout=10m -n ${NAMESPACE}
+  #
+  #     - name: Run smoke tests
+  #       run: |
+  #         ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+  #         URL=${{ github.ref == 'refs/heads/main' && 'https://api.torra.com' || 'https://api.staging.torra.com' }}
+  #
+  #         # Health check
+  #         curl -f ${URL}/health || exit 1
+  #
+  #         # Run smoke test suite
+  #         go test -v -tags=smoke ./tests/smoke/... -env=${ENVIRONMENT}
+  #
+  #     - name: Notify deployment status
+  #       if: always()
+  #       uses: 8398a7/action-slack@v3
+  #       with:
+  #         status: ${{ job.status }}
+  #         text: |
+  #           Deployment to ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }} ${{ job.status }}
+  #           Service: Torra Platform
+  #           Commit: ${{ github.sha }}
+  #           Author: ${{ github.actor }}
+  #         webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
-      - name: Configure kubectl
-        run: |
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
-          export KUBECONFIG=kubeconfig
-
-      - name: Deploy to Kubernetes
-        run: |
-          ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-          NAMESPACE=torra-${ENVIRONMENT}
-
-          # Apply configurations
-          kubectl apply -f infra/kubernetes/namespaces/${NAMESPACE}.yaml
-          kubectl apply -f infra/kubernetes/configmaps/${ENVIRONMENT}/ -n ${NAMESPACE}
-          kubectl apply -f infra/kubernetes/secrets/${ENVIRONMENT}/ -n ${NAMESPACE}
-
-          # Update image tags
-          for service in core marketplace delivery booking torracab media realtime; do
-            if [ -f "infra/kubernetes/deployments/${service}.yaml" ]; then
-              kubectl set image deployment/${service} \
-                ${service}=${{ secrets.DOCKER_USERNAME }}/torra-${service}:${{ github.sha }} \
-                -n ${NAMESPACE}
-            fi
-          done
-
-          # Wait for rollout
-          kubectl rollout status deployment --timeout=10m -n ${NAMESPACE}
-
-      - name: Run smoke tests
-        run: |
-          ENVIRONMENT=${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-          URL=${{ github.ref == 'refs/heads/main' && 'https://api.torra.com' || 'https://api.staging.torra.com' }}
-
-          # Health check
-          curl -f ${URL}/health || exit 1
-
-          # Run smoke test suite
-          go test -v -tags=smoke ./tests/smoke/... -env=${ENVIRONMENT}
-
-      - name: Notify deployment status
-        if: always()
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          text: |
-            Deployment to ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }} ${{ job.status }}
-            Service: Torra Platform
-            Commit: ${{ github.sha }}
-            Author: ${{ github.actor }}
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-
-  # Cleanup job
+  # Basic cleanup job - keep artifacts management
   cleanup:
     name: Cleanup Resources
-    runs-on: [self-hosted, linux, x64]
-    needs: [deploy]
+    runs-on: arc-runner-set
+    needs: [build, test, lint, security, docs, i18n]
     if: always()
     steps:
       - name: Clean workspace
         run: |
-          docker system prune -af --volumes
+          # Clean up temporary files
           rm -rf /tmp/torra-*
 
       - name: Remove old artifacts

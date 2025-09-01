@@ -1,0 +1,83 @@
+# Build stage
+FROM golang:1.25-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
+
+# Set working directory
+WORKDIR /build
+
+# Copy go workspace files from project root
+COPY go.work go.work.sum ./
+
+# Copy all packages (required for local dependencies)
+COPY packages/ packages/
+
+# Copy the core service
+COPY services/core/ services/core/
+
+# Tools required for i18n validation
+COPY tools/ tools/
+
+# Set working directory to core service
+WORKDIR /build/services/core
+
+# Download dependencies
+RUN go mod download
+
+# Build the API binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags='-w -s -extldflags "-static"' \
+    -a -installsuffix cgo \
+    -o /build/bin/core-api \
+    ./cmd/api
+
+# Runtime stage
+FROM alpine:3.20
+
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates tzdata curl
+
+# Create non-root user
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder /build/bin/core-api /app/core-api
+
+# Copy configuration files
+COPY --from=builder /build/services/core/configs/ /app/configs/
+
+# Copy migration files (if needed for health checks or initialization)
+COPY --from=builder /build/services/core/migrations/ /app/migrations/
+
+# Copy locale files for i18n
+COPY --from=builder /build/packages/i18n/locales/ /app/locales/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/tmp
+
+LABEL org.opencontainers.image.source=https://github.com/paradoxe35/torra
+
+# Change ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose port (default 8080, can be overridden)
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Set environment variables
+ENV GIN_MODE=release
+ENV MYTORRA_ENVIRONMENT=production
+
+# Run the binary
+ENTRYPOINT ["/app/core-api"]

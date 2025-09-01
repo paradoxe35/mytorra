@@ -1,0 +1,117 @@
+name: 'Build Service'
+description: 'Build a specific service with API and Worker components'
+inputs:
+  service-name:
+    description: 'Name of the service to build'
+    required: true
+  go-version:
+    description: 'Go version to use'
+    required: false
+    default: '1.25'
+  build-version:
+    description: 'Version to embed in binary'
+    required: false
+    default: 'dev'
+
+outputs:
+  api-built:
+    description: 'Whether API was built'
+    value: ${{ steps.build-check.outputs.api-built }}
+  worker-built:
+    description: 'Whether Worker was built'
+    value: ${{ steps.build-check.outputs.worker-built }}
+  service-exists:
+    description: 'Whether service directory exists'
+    value: ${{ steps.build-check.outputs.service-exists }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check service existence and components
+      id: build-check
+      shell: bash
+      run: |
+        SERVICE_DIR="services/${{ inputs.service-name }}"
+
+        if [ ! -d "$SERVICE_DIR" ]; then
+          echo "⚠️ Service directory $SERVICE_DIR does not exist, skipping..."
+          echo "service-exists=false" >> $GITHUB_OUTPUT
+          echo "api-built=false" >> $GITHUB_OUTPUT
+          echo "worker-built=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "service-exists=true" >> $GITHUB_OUTPUT
+        echo "✅ Building service: ${{ inputs.service-name }}"
+
+        # Check what components exist
+        API_EXISTS=false
+        WORKER_EXISTS=false
+
+        if [ -d "$SERVICE_DIR/cmd/api" ]; then
+          API_EXISTS=true
+          echo "📡 API component found"
+        fi
+
+        if [ -d "$SERVICE_DIR/cmd/worker" ]; then
+          WORKER_EXISTS=true
+          echo "⚙️ Worker component found"
+        fi
+
+        echo "api-exists=$API_EXISTS" >> $GITHUB_OUTPUT
+        echo "worker-exists=$WORKER_EXISTS" >> $GITHUB_OUTPUT
+
+    - name: Create bin directory
+      if: steps.build-check.outputs.service-exists == 'true'
+      shell: bash
+      run: mkdir -p bin
+
+    - name: Build API component
+      if: steps.build-check.outputs.service-exists == 'true'
+      shell: bash
+      working-directory: services/${{ inputs.service-name }}
+      run: |
+        if [ -d "cmd/api" ]; then
+          echo "🔨 Building API for ${{ inputs.service-name }}..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-w -s -X main.Version=${{ inputs.build-version }}" \
+            -o ../../bin/${{ inputs.service-name }}-api \
+            ./cmd/api
+          echo "api-built=true" >> $GITHUB_OUTPUT
+          echo "✅ API built successfully"
+        else
+          echo "api-built=false" >> $GITHUB_OUTPUT
+          echo "ℹ️ No API component found"
+        fi
+
+    - name: Build Worker component
+      if: steps.build-check.outputs.service-exists == 'true'
+      shell: bash
+      working-directory: services/${{ inputs.service-name }}
+      run: |
+        if [ -d "cmd/worker" ]; then
+          echo "🔨 Building Worker for ${{ inputs.service-name }}..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -ldflags="-w -s -X main.Version=${{ inputs.build-version }}" \
+            -o ../../bin/${{ inputs.service-name }}-worker \
+            ./cmd/worker
+          echo "worker-built=true" >> $GITHUB_OUTPUT
+          echo "✅ Worker built successfully"
+        else
+          echo "worker-built=false" >> $GITHUB_OUTPUT
+          echo "ℹ️ No Worker component found"
+        fi
+
+    - name: Verify builds
+      if: steps.build-check.outputs.service-exists == 'true'
+      shell: bash
+      run: |
+        echo "📋 Build Summary for ${{ inputs.service-name }}:"
+
+        if [ -f "bin/${{ inputs.service-name }}-api" ]; then
+          echo "  ✅ API: $(ls -lh bin/${{ inputs.service-name }}-api | awk '{print $5}')"
+        fi
+
+        if [ -f "bin/${{ inputs.service-name }}-worker" ]; then
+          echo "  ✅ Worker: $(ls -lh bin/${{ inputs.service-name }}-worker | awk '{print $5}')"
+        fi

@@ -1,0 +1,434 @@
+name: Database Integration Tests
+
+on:
+  pull_request:
+    paths:
+      - "services/**/migrations/**"
+      - "services/**/internal/adapters/postgres/repositories/**"
+      - "packages/database/**"
+      - ".github/workflows/database-test.yml"
+
+  push:
+    branches: [main, develop]
+    paths:
+      - "services/**/migrations/**"
+      - "services/**/internal/adapters/postgres/repositories/**"
+      - "packages/database/**"
+      - ".github/workflows/database-test.yml"
+
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service to test migrations for (leave empty for all)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  POSTGRES_USER: torra
+  POSTGRES_PASSWORD: torra_test_password
+  POSTGRES_DB: torra_test
+
+jobs:
+  detect-services:
+    name: Detect Services with Migrations
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.detect.outputs.services }}
+      services-count: ${{ steps.detect.outputs.count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect services with migrations
+        id: detect
+        run: |
+          # If service input is provided, use only that service
+          if [ -n "${{ github.event.inputs.service }}" ]; then
+            SERVICE_NAME="${{ github.event.inputs.service }}"
+            if [ -d "services/$SERVICE_NAME/migrations" ]; then
+              SERVICES_JSON="[\"$SERVICE_NAME\"]"
+              SERVICES_COUNT=1
+            else
+              echo "❌ Service $SERVICE_NAME does not have migrations directory"
+              SERVICES_JSON="[]"
+              SERVICES_COUNT=0
+            fi
+          else
+            # Detect all services with migrations
+            SERVICES_WITH_MIGRATIONS=()
+
+            if [ -d "services" ]; then
+              for service_dir in services/*; do
+                if [ -d "$service_dir/migrations" ]; then
+                  service_name=$(basename "$service_dir")
+                  # Check if there are actual migration files
+                  migration_count=$(find "$service_dir/migrations" -name "*.up.sql" 2>/dev/null | wc -l)
+                  if [ "$migration_count" -gt 0 ]; then
+                    SERVICES_WITH_MIGRATIONS+=("$service_name")
+                    echo "✅ Found $migration_count migration(s) in $service_name"
+                  fi
+                fi
+              done
+            fi
+
+            # Convert to JSON
+            if [ ${#SERVICES_WITH_MIGRATIONS[@]} -eq 0 ]; then
+              SERVICES_JSON="[]"
+              SERVICES_COUNT=0
+            else
+              SERVICES_JSON=$(printf '"%s",' "${SERVICES_WITH_MIGRATIONS[@]}" | sed 's/,$//')
+              SERVICES_JSON="[$SERVICES_JSON]"
+              SERVICES_COUNT=${#SERVICES_WITH_MIGRATIONS[@]}
+            fi
+          fi
+
+          echo "services=$SERVICES_JSON" >> $GITHUB_OUTPUT
+          echo "count=$SERVICES_COUNT" >> $GITHUB_OUTPUT
+          echo "📋 Services with migrations: $SERVICES_JSON"
+
+  test-migrations:
+    name: Test Migrations - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: detect-services
+    if: needs.detect-services.outputs.services-count > 0
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5-alpine
+        env:
+          POSTGRES_USER: torra
+          POSTGRES_PASSWORD: torra_test_password
+          POSTGRES_DB: torra_test
+        options: >-
+          --health-cmd "pg_isready -U torra"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
+
+      - name: Install dependencies
+        run: |
+          # Install PostgreSQL client tools
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+          # Install golang-migrate
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/local/bin/
+          migrate -version
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Create service database
+        env:
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: |
+          SERVICE_DB="${{ env.POSTGRES_DB }}_${{ matrix.service }}"
+          echo "Creating database: $SERVICE_DB"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -c "CREATE DATABASE $SERVICE_DB;"
+
+          # Enable PostGIS extension if needed
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+      - name: Run migrations up
+        run: |
+          SERVICE_DB="${{ env.POSTGRES_DB }}_${{ matrix.service }}"
+          DATABASE_URL="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/$SERVICE_DB?sslmode=disable"
+
+          echo "🚀 Running migrations for ${{ matrix.service }}"
+          migrate -path services/${{ matrix.service }}/migrations \
+                  -database "$DATABASE_URL" \
+                  up
+
+          echo "✅ Migrations applied successfully"
+
+      - name: Verify database schema
+        env:
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: |
+          SERVICE_DB="${{ env.POSTGRES_DB }}_${{ matrix.service }}"
+          echo "📊 Database schema for ${{ matrix.service }}:"
+
+          # List all tables
+          echo "Tables:"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "\dt"
+
+          # Check migration history
+          echo "Migration history:"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "SELECT * FROM schema_migrations;"
+
+      - name: Test migrations down
+        run: |
+          SERVICE_DB="${{ env.POSTGRES_DB }}_${{ matrix.service }}"
+          DATABASE_URL="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/$SERVICE_DB?sslmode=disable"
+
+          echo "🔄 Testing rollback for ${{ matrix.service }}"
+
+          # Get current version
+          CURRENT_VERSION=$(psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -t -c "SELECT version FROM schema_migrations WHERE dirty = false ORDER BY version DESC LIMIT 1;" | xargs)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Rollback one version
+          if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "0" ]; then
+            PREV_VERSION=$((CURRENT_VERSION - 1))
+            echo "Rolling back to version: $PREV_VERSION"
+            migrate -path services/${{ matrix.service }}/migrations \
+                    -database "$DATABASE_URL" \
+                    goto $PREV_VERSION
+
+            # Roll forward again to test re-application
+            echo "Re-applying migrations..."
+            migrate -path services/${{ matrix.service }}/migrations \
+                    -database "$DATABASE_URL" \
+                    up
+
+            echo "✅ Rollback and re-application successful"
+          else
+            echo "⚠️ No migrations to rollback"
+          fi
+        env:
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+
+      - name: Test data integrity
+        env:
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: |
+          SERVICE_DB="${{ env.POSTGRES_DB }}_${{ matrix.service }}"
+          echo "🔍 Testing data integrity for ${{ matrix.service }}"
+
+          # Check for foreign key constraints
+          echo "Foreign key constraints:"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "
+            SELECT
+              tc.table_name,
+              kcu.column_name,
+              ccu.table_name AS foreign_table_name,
+              ccu.column_name AS foreign_column_name
+            FROM
+              information_schema.table_constraints AS tc
+              JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+              JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY';"
+
+          # Check indexes
+          echo "Indexes:"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "
+            SELECT
+              tablename,
+              indexname,
+              indexdef
+            FROM
+              pg_indexes
+            WHERE
+              schemaname = 'public'
+            ORDER BY
+              tablename,
+              indexname;"
+
+  database-integration-tests:
+    name: Database Integration Tests - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: [detect-services, test-migrations]
+    if: needs.detect-services.outputs.services-count > 0 && needs.test-migrations.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.detect-services.outputs.services) }}
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5-alpine
+        env:
+          POSTGRES_USER: torra
+          POSTGRES_PASSWORD: torra_test_password
+          POSTGRES_DB: torra_test
+        options: >-
+          --health-cmd "pg_isready -U torra"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.25"
+
+      - name: Install dependencies
+        run: |
+          # Install PostgreSQL client tools
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+          # Install golang-migrate
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.17.0/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/local/bin/
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U ${{ env.POSTGRES_USER }}; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Setup test database with migrations
+        env:
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        run: |
+          SERVICE_DB="${{ env.POSTGRES_DB }}_${{ matrix.service }}_integration"
+          echo "Creating integration test database: $SERVICE_DB"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -c "CREATE DATABASE $SERVICE_DB;"
+
+          # Enable PostGIS extension if needed
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
+          psql -h localhost -U ${{ env.POSTGRES_USER }} -d $SERVICE_DB -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+
+          # Apply migrations
+          DATABASE_URL="postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@localhost:5432/$SERVICE_DB?sslmode=disable"
+          migrate -path services/${{ matrix.service }}/migrations -database "$DATABASE_URL" up
+
+      - name: Run Go workspace sync
+        run: |
+          go work sync
+
+      - name: Run database integration tests
+        run: |
+          echo "🧪 Running database integration tests for ${{ matrix.service }}"
+          echo "⏰ Started at: $(date)"
+          echo ""
+
+          # Run tests with database integration enabled and stream output
+          cd services/${{ matrix.service }}
+          set -o pipefail
+
+          # Use unbuffered output to stream results in real-time with timestamps
+          if ! go test -v -race -timeout=10m ./internal/adapters/postgres/repositories/... 2>&1 | \
+               while IFS= read -r line; do
+                 echo "[$(date '+%H:%M:%S')] $line"
+               done | tee test_output.log; then
+            echo ""
+            echo "❌ Some database integration tests failed at: $(date)"
+            echo "---"
+            echo "Test failure summary:"
+            echo "---"
+            # Show failed tests summary
+            grep -E "(FAIL|panic|Error|error)" test_output.log | head -20 || echo "No specific error patterns found in output"
+            echo ""
+            echo "Full test output is available in the logs above"
+            exit 1
+          else
+            echo ""
+            echo "✅ All database integration tests passed at: $(date)"
+          fi
+        env:
+          # Database testing environment variables
+          ENABLE_DB_TESTS: "true"
+          CI: "true"
+          SERVICE_NAME: ${{ matrix.service }}
+          GITHUB_ACTIONS: "true"
+          TEST_DB_HOST: "localhost"
+          TEST_DB_PORT: "5432"
+          TEST_DB_USER: ${{ env.POSTGRES_USER }}
+          TEST_DB_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          TEST_DB_NAME: "${{ env.POSTGRES_DB }}_${{ matrix.service }}_integration"
+          TEST_DB_SSL_MODE: "disable"
+          TEST_DB_ISOLATE: "false" # Use shared database since we set it up with migrations
+          TEST_DB_MIGRATE: "false" # Migrations already applied
+          # Force unbuffered output for real-time streaming
+          GOMAXPROCS: "2"
+          GOTRACEBACK: "all"
+
+  database-test-summary:
+    name: Database Integration Test Summary
+    runs-on: ubuntu-latest
+    needs: [detect-services, test-migrations, database-integration-tests]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Database Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.detect-services.outputs.services-count }}" -eq "0" ]; then
+            echo "⚠️ No services with migrations found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "🗄️ Tested database integration for ${{ needs.detect-services.outputs.services-count }} service(s)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Services tested: ${{ needs.detect-services.outputs.services }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Migration Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.test-migrations.result }}" == "success" ]; then
+            echo "✅ All migration tests passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.test-migrations.result }}" == "failure" ]; then
+            echo "❌ Some migration tests failed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.test-migrations.result }}" == "skipped" ]; then
+            echo "⏭️ Migration tests were skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Database Integration Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.database-integration-tests.result }}" == "success" ]; then
+            echo "✅ All database integration tests passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.database-integration-tests.result }}" == "failure" ]; then
+            echo "❌ Some database integration tests failed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.database-integration-tests.result }}" == "skipped" ]; then
+            echo "⏭️ Database integration tests were skipped" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Overall Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          MIGRATION_SUCCESS="${{ needs.test-migrations.result }}"
+          INTEGRATION_SUCCESS="${{ needs.database-integration-tests.result }}"
+
+          if [ "$MIGRATION_SUCCESS" == "success" ] && [ "$INTEGRATION_SUCCESS" == "success" ]; then
+            echo "🎉 All database tests passed successfully!" >> $GITHUB_STEP_SUMMARY
+          elif [ "$MIGRATION_SUCCESS" == "success" ] && [ "$INTEGRATION_SUCCESS" == "skipped" ]; then
+            echo "✅ Migration tests passed (integration tests skipped)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Some tests failed or were skipped" >> $GITHUB_STEP_SUMMARY
+            echo "Failing the workflow due to test failures"
+            exit 1
+          fi

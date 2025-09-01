@@ -2,144 +2,175 @@
 
 ## Overview
 
-This document defines the mandatory standards, patterns, and best practices that MUST be followed when implementing any service within the MyTorra platform. These guidelines ensure consistency, maintainability, and professional quality across all services.
+This document defines the mandatory standards and patterns for implementing services in the MyTorra platform. These guidelines ensure consistency, maintainability, and professional quality across all services.
 
 ---
 
-## 1. Service Architecture Requirements
+## 1. Service Architecture (MANDATORY)
 
-### 1.1 Clean Architecture Structure (MANDATORY)
+### 1.1 Clean Architecture Structure
 
-Every service MUST implement the following layered architecture:
+Every service MUST follow this structure:
 
 ```
 services/<service-name>/
-├── cmd/
-│   ├── api/
-│   │   └── main.go          # HTTP API server entry point
-│   └── worker/              # OPTIONAL: Only if service needs background jobs
-│       └── main.go          # Background worker entry point
+├── cmd/api/main.go          # HTTP API server entry point
 ├── internal/
-│   ├── domain/              # Pure business logic, no dependencies
+│   ├── domain/              # Pure business logic
 │   │   ├── entities/        # Core business entities
-│   │   ├── valueobjects/    # Value objects
-│   │   └── errors/          # Domain-specific errors
+│   │   └── valueobjects/    # Value objects
 │   ├── application/         # Use cases and orchestration
 │   │   ├── services/        # Application services
-│   │   ├── ports/           # Interface definitions (contracts)
+│   │   ├── ports/           # Interface definitions
 │   │   └── dtos/            # Data transfer objects
-│   └── adapters/            # External world implementations
+│   └── adapters/            # External implementations
 │       ├── http/            # HTTP handlers and middleware
-│       ├── postgres/        # Database repositories
-│       ├── redis/           # Cache implementations
-│       ├── rabbitmq/        # Message bus handlers
-│       └── grpc/            # gRPC clients/servers (if needed)
+│       └── postgres/        # Database repositories
 ├── migrations/              # Database migrations
-├── configs/                 # Configuration files
-├── Dockerfile.api          # Docker image for API
-├── Dockerfile.worker       # OPTIONAL: Docker image for Worker (if needed)
+├── configs/config.yaml      # Configuration
 └── go.mod                  # Module dependencies
 ```
 
-### 1.2 Separation of Concerns
+### 1.2 Dependency Rules
 
-- **Domain Layer**: Contains ONLY business logic, no framework dependencies
-- **Application Layer**: Orchestrates domain logic, defines interfaces
+- **Domain Layer**: No external dependencies
+- **Application Layer**: Defines interfaces, orchestrates domain logic
 - **Adapters Layer**: Implements interfaces, handles external communications
-- **Dependency Direction**: Outer layers depend on inner layers, NEVER reverse
-
-### 1.3 Interface-Driven Design
-
-All external dependencies MUST be accessed through interfaces:
-
-```go
-// application/ports/user_repository.go
-type UserRepository interface {
-    FindByID(ctx context.Context, id string) (*domain.User, error)
-    Save(ctx context.Context, user *domain.User) error
-    FindByEmail(ctx context.Context, email string) (*domain.User, error)
-}
-
-// adapters/postgres/user_repository.go
-type PostgresUserRepository struct {
-    db *sqlx.DB
-}
-
-func (r *PostgresUserRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
-    // Implementation
-}
-```
+- **Direction**: Outer layers depend on inner layers only
 
 ---
 
-## 2. Go Development Standards
+## 2. Core Service Patterns (MANDATORY)
 
-### 2.1 Required Go Version
+### 2.1 Context Keys Pattern
 
-- **Minimum Version**: Go 1.25 or later
-- **Module Mode**: Always use Go modules (`go mod`)
-- **Workspace**: Part of monorepo workspace (`go.work`)
-
-### 2.2 Code Formatting & Linting
-
-**MANDATORY Tools**:
-
-- `gofmt`: All code MUST be formatted
-- `golangci-lint`: MUST pass with zero errors
-- Pre-commit hooks MUST be configured
-
-**Required Linters Configuration**:
-
-```yaml
-# .golangci.yml
-linters:
-  enable:
-    - gofmt
-    - govet
-    - errcheck
-    - staticcheck
-    - ineffassign
-    - gosec
-    - gocritic
-    - revive
-    - misspell
-    - unconvert
-    - prealloc
-    - nakedret
-    - gocyclo
-    - dupl
-```
-
-### 2.3 Error Handling
+Use typed context keys for type safety:
 
 ```go
-// ALWAYS wrap errors with context
-if err != nil {
-    return fmt.Errorf("userRepo.FindByID failed for id %s: %w", userID, err)
-}
+// Context keys for user information
+type contextKey string
 
-// Define domain errors
-var (
-    ErrUserNotFound = errors.New("user not found")
-    ErrInvalidEmail = errors.New("invalid email format")
+const (
+    UserIDKey    contextKey = "user_id"
+    UserEmailKey contextKey = "user_email"
+    UserNameKey  contextKey = "user_name"
+    AreaIDKey    contextKey = "area_id"
 )
 
-// Use errors.Is for checking
-if errors.Is(err, ErrUserNotFound) {
-    return nil, status.Error(codes.NotFound, "user not found")
+// Usage in handlers
+userIDStr := ctx.Value(middleware.UserIDKey).(string)
+```
+
+### 2.2 Internationalization (i18n) Pattern
+
+All services MUST support multiple languages:
+
+```go
+// Configuration
+type I18nConfig struct {
+    DefaultLanguage    string   `mapstructure:"default_language"`
+    SupportedLanguages []string `mapstructure:"supported_languages"`
+}
+
+// Handler pattern
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    if err != nil {
+        httpPkg.RespondError(w, http.StatusBadRequest, "INVALID_REQUEST",
+            h.translator.TWithContext(ctx, "error.invalid_request_body"))
+        return
+    }
+}
+
+// Success messages
+httpPkg.RespondJSON(w, http.StatusOK, map[string]string{
+    "message": h.translator.TWithContext(ctx, "user.created_successfully"),
+})
+```
+
+### 2.3 Language Middleware Pattern
+
+Automatic language detection from HTTP headers:
+
+```go
+// Add to router setup
+r.Use(httpPkg.Language(translator, cfg.I18n.DefaultLanguage))
+
+// Language middleware implementation
+func Language(translator *i18n.Translator, defaultLang string) func(next http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            acceptLang := r.Header.Get("Accept-Language")
+            lang := i18n.ParseAcceptLanguage(acceptLang, translator.GetSupportedLanguages())
+            if lang == "" {
+                lang = defaultLang
+            }
+            ctx := i18n.WithLanguage(r.Context(), lang)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
 }
 ```
 
-### 2.4 Context Usage
+### 2.4 Configuration Pattern
+
+Configuration-driven initialization:
 
 ```go
-// Context MUST be first parameter for I/O operations
-func (s *UserService) GetUser(ctx context.Context, id string) (*User, error) {
-    // Use context for timeout/cancellation
-    ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-    defer cancel()
+// main.go initialization pattern
+func main() {
+    // Load configuration
+    cfg, err := config.Load("configs/config.yaml")
+    if err != nil {
+        log.Fatal("Failed to load configuration:", err)
+    }
 
-    return s.repo.FindByID(ctx, id)
+    // Initialize translator from config
+    translator, err := i18n.New(cfg.I18n.DefaultLanguage, cfg.I18n.SupportedLanguages...)
+    if err != nil {
+        appLogger.Fatal("Failed to initialize translator")
+    }
+
+    // Pass translator to all handlers
+    authHandler := handlers.NewAuthHandler(authService, userService, appLogger, translator)
+    userHandler := handlers.NewUserHandler(userService, appLogger, translator)
+}
+```
+
+### 2.5 Error Handling Pattern
+
+Use shared error package for consistency:
+
+```go
+// Import shared error package
+import "github.com/paradoxe35/torra/packages/errors"
+
+// Repository pattern
+func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.User, error) {
+    err := r.db.GetContext(ctx, &user, query, id)
+    if err != nil {
+        if database.IsNoRowsError(err) {
+            return nil, fmt.Errorf("user not found: %w", err)
+        }
+        return nil, fmt.Errorf("failed to find user by id: %w", err)
+    }
+    return &user, nil
+}
+
+// Handler pattern with translations
+func (h *UserHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+    ctx := r.Context()
+    userIDStr := ctx.Value(middleware.UserIDKey).(string)
+
+    user, err := h.userService.GetUser(ctx, userID)
+    if err != nil {
+        h.logger.WithError(err).Error("Failed to get user")
+        httpPkg.RespondError(w, http.StatusNotFound, "USER_NOT_FOUND",
+            h.translator.TWithContext(ctx, "user.not_found"))
+        return
+    }
+
+    httpPkg.RespondJSON(w, http.StatusOK, user)
 }
 ```
 
@@ -147,384 +178,268 @@ func (s *UserService) GetUser(ctx context.Context, id string) (*User, error) {
 
 ## 3. HTTP API Standards
 
-### 3.1 Framework & Router
-
-- **Required**: Chi router (`github.com/go-chi/chi/v5`)
-- **Middleware Stack Order**:
-  1. Recovery (panic recovery)
-  2. RequestID
-  3. RealIP
-  4. Logger
-  5. Timeout
-  6. Rate Limiter
-  7. Authentication
-  8. Authorization
-  9. CORS (if needed)
-
-### 3.2 API Design Principles
+### 3.1 Router Setup Pattern
 
 ```go
-// RESTful resource naming
-router.Route("/api/v1/users", func(r chi.Router) {
-    r.Get("/", h.ListUsers)        // GET /api/v1/users
-    r.Post("/", h.CreateUser)       // POST /api/v1/users
-    r.Get("/{id}", h.GetUser)       // GET /api/v1/users/{id}
-    r.Put("/{id}", h.UpdateUser)    // PUT /api/v1/users/{id}
-    r.Delete("/{id}", h.DeleteUser) // DELETE /api/v1/users/{id}
+// Router initialization with middleware
+func (rt *Router) Setup() *chi.Mux {
+    r := chi.NewRouter()
+
+    // Global middleware stack
+    r.Use(middleware.Recoverer)
+    r.Use(middleware.RequestID)
+    r.Use(middleware.RealIP)
+    r.Use(middleware.Logger)
+    r.Use(middleware.Timeout(30 * time.Second))
+    r.Use(httpPkg.SecurityHeaders)
+    r.Use(httpPkg.CORS)
+    r.Use(httpPkg.Language(rt.translator, rt.defaultLanguage)) // Language detection
+
+    return r
+}
+```
+
+### 3.2 Response Patterns
+
+```go
+// Success response
+httpPkg.RespondJSON(w, http.StatusOK, data)
+
+// Error response with translation
+httpPkg.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR",
+    h.translator.TWithContext(ctx, "error.validation_failed"))
+
+// Success with message
+httpPkg.RespondJSON(w, http.StatusOK, map[string]string{
+    "message": h.translator.TWithContext(ctx, "user.created_successfully"),
 })
-
-// Consistent response format
-type Response struct {
-    Success bool        `json:"success"`
-    Data    interface{} `json:"data,omitempty"`
-    Error   *ErrorInfo  `json:"error,omitempty"`
-    Meta    *Meta       `json:"meta,omitempty"`
-}
-```
-
-### 3.3 OpenAPI Documentation
-
-- **MANDATORY**: All APIs MUST have OpenAPI 3.0 specs
-- **Location**: `docs/api/<service>.v1.yaml`
-- **Code Generation**: Use `oapi-codegen` for server stubs
-
----
-
-## 4. Database Standards
-
-### 4.1 PostgreSQL Requirements
-
-- **Library**: `sqlx` (`github.com/jmoiron/sqlx`)
-- **Migrations**: `golang-migrate`
-- **Connection Pooling**: Configure max connections
-- **Prepared Statements**: Use for repeated queries
-
-### 4.2 Database Patterns
-
-```go
-// Repository pattern implementation
-type PostgresUserRepo struct {
-    db *sqlx.DB
-}
-
-// Use named queries for clarity
-const getUserByEmailQuery = `
-    SELECT id, email, name, created_at, updated_at
-    FROM users
-    WHERE email = :email AND deleted_at IS NULL
-`
-
-// Transaction support
-func (r *PostgresUserRepo) CreateWithProfile(ctx context.Context, user *User, profile *Profile) error {
-    tx, err := r.db.BeginTxx(ctx, nil)
-    if err != nil {
-        return fmt.Errorf("begin transaction: %w", err)
-    }
-    defer tx.Rollback()
-
-    // Multiple operations
-    if err := r.createUser(ctx, tx, user); err != nil {
-        return err
-    }
-    if err := r.createProfile(ctx, tx, profile); err != nil {
-        return err
-    }
-
-    return tx.Commit()
-}
-```
-
-### 4.3 Migration Standards
-
-```sql
--- migrations/001_create_users.up.sql
-CREATE TABLE IF NOT EXISTS users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) NOT NULL UNIQUE,
-    name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMP
-);
-
-CREATE INDEX idx_users_email ON users(email) WHERE deleted_at IS NULL;
-CREATE INDEX idx_users_created_at ON users(created_at);
 ```
 
 ---
 
-## 5. Messaging & Events
+## 4. Core Service Analysis (CRITICAL - MANDATORY)
 
-### 5.1 RabbitMQ Standards
+### 4.1 ALWAYS Inspect Core Service First
 
-```go
-// Event definitions in packages/events/
-type ProductListedEvent struct {
-    EventID     string    `json:"event_id"`
-    ProductID   string    `json:"product_id"`
-    SellerID    string    `json:"seller_id"`
-    Price       float64   `json:"price"`
-    Currency    string    `json:"currency"`
-    ListedAt    time.Time `json:"listed_at"`
-    EventType   string    `json:"event_type"`
-    Version     string    `json:"version"`
-}
-
-// Publisher interface
-type EventPublisher interface {
-    Publish(ctx context.Context, event interface{}) error
-}
-
-// Consumer MUST be idempotent
-func (h *EventHandler) HandleProductListed(ctx context.Context, event ProductListedEvent) error {
-    // Check if already processed
-    if exists, err := h.repo.EventExists(ctx, event.EventID); exists || err != nil {
-        return err
-    }
-
-    // Process event
-    // ...
-
-    // Mark as processed
-    return h.repo.MarkEventProcessed(ctx, event.EventID)
-}
-```
-
-### 5.2 Background Jobs (Asynq)
-
-```go
-// Job definitions
-const (
-    TypeEmailWelcome = "email:welcome"
-    TypeImageResize  = "image:resize"
-    TypeReportDaily  = "report:daily"
-)
-
-// Job payload
-type EmailWelcomePayload struct {
-    UserID string `json:"user_id"`
-}
-
-// Enqueue job (in API process)
-func (s *UserService) SendWelcomeEmail(ctx context.Context, userID string) error {
-    payload, _ := json.Marshal(EmailWelcomePayload{UserID: userID})
-    task := asynq.NewTask(TypeEmailWelcome, payload)
-
-    _, err := s.asynqClient.Enqueue(task,
-        asynq.MaxRetry(3),
-        asynq.Timeout(30*time.Second),
-    )
-    return err
-}
-
-// Process job (in Worker process)
-func (w *EmailWorker) ProcessWelcomeEmail(ctx context.Context, t *asynq.Task) error {
-    var payload EmailWelcomePayload
-    if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-        return fmt.Errorf("unmarshal payload: %w", err)
-    }
-
-    // Send email logic
-    return w.emailService.SendWelcome(ctx, payload.UserID)
-}
-```
-
----
-
-## 6. Configuration Management
-
-### 6.1 Viper Configuration
-
-```go
-// config/config.go
-type Config struct {
-    Server   ServerConfig
-    Database DatabaseConfig
-    Redis    RedisConfig
-    RabbitMQ RabbitMQConfig
-}
-
-type ServerConfig struct {
-    Port         int           `mapstructure:"port"`
-    ReadTimeout  time.Duration `mapstructure:"read_timeout"`
-    WriteTimeout time.Duration `mapstructure:"write_timeout"`
-}
-
-// Load configuration
-func LoadConfig(path string) (*Config, error) {
-    viper.SetConfigFile(path)
-    viper.AutomaticEnv()
-    viper.SetEnvPrefix("MYTORRA")
-    viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-    if err := viper.ReadInConfig(); err != nil {
-        return nil, err
-    }
-
-    var config Config
-    if err := viper.Unmarshal(&config); err != nil {
-        return nil, err
-    }
-
-    return &config, nil
-}
-```
-
-### 6.2 Environment Variables
+**Before implementing ANY feature, MANDATORY steps:**
 
 ```bash
-# Required environment variables
-MYTORRA_DATABASE_URL=postgres://user:pass@localhost/mytorra
-MYTORRA_REDIS_URL=redis://localhost:6379
-MYTORRA_RABBITMQ_URL=amqp://guest:guest@localhost:5672/
-MYTORRA_JWT_SECRET=${SECRET_FROM_VAULT}
-MYTORRA_SERVICE_NAME=core
-MYTORRA_ENVIRONMENT=development
+# 1. Analyze core service structure
+ls -la services/core/
+
+# 2. Study related existing files
+find services/core/ -name "*your_feature*" -type f
+
+# 3. Check how core service implements similar functionality
+grep -r "YourFunctionality" services/core/
+
+# 4. Examine handler patterns
+ls -la services/core/internal/adapters/http/handlers/
+
+# 5. Study service patterns
+ls -la services/core/internal/application/services/
+
+# 6. Check repository implementations
+ls -la services/core/internal/adapters/postgres/repositories/
 ```
 
----
+### 4.2 Core Service Reference Implementation
 
-## 7. Logging & Observability
+**The core service (`services/core/`) is the REFERENCE implementation for:**
 
-### 7.1 Structured Logging (slog)
+- Clean architecture structure
+- Handler patterns with i18n
+- Context key usage
+- Error handling with translations
+- Configuration management
+- Database repository patterns
+- Middleware implementation
+- Testing patterns
 
-```go
-// Initialize logger
-logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-    Level: slog.LevelInfo,
-}))
+**ALWAYS study core service before writing new code.**
 
-// Add context fields
-logger = logger.With(
-    slog.String("service", "core"),
-    slog.String("version", version),
-    slog.String("environment", env),
-)
+### 4.3 Service-to-Service Authentication (CRITICAL)
 
-// Use in handlers
-func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
-    ctx := r.Context()
-    logger := h.logger.With(
-        slog.String("request_id", middleware.GetReqID(ctx)),
-        slog.String("method", r.Method),
-        slog.String("path", r.URL.Path),
-    )
+**For services communicating with core service, MANDATORY reference:**
 
-    userID := chi.URLParam(r, "id")
-    logger.Info("fetching user", slog.String("user_id", userID))
+📖 **See complete implementation guide:** [`docs/SERVICE_TO_SERVICE_AUTH.md`](../docs/SERVICE_TO_SERVICE_AUTH.md)
 
-    user, err := h.service.GetUser(ctx, userID)
-    if err != nil {
-        logger.Error("failed to fetch user",
-            slog.String("user_id", userID),
-            slog.String("error", err.Error()),
-        )
-        // Handle error
-    }
-}
-```
-
-### 7.2 Metrics & Tracing
+**Key patterns from the guide:**
 
 ```go
-// OpenTelemetry setup
+// 1. Use shared packages for authentication
 import (
-    "go.opentelemetry.io/otel"
-    "go.opentelemetry.io/otel/trace"
+    "github.com/paradoxe35/torra/packages/cache"
+    "github.com/paradoxe35/torra/packages/logger"
+    "github.com/paradoxe35/torra/packages/config"
 )
 
-// Create tracer
-tracer := otel.Tracer("mytorra.core")
+// 2. JWT validation with JWKS
+type ServiceAuthenticator struct {
+    jwksEndpoint string
+    cache        cache.Cache
+    logger       logger.Interface
+}
 
-// Use in functions
-func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
-    ctx, span := tracer.Start(ctx, "GetUser")
-    defer span.End()
-
-    span.SetAttributes(
-        attribute.String("user.id", id),
-    )
-
-    user, err := s.repo.FindByID(ctx, id)
-    if err != nil {
-        span.RecordError(err)
-        return nil, err
+// 3. Middleware pattern (study core service auth middleware)
+func AuthMiddleware(authenticator *ServiceAuthenticator) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            // Extract and validate JWT token
+            // Add user context using typed keys
+            // Continue with authenticated request
+        })
     }
+}
+```
 
-    return user, nil
+### 4.4 Required Shared Packages
+
+All services MUST use these packages:
+
+```go
+import (
+    "github.com/paradoxe35/torra/packages/config"     // Configuration management
+    "github.com/paradoxe35/torra/packages/database"  // Database connections
+    "github.com/paradoxe35/torra/packages/logger"    // Structured logging
+    "github.com/paradoxe35/torra/packages/errors"    // Error handling
+    "github.com/paradoxe35/torra/packages/http"      // HTTP responses
+    "github.com/paradoxe35/torra/packages/i18n"      // Internationalization
+    "github.com/paradoxe35/torra/packages/cache"     // Caching layer
+    "github.com/paradoxe35/torra/packages/security"  // Security utilities
+)
+```
+
+### 4.3 Database Pattern
+
+```go
+// Entity struct tags for database mapping (IMPORTANT)
+// When using sqlx with named queries or direct scanning, entities need db tags
+type User struct {
+    ID        uuid.UUID `db:"id"`
+    Email     string    `db:"email"`
+    Name      string    `db:"name"`
+    CreatedAt time.Time `db:"created_at"`
+}
+
+// Note: If entity has a separate model in adapters/postgres/models/,
+// use the model for database operations instead of adding tags to domain entity
+
+// Repository implementation using shared database package
+type userRepository struct {
+    db *database.DB
+}
+
+func NewUserRepository(db *database.DB) ports.UserRepository {
+    return &userRepository{db: db}
+}
+
+func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.User, error) {
+    var user entities.User
+    query := `SELECT id, email, name FROM users WHERE id = $1 AND deleted_at IS NULL`
+
+    err := r.db.GetContext(ctx, &user, query, id)
+    if err != nil {
+        if database.IsNoRowsError(err) {
+            return nil, fmt.Errorf("user not found: %w", err)
+        }
+        return nil, fmt.Errorf("failed to find user: %w", err)
+    }
+    return &user, nil
 }
 ```
 
 ---
 
-## 8. Testing Requirements (MANDATORY)
+## 5. Configuration Management
 
-### 8.1 Test Coverage & Execution
+### 5.1 Configuration Structure
 
-- **Minimum Coverage**: 80% for business logic
-- **MANDATORY**: Run `make test` before EVERY commit
-- **Test Types Required**:
-  - Unit tests for all domain logic
-  - Integration tests for repositories
-  - Contract tests for API endpoints
-  - Load tests for critical paths
-- **Test Execution**: ALL tests must pass before committing code
-- **CI/CD**: Tests run automatically on every push
+```go
+// config/config.go - Based on core service pattern
+type Config struct {
+    Service  ServiceConfig  `mapstructure:"service"`
+    Server   ServerConfig   `mapstructure:"server"`
+    Database DatabaseConfig `mapstructure:"database"`
+    Redis    RedisConfig    `mapstructure:"redis"`
+    JWT      JWTConfig      `mapstructure:"jwt"`
+    I18n     I18nConfig     `mapstructure:"i18n"`
+}
 
-### 8.2 Test File Organization
-
-```
-service/
-├── internal/
-│   ├── domain/
-│   │   ├── user.go
-│   │   └── user_test.go          # Unit tests next to code
-│   ├── application/
-│   │   ├── user_service.go
-│   │   └── user_service_test.go
-│   └── adapters/
-│       ├── postgres/
-│       │   ├── user_repo.go
-│       │   └── user_repo_test.go # Integration tests
-│       └── http/
-│           ├── user_handler.go
-│           └── user_handler_test.go
-└── tests/
-    ├── integration/               # Full integration tests
-    ├── e2e/                      # End-to-end tests
-    └── load/                     # Load tests
+type I18nConfig struct {
+    DefaultLanguage    string   `mapstructure:"default_language"`
+    SupportedLanguages []string `mapstructure:"supported_languages"`
+}
 ```
 
-### 8.3 Testing Commands
+### 5.2 Configuration File Pattern
+
+```yaml
+# configs/config.yaml
+service:
+  name: your-service
+  version: 1.0.0
+  environment: development
+
+server:
+  port: 8080
+  host: 0.0.0.0
+  read_timeout: 30s
+  write_timeout: 30s
+
+database:
+  host: localhost
+  port: 5432
+  database: mytorra_service
+  user: mytorra
+  password: ${DB_PASSWORD}
+
+i18n:
+  default_language: en
+  supported_languages:
+    - en
+    - fr
+```
+
+---
+
+## 6. Testing Requirements (CRITICAL - MANDATORY)
+
+### 6.1 ALWAYS Write Tests - NO EXCEPTIONS
+
+**🚨 CRITICAL RULE: Every piece of code MUST have tests before being committed.**
 
 ```bash
-# Run all tests
+# MANDATORY before every commit
 make test
 
-# Run tests with coverage
+# Check test coverage (minimum 80%)
 make test-coverage
 
-# Run tests for specific service
-make test-service SERVICE=core
-
-# Run integration tests only
-make test-integration
-
-# Run tests with race detection
-make test-race
-
-# Generate coverage report
-make coverage-html
+# Run specific service tests
+make test-service SERVICE=your-service
 ```
 
-### 8.4 Testing Patterns
+### 6.2 Test Types Required
+
+**ALL services MUST implement:**
+
+1. **Unit Tests** - Test business logic in isolation
+2. **Integration Tests** - Test database repositories
+3. **Handler Tests** - Test HTTP endpoints with mocked dependencies
+4. **Service Tests** - Test application services
+
+### 6.3 Testing Patterns (Study Core Service)
+
+**Reference implementation:** `services/core/internal/*/`
 
 ```go
-// Unit test example
+// Unit test example (study core service tests)
 func TestUserService_CreateUser(t *testing.T) {
     // Arrange
     mockRepo := mocks.NewMockUserRepository(t)
-    service := NewUserService(mockRepo)
+    mockTranslator := mocks.NewMockTranslator(t)
+    service := NewUserService(mockRepo, mockTranslator)
 
     user := &domain.User{
         Email: "test@example.com",
@@ -532,6 +447,7 @@ func TestUserService_CreateUser(t *testing.T) {
     }
 
     mockRepo.On("Save", mock.Anything, user).Return(nil)
+    mockTranslator.On("TWithContext", mock.Anything, mock.Anything).Return("translated message")
 
     // Act
     err := service.CreateUser(context.Background(), user)
@@ -539,827 +455,335 @@ func TestUserService_CreateUser(t *testing.T) {
     // Assert
     assert.NoError(t, err)
     mockRepo.AssertExpectations(t)
+    mockTranslator.AssertExpectations(t)
 }
 
-// Integration test with testcontainers
-func TestPostgresRepo_Integration(t *testing.T) {
-    ctx := context.Background()
+// Handler test example (study core service handler tests)
+func TestUserHandler_CreateUser(t *testing.T) {
+    // Setup
+    mockService := mocks.NewMockUserService(t)
+    mockTranslator := mocks.NewMockTranslator(t)
+    handler := NewUserHandler(mockService, logger.NewNoop(), mockTranslator)
 
-    // Start PostgreSQL container
-    postgres, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-        ContainerRequest: testcontainers.ContainerRequest{
-            Image:        "postgres:15",
-            ExposedPorts: []string{"5432/tcp"},
-            Env: map[string]string{
-                "POSTGRES_PASSWORD": "test",
-            },
-        },
-        Started: true,
-    })
-    require.NoError(t, err)
-    defer postgres.Terminate(ctx)
+    // Test request
+    reqBody := `{"email":"test@example.com","name":"Test User"}`
+    req := httptest.NewRequest("POST", "/users", strings.NewReader(reqBody))
+    req.Header.Set("Content-Type", "application/json")
+    w := httptest.NewRecorder()
 
-    // Run tests against real database
-    // ...
+    // Mock expectations
+    mockService.On("CreateUser", mock.Anything, mock.Anything).Return(&domain.User{}, nil)
+
+    // Execute
+    handler.CreateUser(w, req)
+
+    // Assert
+    assert.Equal(t, http.StatusCreated, w.Code)
+    mockService.AssertExpectations(t)
+}
+
+// Integration test example (study core service repository tests)
+func TestUserRepository_Integration(t *testing.T) {
+    // Use testcontainers for real database
+    db := setupTestDatabase(t)
+    defer db.Close()
+
+    repo := NewUserRepository(db)
+
+    // Test with real database
+    user := &entities.User{
+        Email: "test@example.com",
+        Name:  "Test User",
+    }
+
+    err := repo.Save(context.Background(), user)
+    assert.NoError(t, err)
+    assert.NotEmpty(t, user.ID)
+}
+```
+
+### 6.4 Test File Organization
+
+**Follow core service pattern:**
+
+```
+services/your-service/
+├── internal/
+│   ├── domain/
+│   │   ├── user.go
+│   │   └── user_test.go          # Unit tests next to code
+│   ├── application/
+│   │   ├── services/
+│   │   │   ├── user_service.go
+│   │   │   └── user_service_test.go
+│   └── adapters/
+│       ├── http/handlers/
+│       │   ├── user_handler.go
+│       │   └── user_handler_test.go
+│       └── postgres/repositories/
+│           ├── user_repository.go
+│           └── user_repository_test.go
+```
+
+### 6.5 Testing with i18n (Study Core Service)
+
+```go
+// Test translations in handlers
+func TestHandler_WithTranslations(t *testing.T) {
+    mockTranslator := mocks.NewMockTranslator(t)
+    handler := NewHandler(mockService, logger.NewNoop(), mockTranslator)
+
+    // Setup context with language
+    ctx := i18n.WithLanguage(context.Background(), "fr")
+    req := httptest.NewRequest("GET", "/test", nil).WithContext(ctx)
+
+    // Expect French translation
+    mockTranslator.On("TWithContext", ctx, "error.not_found").Return("Non trouvé")
+
+    // Test error response
+    w := httptest.NewRecorder()
+    handler.GetUser(w, req)
+
+    // Verify translated message in response
+    assert.Contains(t, w.Body.String(), "Non trouvé")
 }
 ```
 
 ---
 
-## 9. Security Standards (CRITICAL)
+## 7. Security Essentials (CRITICAL)
 
-### 9.1 SQL Injection Prevention
+### 7.1 SQL Injection Prevention
 
-**NEVER construct SQL queries with string concatenation or fmt.Sprintf!**
+**NEVER use string concatenation for SQL queries:**
 
 ```go
 // ❌ DANGEROUS - NEVER DO THIS
 query := fmt.Sprintf("SELECT * FROM users WHERE email = '%s'", email)
 
-// ❌ DANGEROUS - SQL INJECTION VULNERABLE
-query := "SELECT * FROM users WHERE id = " + userID
-
-// ✅ SAFE - Use parameterized queries with sqlx
-const getUserQuery = `
-    SELECT id, email, name
-    FROM users
-    WHERE email = $1 AND deleted_at IS NULL
-`
+// ✅ SAFE - Use parameterized queries
+const getUserQuery = `SELECT id, email, name FROM users WHERE email = $1`
 err := db.Get(&user, getUserQuery, email)
-
-// ✅ SAFE - Use named parameters with sqlx
-const updateUserQuery = `
-    UPDATE users
-    SET name = :name, updated_at = :updated_at
-    WHERE id = :id AND deleted_at IS NULL
-`
-_, err := db.NamedExec(updateUserQuery, map[string]interface{}{
-    "id":         userID,
-    "name":       sanitizedName,
-    "updated_at": time.Now(),
-})
-
-// ✅ SAFE - For dynamic queries, use query builders
-import "github.com/Masterminds/squirrel"
-
-query := squirrel.Select("*").From("users")
-if email != "" {
-    query = query.Where(squirrel.Eq{"email": email})
-}
-if status != "" {
-    query = query.Where(squirrel.Eq{"status": status})
-}
-sql, args, err := query.ToSql()
 ```
 
-### 9.2 Authentication & Authorization
-
-```go
-// JWT validation middleware
-func JWTMiddleware(secret []byte) func(http.Handler) http.Handler {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            token := extractToken(r)
-            if token == "" {
-                http.Error(w, "unauthorized", http.StatusUnauthorized)
-                return
-            }
-
-            claims, err := validateToken(token, secret)
-            if err != nil {
-                http.Error(w, "invalid token", http.StatusUnauthorized)
-                return
-            }
-
-            ctx := context.WithValue(r.Context(), "user_claims", claims)
-            next.ServeHTTP(w, r.WithContext(ctx))
-        })
-    }
-}
-```
-
-### 9.3 Input Validation & Sanitization
+### 7.2 Input Validation
 
 ```go
 // MANDATORY: Validate ALL inputs
 type CreateUserRequest struct {
     Email    string `json:"email" validate:"required,email,max=255"`
-    Name     string `json:"name" validate:"required,min=2,max=100,alphanumunicode"`
-    Password string `json:"password" validate:"required,min=12,containsany=!@#$%,containsnumber"`
-    Age      int    `json:"age" validate:"min=18,max=120"`
-    Phone    string `json:"phone" validate:"required,e164"`
-    URL      string `json:"url" validate:"omitempty,url,max=2048"`
-}
-
-// Sanitize user inputs
-func sanitizeInput(input string) string {
-    // Remove null bytes
-    input = strings.ReplaceAll(input, "\x00", "")
-
-    // Trim whitespace
-    input = strings.TrimSpace(input)
-
-    // Limit length
-    if len(input) > 1000 {
-        input = input[:1000]
-    }
-
-    return input
-}
-
-// HTML content sanitization
-import "github.com/microcosm-cc/bluemonday"
-
-func sanitizeHTML(input string) string {
-    p := bluemonday.UGCPolicy()
-    return p.Sanitize(input)
-}
-
-// File upload validation
-func validateUpload(file multipart.File, header *multipart.FileHeader) error {
-    // Check file size (10MB limit)
-    if header.Size > 10*1024*1024 {
-        return errors.New("file too large")
-    }
-
-    // Validate MIME type
-    buffer := make([]byte, 512)
-    _, err := file.Read(buffer)
-    if err != nil {
-        return err
-    }
-
-    contentType := http.DetectContentType(buffer)
-    allowedTypes := map[string]bool{
-        "image/jpeg": true,
-        "image/png":  true,
-        "image/gif":  true,
-    }
-
-    if !allowedTypes[contentType] {
-        return errors.New("invalid file type")
-    }
-
-    // Reset file pointer
-    file.Seek(0, 0)
-
-    return nil
+    Name     string `json:"name" validate:"required,min=2,max=100"`
+    Password string `json:"password" validate:"required,min=12"`
 }
 
 // Validate in handler
 func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
     var req CreateUserRequest
     if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        respondError(w, http.StatusBadRequest, "invalid request body")
+        httpPkg.RespondError(w, http.StatusBadRequest, "INVALID_REQUEST",
+            h.translator.TWithContext(r.Context(), "error.invalid_request_body"))
         return
     }
 
     if err := h.validator.Struct(req); err != nil {
-        respondError(w, http.StatusBadRequest, "validation failed")
+        httpPkg.RespondError(w, http.StatusBadRequest, "VALIDATION_FAILED",
+            h.translator.TWithContext(r.Context(), "error.validation_failed"))
         return
     }
-
-    // Process valid request
 }
 ```
 
-### 9.4 XSS Prevention
+### 7.3 Security Headers
 
 ```go
-// Always escape output
-import "html/template"
-
-// Safe template rendering
-func renderHTML(w http.ResponseWriter, data interface{}) {
-    tmpl := template.Must(template.New("").Parse(`
-        <h1>{{.Title | html}}</h1>
-        <p>{{.Content | html}}</p>
-    `))
-    tmpl.Execute(w, data)
-}
-
-// JSON responses with proper content type
-func respondJSON(w http.ResponseWriter, data interface{}) {
-    w.Header().Set("Content-Type", "application/json")
-    w.Header().Set("X-Content-Type-Options", "nosniff")
-    json.NewEncoder(w).Encode(data)
-}
-```
-
-### 9.5 CSRF Protection
-
-```go
-import "github.com/gorilla/csrf"
-
-// CSRF middleware setup
-func SetupCSRF(authKey []byte) func(http.Handler) http.Handler {
-    return csrf.Protect(authKey,
-        csrf.Secure(true),
-        csrf.HttpOnly(true),
-        csrf.SameSite(csrf.SameSiteStrictMode),
-        csrf.Path("/"),
-    )
-}
-
-// In handlers
-func (h *Handler) RenderForm(w http.ResponseWriter, r *http.Request) {
-    token := csrf.Token(r)
-    // Include token in form or header
-    w.Header().Set("X-CSRF-Token", token)
-}
-```
-
-### 9.6 Security Headers (Comprehensive)
-
-```go
-func SecurityHeaders(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Prevent MIME type sniffing
-        w.Header().Set("X-Content-Type-Options", "nosniff")
-
-        // Prevent clickjacking
-        w.Header().Set("X-Frame-Options", "DENY")
-
-        // XSS Protection (for older browsers)
-        w.Header().Set("X-XSS-Protection", "1; mode=block")
-
-        // Force HTTPS
-        w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
-
-        // Content Security Policy
-        w.Header().Set("Content-Security-Policy",
-            "default-src 'self'; "+
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "+
-            "style-src 'self' 'unsafe-inline'; "+
-            "img-src 'self' data: https:; "+
-            "font-src 'self' data:; "+
-            "connect-src 'self'; "+
-            "frame-ancestors 'none'; "+
-            "base-uri 'self'; "+
-            "form-action 'self'")
-
-        // Referrer Policy
-        w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-
-        // Permissions Policy
-        w.Header().Set("Permissions-Policy",
-            "geolocation=(), microphone=(), camera=()")
-
-        next.ServeHTTP(w, r)
-    })
-}
-```
-
-### 9.7 Password Security
-
-```go
-import "golang.org/x/crypto/bcrypt"
-
-// Password hashing
-func hashPassword(password string) (string, error) {
-    // Use cost of 12 or higher
-    bytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
-    return string(bytes), err
-}
-
-// Password verification
-func checkPassword(password, hash string) bool {
-    err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-    return err == nil
-}
-
-// Password strength validation
-func validatePasswordStrength(password string) error {
-    if len(password) < 12 {
-        return errors.New("password must be at least 12 characters")
-    }
-
-    var hasUpper, hasLower, hasNumber, hasSpecial bool
-    for _, char := range password {
-        switch {
-        case unicode.IsUpper(char):
-            hasUpper = true
-        case unicode.IsLower(char):
-            hasLower = true
-        case unicode.IsNumber(char):
-            hasNumber = true
-        case unicode.IsPunct(char) || unicode.IsSymbol(char):
-            hasSpecial = true
-        }
-    }
-
-    if !hasUpper || !hasLower || !hasNumber || !hasSpecial {
-        return errors.New("password must contain uppercase, lowercase, number and special character")
-    }
-
-    // Check against common passwords
-    if isCommonPassword(password) {
-        return errors.New("password is too common")
-    }
-
-    return nil
-}
-```
-
-### 9.8 Secrets Management
-
-```go
-// NEVER hardcode secrets
-// ❌ NEVER DO THIS
-const apiKey = "sk_live_abcd1234"
-
-// ✅ Load from environment or secret manager
-func loadSecrets() (*Secrets, error) {
-    // From environment
-    secret := os.Getenv("API_SECRET")
-    if secret == "" {
-        // From secret manager (Vault, AWS Secrets Manager, etc.)
-        client := vault.NewClient()
-        secret, err := client.GetSecret("mytorra/api/secret")
-        if err != nil {
-            return nil, err
-        }
-    }
-
-    return &Secrets{
-        APISecret: secret,
-    }, nil
-}
-```
-
-### 9.9 Rate Limiting & DDoS Protection
-
-```go
-import "golang.org/x/time/rate"
-
-// Per-IP rate limiting
-type IPRateLimiter struct {
-    visitors map[string]*rate.Limiter
-    mu       sync.RWMutex
-    rate     rate.Limit
-    burst    int
-}
-
-func (i *IPRateLimiter) GetLimiter(ip string) *rate.Limiter {
-    i.mu.Lock()
-    defer i.mu.Unlock()
-
-    limiter, exists := i.visitors[ip]
-    if !exists {
-        limiter = rate.NewLimiter(i.rate, i.burst)
-        i.visitors[ip] = limiter
-    }
-
-    return limiter
-}
-
-func RateLimitMiddleware(rl *IPRateLimiter) func(http.Handler) http.Handler {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            ip := getClientIP(r)
-            limiter := rl.GetLimiter(ip)
-
-            if !limiter.Allow() {
-                http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
-                return
-            }
-
-            next.ServeHTTP(w, r)
-        })
-    }
-}
-```
-
-### 9.10 Audit Logging
-
-```go
-// Log security events
-type SecurityLogger struct {
-    logger *slog.Logger
-}
-
-func (s *SecurityLogger) LogAuthAttempt(ctx context.Context, email string, success bool, ip string) {
-    s.logger.Info("authentication attempt",
-        slog.String("email", email),
-        slog.Bool("success", success),
-        slog.String("ip", ip),
-        slog.String("request_id", middleware.GetReqID(ctx)),
-        slog.Time("timestamp", time.Now()),
-    )
-}
-
-func (s *SecurityLogger) LogSuspiciousActivity(ctx context.Context, activity string, details map[string]interface{}) {
-    s.logger.Warn("suspicious activity detected",
-        slog.String("activity", activity),
-        slog.Any("details", details),
-        slog.String("request_id", middleware.GetReqID(ctx)),
-    )
-}
-
-// Monitor for security threats
-func (s *SecurityLogger) MonitorForThreats(r *http.Request) {
-    // Check for SQL injection patterns
-    if containsSQLInjectionPattern(r.URL.RawQuery) {
-        s.LogSuspiciousActivity(r.Context(), "potential_sql_injection", map[string]interface{}{
-            "query": r.URL.RawQuery,
-            "ip":    getClientIP(r),
-        })
-    }
-
-    // Check for XSS patterns
-    if containsXSSPattern(r.URL.RawQuery) {
-        s.LogSuspiciousActivity(r.Context(), "potential_xss", map[string]interface{}{
-            "query": r.URL.RawQuery,
-            "ip":    getClientIP(r),
-        })
-    }
-}
+// Use shared security headers middleware
+r.Use(httpPkg.SecurityHeaders)
 ```
 
 ---
 
-## 10. Performance Guidelines
+## 8. Development Workflow (MANDATORY)
 
-### 10.1 Database Optimization
+### 8.1 Before Writing ANY Code
 
-- Use connection pooling
-- Implement query result caching
-- Use prepared statements for repeated queries
-- Add appropriate indexes
-- Implement pagination for list endpoints
-- Use batch operations where possible
-
-### 10.2 Caching Strategy
-
-```go
-// Cache-aside pattern
-func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
-    // Try cache first
-    cacheKey := fmt.Sprintf("user:%s", id)
-    if cached, err := s.cache.Get(ctx, cacheKey); err == nil {
-        var user User
-        if err := json.Unmarshal(cached, &user); err == nil {
-            return &user, nil
-        }
-    }
-
-    // Cache miss - get from database
-    user, err := s.repo.FindByID(ctx, id)
-    if err != nil {
-        return nil, err
-    }
-
-    // Update cache
-    if data, err := json.Marshal(user); err == nil {
-        s.cache.Set(ctx, cacheKey, data, 5*time.Minute)
-    }
-
-    return user, nil
-}
-```
-
-### 10.3 Rate Limiting
-
-```go
-// Per-user rate limiting
-limiter := rate.NewLimiter(rate.Every(time.Second), 10) // 10 requests per second
-
-func RateLimitMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        userID := getUserID(r.Context())
-        limiter := getUserLimiter(userID)
-
-        if !limiter.Allow() {
-            http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
-            return
-        }
-
-        next.ServeHTTP(w, r)
-    })
-}
-```
-
----
-
-## 11. Deployment Standards
-
-### 11.1 Docker Requirements
-
-```dockerfile
-# Dockerfile.api
-FROM golang:1.25-alpine AS builder
-WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o api ./cmd/api
-
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates
-WORKDIR /root/
-COPY --from=builder /app/api .
-COPY --from=builder /app/configs ./configs
-EXPOSE 8080
-CMD ["./api"]
-```
-
-### 11.2 Health Checks
-
-```go
-// Health check endpoint
-func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-    checks := map[string]string{
-        "database": "checking",
-        "redis":    "checking",
-        "rabbitmq": "checking",
-    }
-
-    // Check database
-    if err := h.db.PingContext(r.Context()); err != nil {
-        checks["database"] = "unhealthy"
-    } else {
-        checks["database"] = "healthy"
-    }
-
-    // Check other dependencies...
-
-    healthy := true
-    for _, status := range checks {
-        if status != "healthy" {
-            healthy = false
-            break
-        }
-    }
-
-    response := map[string]interface{}{
-        "status": "ok",
-        "checks": checks,
-    }
-
-    if !healthy {
-        response["status"] = "degraded"
-        w.WriteHeader(http.StatusServiceUnavailable)
-    }
-
-    json.NewEncoder(w).Encode(response)
-}
-```
-
-### 11.3 Graceful Shutdown
-
-```go
-func main() {
-    // Setup server
-    srv := &http.Server{
-        Addr:    ":8080",
-        Handler: router,
-    }
-
-    // Start server
-    go func() {
-        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            log.Fatal("listen:", err)
-        }
-    }()
-
-    // Wait for interrupt signal
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-    <-quit
-
-    // Graceful shutdown with timeout
-    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-    defer cancel()
-
-    if err := srv.Shutdown(ctx); err != nil {
-        log.Fatal("server forced to shutdown:", err)
-    }
-
-    log.Println("server exited")
-}
-```
-
----
-
-## 12. Documentation Requirements
-
-### 12.1 Code Documentation
-
-```go
-// Package user provides user management functionality.
-package user
-
-// UserService handles all user-related business logic.
-type UserService struct {
-    repo UserRepository
-    // other dependencies
-}
-
-// CreateUser creates a new user with the provided details.
-// It validates the input, checks for duplicate emails, and stores the user.
-// Returns the created user or an error if the operation fails.
-func (s *UserService) CreateUser(ctx context.Context, req CreateUserRequest) (*User, error) {
-    // Implementation
-}
-```
-
-### 12.2 API Documentation
-
-- OpenAPI 3.0 specification required
-- Postman collection for testing
-- README with setup instructions
-- Architecture decision records (ADRs)
-
-### 12.3 Context7 Documentation Lookup (MANDATORY)
-
-**When implementing new features or using external libraries:**
-
-1. **Always Check Context7 First**: Before implementing any feature that involves external libraries, frameworks, or complex Go patterns, developers MUST:
-   - Use Context7 to look up the latest documentation
-   - Search for best practices and recent updates
-   - Review code examples and implementation patterns
-   - Check for security advisories or deprecation notices
-
-2. **Examples of When to Use Context7:**
-   - Implementing OAuth2 flows
-   - Setting up database migrations
-   - Configuring message queues (RabbitMQ)
-   - Using new Go standard library features
-   - Implementing WebSocket connections
-   - Setting up observability (OpenTelemetry)
-   - Configuring CI/CD pipelines
-   - Using any third-party library
-
-3. **Documentation Priority:**
-   ```
-   Context7 (Latest) → Official Docs → Community Resources → Stack Overflow
-   ```
-
-4. **Document Context7 Findings:**
-   - When using Context7 to research implementation approaches, document key findings in code comments
-   - Include Context7 reference links in ADRs for major architectural decisions
-   - Update team knowledge base with important discoveries
-
-**Example Usage:**
-```go
-// Implementation based on Context7 documentation for Chi router v5
-// Ref: Context7 lookup performed on 2025-08-29 for latest middleware patterns
-func SetupRouter() *chi.Mux {
-    r := chi.NewRouter()
-
-    // Middleware stack order based on Context7 best practices
-    r.Use(middleware.Recovery)
-    r.Use(middleware.RequestID)
-    // ... rest of implementation
-}
-```
-
----
-
-## 13. Service Communication Guidelines
-
-### 13.1 Inter-Service Communication
-
-**Synchronous (REST)**:
-
-- Use for immediate responses
-- Implement circuit breakers
-- Add retry logic with exponential backoff
-- Set appropriate timeouts
-
-**Asynchronous (Events)**:
-
-- Use for fire-and-forget operations
-- Ensure idempotency
-- Implement dead letter queues
-- Version event schemas
-
-### 13.2 Service Discovery
-
-```go
-// Service registry interface
-type ServiceRegistry interface {
-    Register(service ServiceInfo) error
-    Discover(serviceName string) ([]ServiceEndpoint, error)
-    HealthCheck() error
-}
-
-// Use in client
-func NewServiceClient(registry ServiceRegistry) *Client {
-    endpoints, _ := registry.Discover("core-service")
-    // Load balance between endpoints
-}
-```
-
----
-
-## 14. Monitoring & Alerting
-
-### 14.1 Key Metrics to Track
-
-- Request rate, error rate, duration (RED)
-- CPU, memory, disk usage
-- Database connection pool metrics
-- Queue depths and processing rates
-- Business metrics (users, transactions, etc.)
-
-### 14.2 Alerting Rules
-
-```yaml
-# Example Prometheus alert rules
-groups:
-  - name: service_alerts
-    rules:
-      - alert: HighErrorRate
-        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
-        for: 5m
-        annotations:
-          summary: "High error rate detected"
-
-      - alert: SlowRequests
-        expr: histogram_quantile(0.95, http_request_duration_seconds) > 1
-        for: 10m
-        annotations:
-          summary: "95th percentile latency is above 1s"
-```
-
----
-
-## 15. Development Workflow (MANDATORY)
-
-### 15.1 Project Todo Tracking
-
-**MANDATORY**: Keep the `project.todo` file updated throughout development:
-
-- Mark tasks as completed when finished: `[x]`
-- Update task status regularly
-- Add new subtasks as discovered
-- Document blockers or issues in task comments
-- Review todo list at start and end of each work session
-
-### 15.2 Before Every Commit
+**🚨 CRITICAL: Follow this sequence for EVERY feature:**
 
 ```bash
-# 1. Update project.todo with completed tasks
-# Mark completed items with [x]
+# 1. ANALYZE CORE SERVICE FIRST (MANDATORY)
+ls -la services/core/internal/
+find services/core/ -name "*similar_feature*" -type f
+grep -r "SimilarFunctionality" services/core/
 
-# 2. Format your code
+# 2. Check existing packages
+ls -la packages/
+grep -r "YourFunctionality" packages/
+
+# 3. Study related implementations
+grep -r "YourFunctionality" services/
+
+# 4. Plan your tests BEFORE writing code
+# - What will you test?
+# - What mocks do you need?
+# - What test cases are required?
+```
+
+### 8.2 Implementation Workflow
+
+```bash
+# 1. Write tests FIRST (TDD approach)
+touch internal/domain/user_test.go
+# Write failing tests
+
+# 2. Implement code to make tests pass
+touch internal/domain/user.go
+# Write minimal code to pass tests
+
+# 3. Refactor and improve
+# Keep tests passing
+
+# 4. Add integration tests
+# Test with real dependencies
+
+# 5. Add handler tests
+# Test HTTP endpoints
+```
+
+### 8.3 Before Every Commit
+
+```bash
+# 1. Format code
 make fmt
 
-# 3. Run linters
+# 2. Run linters
 make lint
 
-# 4. Run ALL tests
+# 3. Run ALL tests (MANDATORY - NO EXCEPTIONS)
 make test
 
-# 5. Check test coverage
+# 4. Check test coverage (minimum 80%)
 make test-coverage
 
-# If all pass, then commit
+# 5. Verify build
+make build
+
+# If ALL pass, then commit
 git add .
 git commit -m "feat: your feature description"
 ```
 
-### 15.3 Before Opening Pull Request
+### 8.4 Core Service Study Checklist
 
-```bash
-# Run complete validation
-make validate
+**MANDATORY before implementing similar functionality:**
 
-# This runs:
-# - Format check
-# - Lint
-# - All tests
-# - Coverage check
-# - Security scan
-# - Build verification
+- [ ] Studied core service folder structure
+- [ ] Analyzed related handler implementations
+- [ ] Examined service layer patterns
+- [ ] Reviewed repository implementations
+- [ ] Checked middleware usage
+- [ ] Studied error handling patterns
+- [ ] Reviewed i18n integration
+- [ ] Examined test patterns
+- [ ] Verified shared package usage
+
+### 8.3 Location Detection Pattern
+
+**MANDATORY for services requiring user location:**
+
+```go
+// Location detection priority order:
+// 1. GPS coordinates (primary)
+// 2. IP-based location (fallback)
+// 3. Default area (last resort)
+
+type RegisterRequest struct {
+    Email     string   `json:"email" validate:"required,email"`
+    Name      string   `json:"name" validate:"required"`
+    AreaID    *uuid.UUID `json:"area_id,omitempty"` // Optional - auto-detected
+    Latitude  *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
+    Longitude *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
+}
+
+func (s *Service) detectUserArea(ctx context.Context, req RegisterRequest) (*entities.Area, error) {
+    // 1. Try GPS coordinates first
+    if req.Latitude != nil && req.Longitude != nil {
+        if area, err := s.areaService.FindAreaByCoordinate(ctx, *req.Latitude, *req.Longitude); err == nil {
+            return area, nil
+        }
+    }
+
+    // 2. Fallback to IP-based detection
+    if clientIP := s.getClientIPFromContext(ctx); clientIP != "" {
+        if lat, lng, err := s.getLocationFromIP(ctx, clientIP); err == nil {
+            if area, err := s.areaService.FindAreaByCoordinate(ctx, lat, lng); err == nil {
+                return area, nil
+            }
+        }
+    }
+
+    return nil, fmt.Errorf("no location data available for area detection")
+}
 ```
 
-## 16. Compliance Checklist
+---
+
+## 9. Compliance Checklist
 
 Before deploying any service to production, ensure:
 
+**📋 Pre-Implementation Checklist:**
+- [ ] Core service analyzed for similar functionality
+- [ ] Related existing files studied
+- [ ] Shared packages verified and used
+- [ ] Service-to-service auth reviewed (if applicable)
+- [ ] Test plan created before coding
+
+**🏗️ Implementation Checklist:**
 - [ ] Clean architecture implemented
-- [ ] All tests passing with >80% coverage
-- [ ] `make validate` passes without errors
-- [ ] OpenAPI documentation complete
+- [ ] All tests written and passing (>80% coverage)
+- [ ] Handler tests with i18n mocking
+- [ ] Integration tests with real dependencies
+- [ ] Unit tests for all business logic
+- [ ] Shared packages used (no code duplication)
+- [ ] i18n support implemented with translations
+- [ ] Context keys properly typed (no string literals)
+- [ ] Configuration externalized
+- [ ] Error handling with translations
+
+**🔒 Security Checklist:**
 - [ ] Security headers configured
-- [ ] Rate limiting implemented
+- [ ] Input validation implemented
+- [ ] SQL injection prevention verified
+- [ ] JWT authentication implemented (if needed)
+- [ ] Service-to-service auth configured (if needed)
+
+**🚀 Deployment Checklist:**
 - [ ] Health checks working
 - [ ] Graceful shutdown implemented
-- [ ] Logging properly structured
-- [ ] Metrics exposed for Prometheus
+- [ ] Monitoring and metrics configured
 - [ ] Docker images optimized
-- [ ] Configuration externalized
-- [ ] Secrets managed securely
-- [ ] Database migrations tested
-- [ ] Error handling comprehensive
-- [ ] Code reviewed and approved
+- [ ] All tests passing in CI/CD
 
 ---
 
 ## Conclusion
 
-These guidelines are living standards that should be updated as the platform evolves. Every developer working on the MyTorra platform must familiarize themselves with these guidelines and follow them consistently.
+These guidelines are based on patterns proven in the core service implementation. Every developer must follow these standards consistently.
 
-For questions or clarifications, consult the architecture team or refer to the example implementations in the `services/core` directory.
+**🎯 Key Principles:**
+1. **Study First**: Always analyze core service before implementing
+2. **Test Everything**: Write tests before code, maintain >80% coverage
+3. **Reuse First**: Check existing packages and implementations
+4. **Translate Everything**: All user-facing text must support i18n
+5. **Type Safety**: Use typed context keys and proper validation
+6. **Security First**: Never compromise on security practices
+
+**📚 Reference Sources:**
+- **Core Service**: `services/core/` - Reference implementation for all patterns
+- **Service Auth**: `docs/SERVICE_TO_SERVICE_AUTH.md` - Complete authentication guide
+- **Shared Packages**: `packages/` - Reusable components
+
+**❓ When in doubt:**
+1. Check how core service implements it
+2. Look for existing packages
+3. Study related files in other services
+4. Write comprehensive tests

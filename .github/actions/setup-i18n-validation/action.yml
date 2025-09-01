@@ -1,0 +1,28 @@
+name: 'Setup i18n Validation'
+description: 'Build and run i18n key validation'
+inputs:
+  fail-on-missing:
+    description: 'Whether to fail on missing keys'
+    required: false
+    default: 'true'
+  check-unused:
+    description: 'Whether to check for unused keys'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Build i18n validator
+      shell: bash
+      run: make i18n-build
+
+    - name: Validate i18n keys
+      if: inputs.fail-on-missing == 'true'
+      shell: bash
+      run: make i18n-validate
+
+    - name: Check for unused keys (non-failing)
+      if: inputs.check-unused == 'true'
+      shell: bash
+      run: make i18n-unused || true

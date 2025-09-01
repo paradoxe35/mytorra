@@ -1,12 +1,12 @@
 # MyTorra - Multi-Service Platform
 
-_Area-Based Marketplace & Services Ecosystem for initial launch in Bukavu & Goma (but admin can expand to other cities)_
+_Dynamic Area-Based Marketplace & Services Ecosystem with Admin-Controlled Geographic Expansion_
 
 ## 1. Platform Overview
 
 ### 1.1 Vision & Mission
 
-MyTorra is a comprehensive multi-service platform designed exclusively for Bukavu and Goma, creating a localized digital economy that connects buyers, sellers, and service providers through intelligent matching and psychological engagement strategies.
+MyTorra is a comprehensive multi-service platform with dynamic area management, allowing administrators to define and expand operational regions. The platform creates localized digital economies that connect buyers, sellers, and service providers through intelligent matching and psychological engagement strategies.
 
 ### 1.2 Core Modules
 
@@ -20,7 +20,7 @@ MyTorra is a comprehensive multi-service platform designed exclusively for Bukav
 
 ### 1.3 Strategic Differentiators
 
-- Area-restricted operations ensuring local relevance
+- Dynamic area management with admin-controlled geographic boundaries
 - Intelligent cross-module product/service matching
 - Psychological triggers for increased engagement
 - Unified notification system across all modules
@@ -28,38 +28,85 @@ MyTorra is a comprehensive multi-service platform designed exclusively for Bukav
 
 ---
 
-## 2. Area Management & Control System
+## 2. Area Management & Control System (Core Service)
 
 ### 2.1 Geographic Operational Framework
 
-**Exclusive Service Areas:**
+**Dynamic Service Areas:**
 
-- **Bukavu**: Full city coverage including Ibanda, Kadutu, Bagira communes, with 15km operational radius from city center
-- **Goma**: Complete coverage of Goma city, Karisimbi, and Nyiragongo areas, with 12km operational radius
+- **Admin-Defined Regions**: Administrators can dynamically add countries, provinces, and towns/cities
+- **Hierarchical Structure**: Country → Province → Town/City → Sub-areas
+- **Flexible Boundaries**: Each area can have custom operational radius and service zones
+- **No Hardcoded Locations**: All areas are database-driven and configurable through admin panel
 
-**Automatic Area Detection Process:**
+**Area Detection & Switching Modes:**
 
-1. App launches and requests location permission
-2. GPS coordinates checked against operational boundaries
-3. If within Bukavu boundaries → Bukavu area auto-selected
-4. If within Goma boundaries → Goma area auto-selected
-5. If GPS unavailable → IP geolocation attempted
-6. If outside both areas → Out-of-area message displayed
-7. Out-of-area users see: "MyTorra services currently available only in Bukavu and Goma. Please select an area if you'll be visiting soon."
-8. Manual area selection available with disclaimer
+**Admin-Configurable Area Switching:**
+- **Automatic Mode**: Area changes based on user location
+- **Manual Mode**: User must explicitly switch areas
+- **Hybrid Mode**: Suggests area change but requires confirmation
+- **Locked Mode**: Area fixed during certain operations (active orders, etc.)
 
-**Area Switching Rules:**
+**Area Detection Process:**
+1. App launches and checks area switching configuration
+2. If automatic mode enabled:
+   - GPS coordinates checked against all active operational boundaries
+   - Area auto-switches when user moves between regions
+   - Background location monitoring for seamless transitions
+3. If manual mode enabled:
+   - User's selected area persists regardless of location
+   - Option to change area through settings menu
+   - Warning shown if current location differs from selected area
+4. If hybrid mode enabled:
+   - Detects when user enters new area
+   - Shows notification: "You appear to be in [Area]. Switch?"
+   - User confirms or dismisses area change
+5. If outside all active areas:
+   - Shows available areas list with distances
+   - User can select nearest or preferred area
+   - "Visiting mode" for temporary area selection
 
-- Users can manually switch between Bukavu and Goma
-- Switching clears cart and active sessions
-- Previous area history maintained
-- Wants and notifications update to new area
-- Delivery addresses must be within selected area
-- Seller listings remain in original area
+**Area Switching Rules & Restrictions:**
 
-### 2.2 Administrative Area Control Panel
+**General Rules:**
+- Switching availability depends on admin-configured mode
+- Some operations block area switching until completed
+- Area history maintained for quick switching
+- Preferences can be set per area
+
+**During Area Switch:**
+- Shopping cart: Items unavailable in new area are marked/removed
+- Active orders: Continue in original area until completed
+- Wants: Automatically search in new area or maintain multi-area search
+- Notifications: Update to show new area content
+- Saved addresses: Filter to show only new area addresses
+- Search history: Maintains separate history per area
+
+**Marketplace-Specific Rules:**
+- Seller listings remain in original posting area by default
+- Option to "expand listing" to multiple areas (with fee)
+- Buyers see items from current area + "nearby areas" if enabled
+- Cross-area purchases allowed with additional delivery fees
+
+### 2.2 Administrative Area Control Panel (Core Service Feature)
 
 **Area Configuration Dashboard:**
+
+**Area Hierarchy Management:**
+- Add/Edit/Delete Countries
+- Add/Edit/Delete Provinces within Countries
+- Add/Edit/Delete Towns/Cities within Provinces
+- Define sub-areas within Towns/Cities
+- Set operational status (Active/Inactive/Testing)
+- Configure service availability per area
+
+**Area Behavior Configuration:**
+- **Switching Mode**: Automatic/Manual/Hybrid/Locked
+- **Cross-Area Trading**: Enable/Disable/Restricted
+- **Area Proximity**: Define "nearby" areas for expanded search
+- **Migration Rules**: How items/services move between areas
+- **Area Relationships**: Sister cities, metropolitan zones
+- **Transition Zones**: Overlapping boundaries for smooth switching
 
 **Boundary Management:**
 
@@ -103,13 +150,14 @@ MyTorra is a comprehensive multi-service platform designed exclusively for Bukav
 
 **Pilot Program Process:**
 
-1. Start with Bukavu city center (3km radius)
-2. Validate operations for 3 months
-3. Expand to full Bukavu (15km radius)
-4. Launch Goma with lessons learned
-5. Monitor both areas for optimization
-6. Document standard operating procedures
-7. Prepare expansion playbook
+1. Admin adds initial city/town to the system
+2. Define initial operational radius
+3. Validate operations for testing period
+4. Expand radius or add sub-areas as needed
+5. Add new cities/towns within same province
+6. Expand to new provinces/countries as business grows
+7. Each area independently configurable
+8. Document standard operating procedures per area type
 
 **Future Expansion Criteria:**
 
@@ -123,11 +171,17 @@ MyTorra is a comprehensive multi-service platform designed exclusively for Bukav
 
 **Expansion Phases:**
 
-- Phase 1: Bukavu and Goma establishment
-- Phase 2: Kisangani and Lubumbashi
-- Phase 3: Smaller cities (Uvira, Beni, Butembo)
-- Phase 4: Cross-border opportunities
-- Phase 5: Regional hub status
+- Phase 1: Initial cities as defined by admin
+- Phase 2: Additional cities within same province
+- Phase 3: Expansion to new provinces
+- Phase 4: Cross-border opportunities (new countries)
+- Phase 5: Regional hub status with multiple countries
+
+**Core Service Area Management API:**
+- All services depend on core service for area data
+- Centralized area validation and boundaries
+- Real-time area updates propagated to all services
+- Consistent area handling across platform
 
 ---
 
@@ -301,6 +355,48 @@ When users can't find what they're looking for, they create a "want" that active
 - Weekly reminder for pending reviews
 - Monthly seller performance reports
 - Suspicious activity detection and flagging
+
+### 4.4 Cross-Area Item Mobility
+
+**Item Area Management:**
+
+**Single-Area Listing (Default):**
+- Items listed in seller's current area
+- Visible only to buyers in same area
+- Standard delivery within area boundaries
+- No additional fees
+
+**Multi-Area Listing (Premium Feature):**
+- Seller can expand listing to multiple areas
+- Additional fee per extra area (configurable by admin)
+- Different pricing possible per area
+- Inventory allocation per area
+- Area-specific delivery options
+
+**Item Migration Process:**
+1. Seller initiates "Move Item to Different Area"
+2. System checks if item has pending transactions
+3. If clear, seller selects target area(s)
+4. Options presented:
+   - Move completely (remove from current area)
+   - Duplicate listing (maintain in both areas)
+   - Expand visibility (single listing, multiple areas)
+5. Pricing adjustment based on new area's market
+6. Delivery logistics updated for new area
+7. Notification sent to watchers about area change
+
+**Cross-Area Purchase Options:**
+- "Ship to Different Area" for buyers outside seller's area
+- Additional shipping fee calculated based on distance
+- Extended delivery time estimates
+- Insurance options for long-distance shipping
+- Area-to-area courier service integration
+
+**Area Market Intelligence:**
+- Show demand levels across different areas
+- Price comparison between areas
+- "Hot items" in other areas
+- Suggestions for area expansion based on demand
 
 ---
 
@@ -811,9 +907,106 @@ When users can't find what they're looking for, they create a "want" that active
 
 ---
 
-## 13. Technical Process Architecture
+## 13. Area-Aware Service Architecture
 
-### 13.1 Data Flow Management
+### 13.1 Core Entities with Area References
+
+**Entities Requiring Area ID:**
+
+1. **User Entity**
+   - `area_id`: Current selected area
+   - `area_history`: Previously visited areas
+   - `area_preferences`: Settings per area
+
+2. **Product/Listing Entity (MyTorra & Torra Shop)**
+   - `primary_area_id`: Main listing area
+   - `secondary_area_ids[]`: Additional areas (if expanded)
+   - `area_pricing{}`: Different prices per area
+   - `area_stock{}`: Inventory allocation per area
+
+3. **Order Entity**
+   - `buyer_area_id`: Buyer's area at purchase time
+   - `seller_area_id`: Seller's area
+   - `delivery_area_id`: Actual delivery area (may differ)
+   - `cross_area_fee`: Additional fee if applicable
+
+4. **Restaurant Entity (Torra Food)**
+   - `area_id`: Restaurant location
+   - `delivery_areas[]`: Areas they can deliver to
+   - `area_specific_menu{}`: Menu variations per area
+
+5. **Driver Entity (Torra Cab & Delivery)**
+   - `operating_area_id`: Primary operating area
+   - `allowed_areas[]`: Areas driver can operate in
+   - `current_area_id`: Real-time area location
+
+6. **Want/Request Entity**
+   - `search_area_ids[]`: Areas to search in
+   - `preferred_pickup_areas[]`: Acceptable pickup locations
+
+7. **Notification Entity**
+   - `target_area_id`: Area-specific notifications
+   - `area_broadcast`: Whether it's area-wide
+
+8. **Promotion/Campaign Entity**
+   - `applicable_areas[]`: Where promotion is valid
+   - `area_budgets{}`: Budget allocation per area
+
+### 13.2 Service-Specific Area Features
+
+**MyTorra (Used Products):**
+- Area-based search filtering
+- "Nearby areas" expanded search option
+- Cross-area shipping calculator
+- Area trending products
+- Local pickup points per area
+
+**Torra Shop (New Products):**
+- Area-specific featured products
+- Regional promotional campaigns
+- Area-based inventory management
+- Drop-shipping to different areas
+- Area performance analytics for sellers
+
+**Torra Food:**
+- Restaurant discovery by area
+- Delivery zone management
+- Area-specific cuisines and preferences
+- Peak hour management per area
+- Ghost kitchen allocation by demand
+
+**Torra Cab:**
+- Driver distribution per area
+- Cross-area ride requests
+- Area-specific pricing (urban vs suburban)
+- Airport/station special zones
+- Driver area transfer requests
+
+**Torra Delivery:**
+- Package routing between areas
+- Hub and spoke model for areas
+- Express vs standard per distance
+- Area courier partnerships
+- Last-mile delivery optimization
+
+### 13.3 Area Data Synchronization
+
+**Real-Time Area Updates:**
+- WebSocket connections for area changes
+- Event-driven area notifications
+- Cache invalidation on area updates
+- Area boundary change propagation
+
+**Area Analytics Pipeline:**
+- Per-area metrics collection
+- Cross-area comparison dashboards
+- Area growth tracking
+- Heat maps of activity
+- Demand forecasting per area
+
+## 14. Technical Process Architecture
+
+### 14.1 Data Flow Management
 
 **User Journey Tracking:**
 
@@ -825,7 +1018,7 @@ When users can't find what they're looking for, they create a "want" that active
 - Performance optimization based on usage
 - Backup and recovery procedures
 
-### 13.2 System Automation
+### 14.2 System Automation
 
 **Daily Processes:**
 

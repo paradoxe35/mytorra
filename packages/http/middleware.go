@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 
+	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 )
 
@@ -88,31 +89,49 @@ func Recovery(log *logger.Logger) func(next http.Handler) http.Handler {
 	}
 }
 
-func CORS(allowedOrigins []string) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
+func CORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*") // Configure based on environment
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-Request-ID")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 
-			for _, allowed := range allowedOrigins {
-				if allowed == "*" || allowed == origin {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					break
-				}
-			}
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 
-			if r.Method == "OPTIONS" {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
-				w.Header().Set("Access-Control-Max-Age", "3600")
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			next.ServeHTTP(w, r)
-		})
-	}
+		next.ServeHTTP(w, r)
+	})
 }
+
+// func CORS(allowedOrigins []string) func(next http.Handler) http.Handler {
+// 	return func(next http.Handler) http.Handler {
+// 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 			origin := r.Header.Get("Origin")
+
+// 			for _, allowed := range allowedOrigins {
+// 				if allowed == "*" || allowed == origin {
+// 					w.Header().Set("Access-Control-Allow-Origin", origin)
+// 					break
+// 				}
+// 			}
+
+// 			if r.Method == "OPTIONS" {
+// 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+// 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
+// 				w.Header().Set("Access-Control-Max-Age", "3600")
+// 				w.WriteHeader(http.StatusNoContent)
+// 				return
+// 			}
+
+// 			w.Header().Set("Access-Control-Allow-Credentials", "true")
+// 			next.ServeHTTP(w, r)
+// 		})
+// 	}
+// }
 
 func GetRequestID(ctx context.Context) string {
 	if requestID, ok := ctx.Value("request_id").(string); ok {
@@ -134,4 +153,27 @@ func GetClientIP(r *http.Request) string {
 	}
 
 	return strings.Split(r.RemoteAddr, ":")[0]
+}
+
+// Language middleware sets the language in context based on Accept-Language header
+func Language(translator *i18n.Translator, defaultLang string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get Accept-Language header
+			acceptLang := r.Header.Get("Accept-Language")
+
+			// Parse and find best match
+			lang := i18n.ParseAcceptLanguage(acceptLang, translator.GetSupportedLanguages())
+
+			// Fallback to default if no match
+			if lang == "" {
+				lang = defaultLang
+			}
+
+			// Add language to context
+			ctx := i18n.WithLanguage(r.Context(), lang)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }

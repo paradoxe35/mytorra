@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +18,7 @@ type Config struct {
 	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	AWS      AWSConfig      `mapstructure:"aws"`
+	I18n     I18nConfig     `mapstructure:"i18n"`
 }
 
 type ServiceConfig struct {
@@ -66,7 +69,6 @@ type RabbitMQConfig struct {
 }
 
 type JWTConfig struct {
-	Secret          string        `mapstructure:"secret"`
 	AccessDuration  time.Duration `mapstructure:"access_duration"`
 	RefreshDuration time.Duration `mapstructure:"refresh_duration"`
 	Issuer          string        `mapstructure:"issuer"`
@@ -77,6 +79,11 @@ type AWSConfig struct {
 	AccessKeyID     string `mapstructure:"access_key_id"`
 	SecretAccessKey string `mapstructure:"secret_access_key"`
 	S3Bucket        string `mapstructure:"s3_bucket"`
+}
+
+type I18nConfig struct {
+	DefaultLanguage    string   `mapstructure:"default_language"`
+	SupportedLanguages []string `mapstructure:"supported_languages"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -145,6 +152,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.access_duration", "15m")
 	v.SetDefault("jwt.refresh_duration", "7d")
 	v.SetDefault("jwt.issuer", "mytorra")
+
+	v.SetDefault("i18n.default_language", "en")
+	v.SetDefault("i18n.supported_languages", []string{"en", "fr"})
 }
 
 func validate(cfg *Config) error {
@@ -154,10 +164,6 @@ func validate(cfg *Config) error {
 
 	if cfg.Database.Host != "" && cfg.Database.Database == "" {
 		return fmt.Errorf("database name is required when host is specified")
-	}
-
-	if cfg.JWT.Secret == "" && cfg.Service.Environment == "production" {
-		return fmt.Errorf("JWT secret is required in production")
 	}
 
 	return nil
@@ -170,4 +176,34 @@ func (d *DatabaseConfig) DSN() string {
 
 func (r *RedisConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", r.Host, r.Port)
+}
+
+// Environment variable utility functions
+
+// GetEnvOrDefault returns the value of the environment variable or the default value if not set
+func GetEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// GetEnvOrDefaultInt returns the value of the environment variable as an integer or the default value if not set or invalid
+func GetEnvOrDefaultInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// GetEnvOrDefaultBool returns the value of the environment variable as a boolean or the default value if not set or invalid
+func GetEnvOrDefaultBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
 }

@@ -6,6 +6,18 @@ import (
 	"net/http"
 )
 
+// Common error variables for consistency across the application
+var (
+	ErrNotFound       = errors.New("not found")
+	ErrUnauthorized   = errors.New("unauthorized")
+	ErrForbidden      = errors.New("forbidden")
+	ErrBadRequest     = errors.New("bad request")
+	ErrInternalServer = errors.New("internal server error")
+	ErrConflict       = errors.New("conflict")
+	ErrTokenExpired   = errors.New("token expired")
+	ErrInvalidMFACode = errors.New("invalid MFA code")
+)
+
 type ErrorType string
 
 const (
@@ -120,3 +132,13 @@ func GetAppError(err error) *AppError {
 	}
 	return nil
 }
+
+// Common error variables
+var (
+	ErrInvalidToken       = UnauthorizedError("Invalid or expired token")
+	ErrInvalidCredentials = UnauthorizedError("Invalid credentials")
+	ErrAccountSuspended   = UnauthorizedError("Account is suspended")
+	ErrUserNotFound       = NotFoundError("User")
+	ErrEmailExists        = ConflictError("Email already exists")
+	ErrPhoneExists        = ConflictError("Phone already exists")
+)
