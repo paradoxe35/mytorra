@@ -39,8 +39,8 @@ func (rt *Router) Setup() *chi.Mux {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Timeout(30 * time.Second))
-	r.Use(httpMiddleware.SecurityHeaders)
-	r.Use(httpMiddleware.CORS)
+	r.Use(httpPkg.SecurityHeaders)
+	r.Use(httpPkg.CORS)
 
 	// Health check endpoints
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

@@ -14,11 +14,11 @@ import (
 	"github.com/paradoxe35/torra/packages/cache"
 	"github.com/paradoxe35/torra/packages/config"
 	"github.com/paradoxe35/torra/packages/database"
+	"github.com/paradoxe35/torra/packages/events"
 	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 
 	// Internal packages
-	"github.com/paradoxe35/torra/packages/events"
 	adaptersHTTP "github.com/paradoxe35/torra/services/core/internal/adapters/http"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
@@ -113,7 +113,7 @@ func main() {
 
 	// Create HTTP server
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      r,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
