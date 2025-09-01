@@ -82,9 +82,15 @@ func main() {
 		appLogger,
 	)
 
+	locationService := services.NewLocationService(
+		areaService,
+		appLogger,
+	)
+
 	userService := services.NewUserService(
 		userRepo,
 		areaService,
+		locationService,
 		eventPublisher,
 		cacheClient,
 		appLogger,
@@ -112,13 +118,14 @@ func main() {
 	// Initialize HTTP handlers
 	authHandler := handlers.NewAuthHandler(authService, userService, appLogger)
 	userHandler := handlers.NewUserHandler(userService, appLogger)
+	areaHandler := handlers.NewAreaHandler(areaService, locationService, appLogger)
 	jwksHandler := handlers.NewJWKSHandler(jwtKeyRepo, appLogger, cacheClient)
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(jwtKeyRepo, appLogger)
 
 	// Setup router
-	router := adaptersHTTP.NewRouter(authHandler, userHandler, jwksHandler, authMiddleware)
+	router := adaptersHTTP.NewRouter(authHandler, userHandler, areaHandler, jwksHandler, authMiddleware)
 	r := router.Setup()
 
 	// Create HTTP server

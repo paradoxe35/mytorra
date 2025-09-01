@@ -15,6 +15,7 @@ import (
 type Router struct {
 	authHandler    *handlers.AuthHandler
 	userHandler    *handlers.UserHandler
+	areaHandler    *handlers.AreaHandler
 	jwksHandler    *handlers.JWKSHandler
 	authMiddleware *httpMiddleware.AuthMiddleware
 }
@@ -22,12 +23,14 @@ type Router struct {
 func NewRouter(
 	authHandler *handlers.AuthHandler,
 	userHandler *handlers.UserHandler,
+	areaHandler *handlers.AreaHandler,
 	jwksHandler *handlers.JWKSHandler,
 	authMiddleware *httpMiddleware.AuthMiddleware,
 ) *Router {
 	return &Router{
 		authHandler:    authHandler,
 		userHandler:    userHandler,
+		areaHandler:    areaHandler,
 		jwksHandler:    jwksHandler,
 		authMiddleware: authMiddleware,
 	}
@@ -77,6 +80,12 @@ func (rt *Router) Setup() *chi.Mux {
 			r.Post("/reset-password", rt.authHandler.ResetPassword)
 			r.Get("/verify-email", rt.authHandler.VerifyEmail)
 			r.Post("/verify-phone", rt.authHandler.VerifyPhone)
+		})
+
+		// Area routes (public)
+		r.Route("/areas", func(r chi.Router) {
+			r.Post("/detect", rt.areaHandler.DetectArea) // Area detection endpoint
+			r.Get("/", rt.areaHandler.GetActiveAreas)    // List active areas
 		})
 
 		// Protected routes

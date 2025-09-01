@@ -44,9 +44,16 @@ func TestUserService_CreateUser(t *testing.T) {
 		mockLogger,
 	)
 
+	// Create LocationService
+	locationService := services.NewLocationService(
+		areaService,
+		testLogger,
+	)
+
 	service := services.NewUserService(
 		mockRepo,
 		areaService,
+		locationService,
 		mockEventPublisher,
 		mockCache,
 		testLogger,
@@ -63,7 +70,7 @@ func TestUserService_CreateUser(t *testing.T) {
 			Name:            "Test User",
 			Password:        "SecurePass123!@#",
 			ConfirmPassword: "SecurePass123!@#",
-			AreaID:          areaID,
+			AreaID:          &areaID,
 			AcceptTerms:     true,
 		}
 
@@ -110,7 +117,7 @@ func TestUserService_CreateUser(t *testing.T) {
 			Name:            "Existing User",
 			Password:        "SecurePass123!@#",
 			ConfirmPassword: "SecurePass123!@#",
-			AreaID:          areaID,
+			AreaID:          &areaID,
 			AcceptTerms:     true,
 		}
 
@@ -140,7 +147,7 @@ func TestUserService_CreateUser(t *testing.T) {
 			Name:            "Test User",
 			Password:        "SecurePass123!@#",
 			ConfirmPassword: "SecurePass123!@#",
-			AreaID:          areaID,
+			AreaID:          &areaID,
 			AcceptTerms:     true,
 		}
 
@@ -172,7 +179,7 @@ func TestUserService_CreateUser(t *testing.T) {
 			Name:            "Test User",
 			Password:        "SecurePass123!@#",
 			ConfirmPassword: "SecurePass123!@#",
-			AreaID:          areaID,
+			AreaID:          &areaID,
 			AcceptTerms:     true,
 		}
 
@@ -217,7 +224,7 @@ func TestUserService_CreateUser(t *testing.T) {
 					Name:            "Test User",
 					Password:        "SecurePass123!@#",
 					ConfirmPassword: "SecurePass123!@#",
-					AreaID:          areaID,
+					AreaID:          &areaID,
 					AcceptTerms:     true,
 				},
 				errMsg: "email",
@@ -230,7 +237,7 @@ func TestUserService_CreateUser(t *testing.T) {
 					Name:            "Test User",
 					Password:        "weak",
 					ConfirmPassword: "weak",
-					AreaID:          areaID,
+					AreaID:          &areaID,
 					AcceptTerms:     true,
 				},
 				errMsg: "password",
@@ -243,7 +250,7 @@ func TestUserService_CreateUser(t *testing.T) {
 					Name:            "Test User",
 					Password:        "SecurePass123!@#",
 					ConfirmPassword: "DifferentPass123!@#",
-					AreaID:          areaID,
+					AreaID:          &areaID,
 					AcceptTerms:     true,
 				},
 				errMsg: "ConfirmPassword",
@@ -256,7 +263,7 @@ func TestUserService_CreateUser(t *testing.T) {
 					Name:            "Test User",
 					Password:        "SecurePass123!@#",
 					ConfirmPassword: "SecurePass123!@#",
-					AreaID:          areaID,
+					AreaID:          &areaID,
 					AcceptTerms:     false,
 				},
 				errMsg: "terms",
@@ -295,9 +302,15 @@ func TestUserService_GetUser(t *testing.T) {
 		mockLogger,
 	)
 
+	locationService := services.NewLocationService(
+		areaService,
+		testLogger,
+	)
+
 	service := services.NewUserService(
 		mockRepo,
 		areaService,
+		locationService,
 		mockEventPublisher,
 		mockCache,
 		testLogger,
@@ -384,9 +397,15 @@ func BenchmarkUserService_CreateUser(b *testing.B) {
 		mockLogger,
 	)
 
+	locationService := services.NewLocationService(
+		areaService,
+		testLogger,
+	)
+
 	service := services.NewUserService(
 		mockRepo,
 		areaService,
+		locationService,
 		mockEventPublisher,
 		mockCache,
 		testLogger,
@@ -419,10 +438,128 @@ func BenchmarkUserService_CreateUser(b *testing.B) {
 			Name:            "Test User",
 			Password:        "SecurePass123!@#",
 			ConfirmPassword: "SecurePass123!@#",
-			AreaID:          areaID,
+			AreaID:          &areaID,
 			AcceptTerms:     true,
 		}
 
 		_, _ = service.CreateUser(ctx, req)
 	}
+}
+
+func TestUserService_CreateUser_LocationDetection(t *testing.T) {
+	// Setup
+	mockRepo := repositories.NewMockUserRepository()
+	mockAreaRepo := repositories.NewMockAreaRepository()
+	mockEventPublisher := &repositories.MockEventPublisher{}
+	mockCache := cache.NewMockCache()
+	mockLogger := logger.NewMockLogger()
+
+	// Create real logger and translator
+	testLogger := logger.New("test", "test")
+	translator, err := i18n.New("en")
+	require.NoError(t, err)
+
+	// Create AreaService with mocks
+	areaService := services.NewAreaService(
+		mockAreaRepo,
+		mockEventPublisher,
+		mockCache,
+		mockLogger,
+	)
+
+	locationService := services.NewLocationService(
+		areaService,
+		testLogger,
+	)
+
+	service := services.NewUserService(
+		mockRepo,
+		areaService,
+		locationService,
+		mockEventPublisher,
+		mockCache,
+		testLogger,
+		translator,
+	)
+
+	ctx := context.WithValue(context.Background(), services.ClientIPKey, "127.0.0.1") // Use localhost to avoid external API calls
+	areaID := uuid.New()
+
+	// Create a proper area entity with ContainsCoordinate method working
+	activeArea := &entities.Area{
+		ID:                areaID,
+		Status:            valueobjects.AreaStatusActive,
+		Type:              valueobjects.AreaTypeTown,
+		Name:              "Test Area",
+		CenterLat:         -2.5085,
+		CenterLng:         28.8473,
+		OperationalRadius: 50, // 50km radius
+	}
+
+	t.Run("successful user creation with explicit area ID", func(t *testing.T) {
+		req := dtos.RegisterRequest{
+			Email:           "test@example.com",
+			Phone:           "+250780123456",
+			Name:            "Test User",
+			Password:        "SecurePass123!@#",
+			ConfirmPassword: "SecurePass123!@#",
+			AcceptTerms:     true,
+			AreaID:          &areaID, // Explicitly provide area ID
+		}
+
+		email, _ := valueobjects.NewEmail(req.Email)
+
+		// Setup expectations
+		mockRepo.On("FindByEmail", ctx, email).Return(nil, fmt.Errorf("not found")).Once()
+		// Mock area lookup by ID
+		mockAreaRepo.On("FindByID", ctx, areaID).Return(activeArea, nil).Once()
+		mockCache.On("Get", ctx, fmt.Sprintf("area:%s", areaID)).Return(nil, fmt.Errorf("not found")).Once()
+		mockCache.On("Set", ctx, fmt.Sprintf("area:%s", areaID), mock.Anything, mock.Anything).Return(nil).Once()
+		mockRepo.On("Save", ctx, mock.AnythingOfType("*entities.User")).Return(nil).Once()
+		mockEventPublisher.On("PublishAsync", ctx, mock.Anything).Return(nil).Once()
+		mockCache.On("Delete", ctx, mock.AnythingOfType("string")).Return(nil).Once()
+
+		// Execute
+		user, err := service.CreateUser(ctx, req)
+
+		// Assert
+		assert.NoError(t, err)
+		assert.NotNil(t, user)
+		assert.Equal(t, req.Email, user.Email.String())
+		assert.Equal(t, req.Name, user.Name)
+		assert.Equal(t, areaID, user.AreaID)
+
+		mockRepo.AssertExpectations(t)
+		mockAreaRepo.AssertExpectations(t)
+		mockEventPublisher.AssertExpectations(t)
+	})
+
+	t.Run("area detection fails - no location data", func(t *testing.T) {
+		ctxNoIP := context.Background() // No client IP in context
+
+		req := dtos.RegisterRequest{
+			Email:           "test3@example.com",
+			Phone:           "+250780123458",
+			Name:            "Test User 3",
+			Password:        "SecurePass123!@#",
+			ConfirmPassword: "SecurePass123!@#",
+			AcceptTerms:     true,
+			// No GPS coordinates, no area ID, and no IP in context
+		}
+
+		email, _ := valueobjects.NewEmail(req.Email)
+
+		// Setup expectations
+		mockRepo.On("FindByEmail", ctxNoIP, email).Return(nil, fmt.Errorf("not found")).Once()
+
+		// Execute
+		user, err := service.CreateUser(ctxNoIP, req)
+
+		// Assert
+		assert.Error(t, err)
+		assert.Nil(t, user)
+		assert.Contains(t, err.Error(), "area.detection_failed")
+
+		mockRepo.AssertExpectations(t)
+	})
 }

@@ -37,6 +37,9 @@
 ### User Management & Authentication
 [x] Implement user account system
     [x] User registration with email/phone verification
+    [x] GPS-based area detection for user registration
+    [x] IP-based location fallback for area detection
+    [x] Public area detection API endpoint
     [x] JWT-based authentication with refresh tokens
     [] OAuth2 integration (Google, Facebook)
     [] Multi-factor authentication (MFA) support

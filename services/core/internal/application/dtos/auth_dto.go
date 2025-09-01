@@ -56,14 +56,18 @@ func (r *LoginRequest) Validate(ctx context.Context, translator *i18n.Translator
 
 // RegisterRequest represents a registration request
 type RegisterRequest struct {
-	Email           string    `json:"email" validate:"required,email,max=255"`
-	Phone           string    `json:"phone" validate:"required,phone_e164"`
-	Name            string    `json:"name" validate:"required,min=2,max=100"`
-	Password        string    `json:"password" validate:"required,password"`
-	ConfirmPassword string    `json:"confirm_password" validate:"required,eqfield=Password"`
-	AreaID          uuid.UUID `json:"area_id" validate:"required"`
-	AcceptTerms     bool      `json:"accept_terms" validate:"required,eq=true"`
-	Language        string    `json:"language" validate:"omitempty,oneof=en fr sw"`
+	Email           string     `json:"email" validate:"required,email,max=255"`
+	Phone           string     `json:"phone" validate:"required,phone_e164"`
+	Name            string     `json:"name" validate:"required,min=2,max=100"`
+	Password        string     `json:"password" validate:"required,password"`
+	ConfirmPassword string     `json:"confirm_password" validate:"required,eqfield=Password"`
+	AreaID          *uuid.UUID `json:"area_id,omitempty"` // Optional - will be auto-detected if not provided
+	AcceptTerms     bool       `json:"accept_terms" validate:"required,eq=true"`
+	Language        string     `json:"language" validate:"omitempty,oneof=en fr sw"`
+
+	// Location data for area detection (optional)
+	Latitude  *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
+	Longitude *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
 }
 
 // Validate performs validation with i18n support

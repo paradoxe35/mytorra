@@ -1244,6 +1244,71 @@ All services MUST use these shared packages from `/packages/` directory:
    - `packages/dtos` - Shared DTOs across services
    - `packages/geo` - Geolocation utilities
 
+### 15.2 Location Detection Standards
+
+**MANDATORY**: All services that require user location MUST implement the following location detection hierarchy:
+
+#### Location Detection Priority Order
+
+1. **GPS Coordinates (Primary)**
+   - Accept `latitude` and `longitude` from frontend
+   - Validate coordinates using `latitude` and `longitude` validation tags
+   - Use coordinates to find nearest active area
+
+2. **IP-based Location (Fallback)**
+   - Extract client IP from request context (`ClientIPKey`)
+   - Use free IP geolocation service (ip-api.com for development)
+   - Convert IP location to coordinates
+   - Find nearest active area using coordinates
+
+3. **Default Area (Last Resort)**
+   - Use system default area if no location data available
+   - Log warning for location detection failure
+
+#### Implementation Example
+
+```go
+// User registration with optional location
+type RegisterRequest struct {
+    Email           string     `json:"email" validate:"required,email"`
+    Phone           string     `json:"phone" validate:"required,phone_e164"`
+    Name            string     `json:"name" validate:"required,min=2,max=100"`
+    Password        string     `json:"password" validate:"required,password"`
+    ConfirmPassword string     `json:"confirm_password" validate:"required,eqfield=Password"`
+    AreaID          *uuid.UUID `json:"area_id,omitempty"` // Optional - auto-detected if not provided
+    AcceptTerms     bool       `json:"accept_terms" validate:"required,eq=true"`
+
+    // Location data for area detection (optional)
+    Latitude  *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
+    Longitude *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
+}
+
+// Location detection service method
+func (s *UserService) detectUserArea(ctx context.Context, req RegisterRequest) (*entities.Area, error) {
+    // 1. Try GPS coordinates first
+    if req.Latitude != nil && req.Longitude != nil {
+        area, err := s.areaService.FindAreaByCoordinate(ctx, *req.Latitude, *req.Longitude)
+        if err == nil && area.IsActive() {
+            return area, nil
+        }
+    }
+
+    // 2. Fallback to IP-based detection
+    clientIP := s.getClientIPFromContext(ctx)
+    if clientIP != "" {
+        lat, lng, err := s.getLocationFromIP(ctx, clientIP)
+        if err == nil {
+            area, err := s.areaService.FindAreaByCoordinate(ctx, lat, lng)
+            if err == nil && area.IsActive() {
+                return area, nil
+            }
+        }
+    }
+
+    return nil, fmt.Errorf("no location data available for area detection")
+}
+```
+
 #### Implementation Requirements
 
 **MANDATORY CHECKS before implementing ANY feature:**

@@ -23,29 +23,32 @@ import (
 )
 
 type UserService struct {
-	userRepo       ports.UserRepository
-	areaService    *AreaService
-	eventPublisher ports.EventPublisher
-	cache          ports.Cache
-	logger         logger.Interface
-	translator     *i18n.Translator
+	userRepo        ports.UserRepository
+	areaService     *AreaService
+	locationService *LocationService
+	eventPublisher  ports.EventPublisher
+	cache           ports.Cache
+	logger          logger.Interface
+	translator      *i18n.Translator
 }
 
 func NewUserService(
 	userRepo ports.UserRepository,
 	areaService *AreaService,
+	locationService *LocationService,
 	eventPublisher ports.EventPublisher,
 	cache ports.Cache,
 	logger logger.Interface,
 	translator *i18n.Translator,
 ) *UserService {
 	return &UserService{
-		userRepo:       userRepo,
-		areaService:    areaService,
-		eventPublisher: eventPublisher,
-		cache:          cache,
-		logger:         logger,
-		translator:     translator,
+		userRepo:        userRepo,
+		areaService:     areaService,
+		locationService: locationService,
+		eventPublisher:  eventPublisher,
+		cache:           cache,
+		logger:          logger,
+		translator:      translator,
 	}
 }
 
@@ -72,13 +75,27 @@ func (s *UserService) CreateUser(ctx context.Context, req dtos.RegisterRequest) 
 		return nil, appErrors.ConflictError(s.translator.TWithContext(ctx, "user.already_exists"))
 	}
 
-	// Validate area exists and is active
-	area, err := s.areaService.GetAreaByID(ctx, req.AreaID)
-	if err != nil {
-		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_found"))
-	}
-	if !area.IsActive() {
-		return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_active"))
+	// Determine area for the user
+	var areaID uuid.UUID
+	var area *entities.Area
+
+	if req.AreaID != nil {
+		// Area explicitly provided - validate it
+		area, err = s.areaService.GetAreaByID(ctx, *req.AreaID)
+		if err != nil {
+			return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_found"))
+		}
+		if !area.IsActive() {
+			return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.not_active"))
+		}
+		areaID = *req.AreaID
+	} else {
+		// Auto-detect area based on location
+		area, err = s.detectUserArea(ctx, req)
+		if err != nil {
+			return nil, appErrors.ValidationError(s.translator.TWithContext(ctx, "area.detection_failed"))
+		}
+		areaID = area.ID
 	}
 
 	// Hash password using security package
@@ -95,7 +112,7 @@ func (s *UserService) CreateUser(ctx context.Context, req dtos.RegisterRequest) 
 		Phone:             phone,
 		Name:              req.Name,
 		PasswordHash:      string(hashedPassword),
-		AreaID:            req.AreaID,
+		AreaID:            areaID,
 		Status:            entities.UserStatusActive,
 		EmailVerified:     false,
 		PhoneVerified:     false,
@@ -103,6 +120,11 @@ func (s *UserService) CreateUser(ctx context.Context, req dtos.RegisterRequest) 
 		VerificationLevel: 0,
 		CreatedAt:         time.Now(),
 		UpdatedAt:         time.Now(),
+	}
+
+	// Set location if provided
+	if req.Latitude != nil && req.Longitude != nil {
+		user.SetLocation(*req.Latitude, *req.Longitude)
 	}
 
 	// Save to repository
@@ -452,3 +474,19 @@ func (s *UserService) invalidateUserCache(ctx context.Context, userID uuid.UUID)
 		s.logger.Warn("failed to invalidate user cache", "error", err, "user_id", userID)
 	}
 }
+
+// detectUserArea detects the user's area based on GPS coordinates or IP address
+func (s *UserService) detectUserArea(ctx context.Context, req dtos.RegisterRequest) (*entities.Area, error) {
+	// Use location service for area detection
+	result, err := s.locationService.DetectAreaFromContext(ctx, req.Latitude, req.Longitude)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Area, nil
+}
+
+// ContextKey is a custom type for context keys to avoid collisions
+type ContextKey string
+
+const ClientIPKey ContextKey = "client_ip"
