@@ -39,7 +39,7 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 	err := r.db.GetContext(ctx, &userModel, query, id)
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, fmt.Errorf("user not found: %w", err)
+			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by id: %w", err)
 	}
@@ -61,7 +61,7 @@ func (r *userRepository) FindByEmail(ctx context.Context, email valueobjects.Ema
 	err := r.db.GetContext(ctx, &userModel, query, email.String())
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil // Return nil, nil when user not found
+			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by email: %w", err)
 	}
@@ -83,7 +83,7 @@ func (r *userRepository) FindByPhone(ctx context.Context, phone valueobjects.Pho
 	err := r.db.GetContext(ctx, &userModel, query, phone.String())
 	if err != nil {
 		if database.IsNoRowsError(err) {
-			return nil, nil
+			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by phone: %w", err)
 	}
@@ -145,9 +145,18 @@ func (r *userRepository) Update(ctx context.Context, user *entities.User) error 
 	// Convert domain types to database-compatible types
 	dbUser := r.toDBUser(user)
 
-	_, err := r.db.NamedExecContext(ctx, query, dbUser)
+	result, err := r.db.NamedExecContext(ctx, query, dbUser)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.ErrNotFound
 	}
 
 	return nil
@@ -170,7 +179,7 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("user not found")
+		return errors.ErrNotFound
 	}
 
 	return nil
