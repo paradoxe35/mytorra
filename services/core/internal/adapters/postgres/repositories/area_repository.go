@@ -222,7 +222,7 @@ func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 	query := `
 		INSERT INTO areas (
 			id, parent_id, type, name, code, boundary_polygon,
-			center_lat, center_lng, operational_radius, status,
+			center_lat, center_lng, center_point, operational_radius, status,
 			service_availability, settings, switching_mode,
 			allow_cross_trade, nearby_area_ids, transition_zones,
 			timezone, languages, currency, tax_rate, min_order_value,
@@ -230,7 +230,9 @@ func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 			created_at, updated_at
 		) VALUES (
 			:id, :parent_id, :type, :name, :code, :boundary_polygon,
-			:center_lat, :center_lng, :operational_radius, :status,
+			:center_lat, :center_lng,
+			ST_SetSRID(ST_MakePoint(:center_lng, :center_lat), 4326),
+			:operational_radius, :status,
 			:service_availability, :settings, :switching_mode,
 			:allow_cross_trade, :nearby_area_ids, :transition_zones,
 			:timezone, :languages, :currency, :tax_rate, :min_order_value,
@@ -257,6 +259,7 @@ func (r *areaRepository) Update(ctx context.Context, area *entities.Area) error 
 			boundary_polygon = :boundary_polygon,
 			center_lat = :center_lat,
 			center_lng = :center_lng,
+			center_point = ST_SetSRID(ST_MakePoint(:center_lng, :center_lat), 4326),
 			operational_radius = :operational_radius,
 			status = :status,
 			service_availability = :service_availability,
@@ -357,6 +360,11 @@ func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]
 	err := r.db.SelectContext(ctx, &areaModels, query, areaID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get area hierarchy: %w", err)
+	}
+
+	// Check if any areas were found
+	if len(areaModels) == 0 {
+		return nil, fmt.Errorf("area not found")
 	}
 
 	areas := make([]*entities.Area, len(areaModels))

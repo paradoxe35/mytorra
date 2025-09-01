@@ -8,15 +8,15 @@ import (
 
 // JWTKey represents a JWT signing key stored in the database
 type JWTKey struct {
-	ID         uuid.UUID
-	KeyID      string // Unique identifier for the key (kid in JWK)
-	PrivateKey string // PEM-encoded private key (should be encrypted)
-	PublicKey  string // PEM-encoded public key
-	Algorithm  string // RS256, RS384, RS512
-	IsActive   bool   // Whether this key is currently active for signing
-	CreatedAt  time.Time
-	ExpiresAt  time.Time
-	RotatedAt  *time.Time // When this key was rotated
+	ID         uuid.UUID  `db:"id"`
+	KeyID      string     `db:"key_id"`      // Unique identifier for the key (kid in JWK)
+	PrivateKey string     `db:"private_key"` // PEM-encoded private key (should be encrypted)
+	PublicKey  string     `db:"public_key"`  // PEM-encoded public key
+	Algorithm  string     `db:"algorithm"`   // RS256, RS384, RS512
+	IsActive   bool       `db:"is_active"`   // Whether this key is currently active for signing
+	CreatedAt  time.Time  `db:"created_at"`
+	ExpiresAt  time.Time  `db:"expires_at"`
+	RotatedAt  *time.Time `db:"rotated_at"` // When this key was rotated
 }
 
 // IsValid checks if the JWT key is still valid for use
