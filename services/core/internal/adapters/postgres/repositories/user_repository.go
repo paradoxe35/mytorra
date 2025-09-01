@@ -3,11 +3,13 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/paradoxe35/torra/packages/database"
+	"github.com/paradoxe35/torra/packages/errors"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
@@ -221,6 +223,54 @@ func (r *userRepository) ExistsByEmail(ctx context.Context, email valueobjects.E
 func (r *userRepository) ExistsByPhone(ctx context.Context, phone valueobjects.Phone) (bool, error) {
 	query := `SELECT 1 FROM users WHERE phone = $1 AND deleted_at IS NULL`
 	return r.db.ExistsContext(ctx, query, phone.String())
+}
+
+// UpdateLastLogin updates the last login timestamp for a user
+func (r *userRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID, loginTime time.Time) error {
+	query := `
+		UPDATE users
+		SET last_login_at = $2, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`
+
+	result, err := r.db.ExecContext(ctx, query, userID, loginTime)
+	if err != nil {
+		return fmt.Errorf("failed to update last login: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.ErrNotFound
+	}
+
+	return nil
+}
+
+// UpdateLocation updates the user's location coordinates
+func (r *userRepository) UpdateLocation(ctx context.Context, userID uuid.UUID, lat, lng float64) error {
+	query := `
+		UPDATE users
+		SET last_known_lat = $2, last_known_lng = $3, updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL`
+
+	result, err := r.db.ExecContext(ctx, query, userID, lat, lng)
+	if err != nil {
+		return fmt.Errorf("failed to update location: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.ErrNotFound
+	}
+
+	return nil
 }
 
 // Helper function to convert domain user to database-compatible struct

@@ -16,15 +16,23 @@ import (
 )
 
 func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, func()) {
-	// Skip test if no test database is available
-	t.Skip("Skipping test: requires database connection")
+	// Skip test if database testing is not enabled
+	if !database.IsTestingEnabled() {
+		t.Skip("Skipping test: database testing not enabled. Set ENABLE_DB_TESTS=true or run in CI")
+	}
 
-	// This would use a test database in a real implementation
-	db := &database.DB{} // This would be a test database connection
-	repo := &refreshTokenRepository{db: db}
+	// Setup test database
+	testDB, err := database.SetupTestDB(nil) // Use default config
+	if err != nil {
+		t.Fatalf("Failed to setup test database: %v", err)
+	}
+
+	repo := &refreshTokenRepository{db: testDB.DB}
 
 	cleanup := func() {
-		// Cleanup test data
+		if err := testDB.Close(); err != nil {
+			t.Errorf("Failed to cleanup test database: %v", err)
+		}
 	}
 
 	return repo, cleanup
