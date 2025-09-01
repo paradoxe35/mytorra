@@ -81,9 +81,7 @@ func DefaultTestConfig() *TestConfig {
 
 // IsTestingEnabled checks if database testing is enabled via environment variables
 func IsTestingEnabled() bool {
-	return config.GetEnvOrDefaultBool("ENABLE_DB_TESTS", false) ||
-		config.GetEnvOrDefaultBool("CI", false) ||
-		config.GetEnvOrDefaultBool("GITHUB_ACTIONS", false)
+	return config.GetEnvOrDefaultBool("ENABLE_DB_TESTS", false)
 }
 
 // SetupTestDB creates a test database connection with optional isolation and migrations
