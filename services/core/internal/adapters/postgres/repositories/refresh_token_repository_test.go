@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
 )
 
-func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, func()) {
+func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, *database.DB, func()) {
 	// Skip test if database testing is not enabled
 	if !database.IsTestingEnabled() {
 		t.Skip("Skipping test: database testing not enabled. Set ENABLE_DB_TESTS=true or run in CI")
@@ -35,14 +36,70 @@ func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, func()) {
 		}
 	}
 
-	return repo, cleanup
+	return repo, testDB.DB, cleanup
+}
+
+func createTestUserForRefreshToken(t *testing.T, db *database.DB) uuid.UUID {
+	// First create a test area
+	areaID := uuid.New()
+	areaCode := fmt.Sprintf("TEST_%s", areaID.String()[:8])
+
+	areaQuery := `
+		INSERT INTO areas (
+			id, type, name, code, center_lat, center_lng,
+			center_point, operational_radius, status,
+			service_availability, settings, switching_mode,
+			allow_cross_trade, nearby_area_ids, transition_zones,
+			timezone, languages, currency, tax_rate, min_order_value,
+			delivery_fee_structure, cross_area_fees, operational_hours,
+			created_at, updated_at
+		) VALUES (
+			$1, 'town', 'Test Area', $2, 0, 0,
+			ST_SetSRID(ST_MakePoint(0, 0), 4326), 10, 'active',
+			'{}', '{}', 'manual',
+			false, '{}', '[]',
+			'UTC', '{"en"}', 'USD', 0, 0,
+			'{}', '{}', '{}',
+			NOW(), NOW()
+		)`
+
+	_, err := db.Exec(areaQuery, areaID, areaCode)
+	require.NoError(t, err)
+
+	// Now create a test user
+	userID := uuid.New()
+	userQuery := `
+		INSERT INTO users (
+			id, email, phone, name, password_hash,
+			profile_image_url, email_verified, phone_verified,
+			id_verified, verification_level, google_id, facebook_id,
+			mfa_enabled, mfa_secret, area_id, last_known_lat, last_known_lng,
+			status, created_at, updated_at
+		) VALUES (
+			$1, $2, $3, 'Test User', 'hashed_password',
+			'', false, false,
+			false, 0, NULL, NULL,
+			false, NULL, $4, NULL, NULL,
+			'active', NOW(), NOW()
+		)`
+
+	email := fmt.Sprintf("test_%s@example.com", userID.String()[:8])
+	phone := fmt.Sprintf("+123456%s", userID.String()[:4])
+
+	_, err = db.Exec(userQuery, userID, email, phone, areaID)
+	require.NoError(t, err)
+
+	return userID
 }
 
 func TestRefreshTokenRepository_Create(t *testing.T) {
-	repo, cleanup := setupRefreshTokenRepo(t)
+	repo, db, cleanup := setupRefreshTokenRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
+
+	// Create a test user first
+	userID := createTestUserForRefreshToken(t, db)
 
 	// Generate a secure token
 	rawToken, err := security.GenerateRefreshToken()
@@ -53,7 +110,7 @@ func TestRefreshTokenRepository_Create(t *testing.T) {
 
 	token := &entities.RefreshToken{
 		ID:         uuid.New(),
-		UserID:     uuid.New(),
+		UserID:     userID, // Use the created user ID
 		TokenHash:  tokenHash,
 		DeviceID:   "test-device-123",
 		DeviceName: "Test Device",
@@ -70,10 +127,13 @@ func TestRefreshTokenRepository_Create(t *testing.T) {
 }
 
 func TestRefreshTokenRepository_FindByTokenHash(t *testing.T) {
-	repo, cleanup := setupRefreshTokenRepo(t)
+	repo, db, cleanup := setupRefreshTokenRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
+
+	// Create a test user first
+	userID := createTestUserForRefreshToken(t, db)
 
 	// Create a test token first
 	rawToken, err := security.GenerateRefreshToken()
@@ -82,9 +142,10 @@ func TestRefreshTokenRepository_FindByTokenHash(t *testing.T) {
 
 	expectedToken := &entities.RefreshToken{
 		ID:        uuid.New(),
-		UserID:    uuid.New(),
+		UserID:    userID, // Use the created user ID
 		TokenHash: tokenHash,
 		DeviceID:  "test-device-123",
+		IPAddress: "192.168.1.1", // Add valid IP address
 		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -109,16 +170,20 @@ func TestRefreshTokenRepository_FindByTokenHash(t *testing.T) {
 }
 
 func TestRefreshTokenRepository_RevokeByID(t *testing.T) {
-	repo, cleanup := setupRefreshTokenRepo(t)
+	repo, db, cleanup := setupRefreshTokenRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
+	// Create a test user first
+	userID := createTestUserForRefreshToken(t, db)
+
 	// Create a test token
 	token := &entities.RefreshToken{
 		ID:        uuid.New(),
-		UserID:    uuid.New(),
+		UserID:    userID, // Use the created user ID
 		TokenHash: security.HashRefreshToken("test-token"),
+		IPAddress: "192.168.1.1", // Add valid IP address
 		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -143,17 +208,18 @@ func TestRefreshTokenRepository_RevokeByID(t *testing.T) {
 }
 
 func TestRefreshTokenRepository_FindActiveByUserID(t *testing.T) {
-	repo, cleanup := setupRefreshTokenRepo(t)
+	repo, db, cleanup := setupRefreshTokenRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	userID := uuid.New()
+	userID := createTestUserForRefreshToken(t, db)
 
 	// Create multiple tokens for the user
 	activeToken1 := &entities.RefreshToken{
 		ID:        uuid.New(),
 		UserID:    userID,
 		TokenHash: security.HashRefreshToken("active-token-1"),
+		IPAddress: "192.168.1.1", // Add valid IP address
 		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -163,6 +229,7 @@ func TestRefreshTokenRepository_FindActiveByUserID(t *testing.T) {
 		ID:        uuid.New(),
 		UserID:    userID,
 		TokenHash: security.HashRefreshToken("active-token-2"),
+		IPAddress: "192.168.1.2", // Add valid IP address
 		ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -173,6 +240,7 @@ func TestRefreshTokenRepository_FindActiveByUserID(t *testing.T) {
 		ID:        uuid.New(),
 		UserID:    userID,
 		TokenHash: security.HashRefreshToken("expired-token"),
+		IPAddress: "192.168.1.3",                  // Add valid IP address
 		ExpiresAt: time.Now().Add(-1 * time.Hour), // Already expired
 		CreatedAt: time.Now().Add(-30 * 24 * time.Hour),
 		UpdatedAt: time.Now(),
@@ -184,6 +252,7 @@ func TestRefreshTokenRepository_FindActiveByUserID(t *testing.T) {
 		ID:        uuid.New(),
 		UserID:    userID,
 		TokenHash: security.HashRefreshToken("revoked-token"),
+		IPAddress: "192.168.1.4", // Add valid IP address
 		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 		RevokedAt: &revokedTime,
 		CreatedAt: time.Now(),
@@ -209,17 +278,18 @@ func TestRefreshTokenRepository_FindActiveByUserID(t *testing.T) {
 }
 
 func TestRefreshTokenRepository_RevokeAllForUser(t *testing.T) {
-	repo, cleanup := setupRefreshTokenRepo(t)
+	repo, db, cleanup := setupRefreshTokenRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	userID := uuid.New()
+	userID := createTestUserForRefreshToken(t, db)
 
 	// Create multiple tokens for the user
 	token1 := &entities.RefreshToken{
 		ID:        uuid.New(),
 		UserID:    userID,
 		TokenHash: security.HashRefreshToken("token-1"),
+		IPAddress: "192.168.1.1", // Add valid IP address
 		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -229,6 +299,7 @@ func TestRefreshTokenRepository_RevokeAllForUser(t *testing.T) {
 		ID:        uuid.New(),
 		UserID:    userID,
 		TokenHash: security.HashRefreshToken("token-2"),
+		IPAddress: "192.168.1.2", // Add valid IP address
 		ExpiresAt: time.Now().Add(15 * 24 * time.Hour),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -249,16 +320,22 @@ func TestRefreshTokenRepository_RevokeAllForUser(t *testing.T) {
 }
 
 func TestRefreshTokenRepository_DeleteExpired(t *testing.T) {
-	repo, cleanup := setupRefreshTokenRepo(t)
+	repo, db, cleanup := setupRefreshTokenRepo(t)
 	defer cleanup()
 
 	ctx := context.Background()
 
+	// Create test users for the tokens
+	userID1 := createTestUserForRefreshToken(t, db)
+	userID2 := createTestUserForRefreshToken(t, db)
+	userID3 := createTestUserForRefreshToken(t, db)
+
 	// Create expired tokens
 	expiredToken1 := &entities.RefreshToken{
 		ID:        uuid.New(),
-		UserID:    uuid.New(),
+		UserID:    userID1, // Use created user ID
 		TokenHash: security.HashRefreshToken("expired-1"),
+		IPAddress: "192.168.1.1", // Add valid IP address
 		ExpiresAt: time.Now().Add(-1 * time.Hour),
 		CreatedAt: time.Now().Add(-31 * 24 * time.Hour),
 		UpdatedAt: time.Now(),
@@ -266,8 +343,9 @@ func TestRefreshTokenRepository_DeleteExpired(t *testing.T) {
 
 	expiredToken2 := &entities.RefreshToken{
 		ID:        uuid.New(),
-		UserID:    uuid.New(),
+		UserID:    userID2, // Use created user ID
 		TokenHash: security.HashRefreshToken("expired-2"),
+		IPAddress: "192.168.1.2", // Add valid IP address
 		ExpiresAt: time.Now().Add(-24 * time.Hour),
 		CreatedAt: time.Now().Add(-60 * 24 * time.Hour),
 		UpdatedAt: time.Now(),
@@ -276,8 +354,9 @@ func TestRefreshTokenRepository_DeleteExpired(t *testing.T) {
 	// Create active token
 	activeToken := &entities.RefreshToken{
 		ID:        uuid.New(),
-		UserID:    uuid.New(),
+		UserID:    userID3, // Use created user ID
 		TokenHash: security.HashRefreshToken("active"),
+		IPAddress: "192.168.1.3", // Add valid IP address
 		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),

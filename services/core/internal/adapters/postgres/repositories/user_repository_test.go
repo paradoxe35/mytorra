@@ -92,7 +92,7 @@ func createTestAreaForUser(t *testing.T, db *sqlx.DB) uuid.UUID {
 			ST_SetSRID(ST_MakePoint(0, 0), 4326), 10, 'active',
 			'{}', '{}', 'manual',
 			false, '{}', '[]',
-			'UTC', '["en"]', 'USD', 0, 0,
+			'UTC', '{"en"}', 'USD', 0, 0,
 			'{}', '{}', '{}',
 			NOW(), NOW()
 		)`

@@ -3,8 +3,6 @@ package database
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -28,25 +26,28 @@ type TestConfig struct {
 	SSLMode  string
 	// If true, creates a unique database for each test
 	IsolateTests bool
+	// If true, drops databases and tables after tests (default: false - just clear data)
+	DropAfterTest bool
 }
 
 // DefaultTestConfig returns a default test configuration
 func DefaultTestConfig() *TestConfig {
 	return &TestConfig{
-		Host:         getEnvOrDefault("TEST_DB_HOST", "localhost"),
-		Port:         getEnvOrDefaultInt("TEST_DB_PORT", 5432),
-		User:         getEnvOrDefault("TEST_DB_USER", "postgres"),
-		Password:     getEnvOrDefault("TEST_DB_PASSWORD", "postgres"),
-		SSLMode:      getEnvOrDefault("TEST_DB_SSL_MODE", "disable"),
-		IsolateTests: getEnvOrDefaultBool("TEST_DB_ISOLATE", true),
+		Host:          config.GetEnvOrDefault("TEST_DB_HOST", "localhost"),
+		Port:          config.GetEnvOrDefaultInt("TEST_DB_PORT", 5432),
+		User:          config.GetEnvOrDefault("TEST_DB_USER", "postgres"),
+		Password:      config.GetEnvOrDefault("TEST_DB_PASSWORD", "postgres"),
+		SSLMode:       config.GetEnvOrDefault("TEST_DB_SSL_MODE", "disable"),
+		IsolateTests:  config.GetEnvOrDefaultBool("TEST_DB_ISOLATE", true),
+		DropAfterTest: config.GetEnvOrDefaultBool("TEST_DB_DROP_AFTER", false),
 	}
 }
 
 // IsTestingEnabled checks if database testing is enabled via environment variables
 func IsTestingEnabled() bool {
-	return getEnvOrDefaultBool("ENABLE_DB_TESTS", false) ||
-		getEnvOrDefaultBool("CI", false) ||
-		getEnvOrDefaultBool("GITHUB_ACTIONS", false)
+	return config.GetEnvOrDefaultBool("ENABLE_DB_TESTS", false) ||
+		config.GetEnvOrDefaultBool("CI", false) ||
+		config.GetEnvOrDefaultBool("GITHUB_ACTIONS", false)
 }
 
 // SetupTestDB creates a test database connection with optional isolation and migrations
@@ -66,16 +67,19 @@ func SetupTestDB(cfg *TestConfig) (*TestDB, error) {
 		}
 		dbName = uniqueDBName
 		cleanup = func() error {
-			return dropTestDatabase(cfg, uniqueDBName)
+			if cfg.DropAfterTest {
+				return dropTestDatabase(cfg, uniqueDBName)
+			}
+			return cleanTestDatabase(cfg, uniqueDBName)
 		}
 	} else {
 		// Use a shared test database
-		dbName = getEnvOrDefault("TEST_DB_NAME", "test_torra")
+		dbName = config.GetEnvOrDefault("TEST_DB_NAME", "test_torra")
 		if err := createTestDatabase(cfg, dbName); err != nil {
 			// Database might already exist, which is fine for shared mode
 		}
 		cleanup = func() error {
-			// Don't drop shared database, just clean tables
+			// For shared database, always just clean tables (never drop)
 			return cleanTestDatabase(cfg, dbName)
 		}
 	}
@@ -165,32 +169,6 @@ func (tdb *TestDB) TruncateAllTables(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// Helper functions for environment variables
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvOrDefaultInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
-	}
-	return defaultValue
-}
-
-func getEnvOrDefaultBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		if boolValue, err := strconv.ParseBool(value); err == nil {
-			return boolValue
-		}
-	}
-	return defaultValue
 }
 
 // createTestDatabase creates a new test database
