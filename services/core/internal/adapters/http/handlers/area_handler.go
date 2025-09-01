@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	httpPkg "github.com/paradoxe35/torra/packages/http"
+	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 	"github.com/paradoxe35/torra/services/core/internal/application/services"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
@@ -16,17 +17,20 @@ type AreaHandler struct {
 	areaService     *services.AreaService
 	locationService *services.LocationService
 	logger          logger.Interface
+	translator      *i18n.Translator
 }
 
 func NewAreaHandler(
 	areaService *services.AreaService,
 	locationService *services.LocationService,
 	logger logger.Interface,
+	translator *i18n.Translator,
 ) *AreaHandler {
 	return &AreaHandler{
 		areaService:     areaService,
 		locationService: locationService,
 		logger:          logger,
+		translator:      translator,
 	}
 }
 
@@ -103,10 +107,10 @@ func (h *AreaHandler) DetectArea(w http.ResponseWriter, r *http.Request) {
 
 		if strings.Contains(err.Error(), "no location data available") {
 			httpPkg.RespondError(w, http.StatusBadRequest, "NO_LOCATION_DATA",
-				"No GPS coordinates provided and unable to determine client IP")
+				h.translator.TWithContext(ctx, "area.no_location_data"))
 		} else {
 			httpPkg.RespondError(w, http.StatusNotFound, "AREA_NOT_FOUND",
-				"Unable to detect area from provided location data")
+				h.translator.TWithContext(ctx, "area.detection_failed"))
 		}
 		return
 	}
@@ -128,7 +132,7 @@ func (h *AreaHandler) GetActiveAreas(w http.ResponseWriter, r *http.Request) {
 	areas, err := h.areaService.GetActiveAreas(ctx)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to get active areas")
-		httpPkg.RespondError(w, http.StatusInternalServerError, "FETCH_FAILED", "Failed to fetch areas")
+		httpPkg.RespondError(w, http.StatusInternalServerError, "FETCH_FAILED", h.translator.TWithContext(ctx, "area.fetch_failed"))
 		return
 	}
 

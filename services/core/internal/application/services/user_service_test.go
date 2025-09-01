@@ -558,7 +558,7 @@ func TestUserService_CreateUser_LocationDetection(t *testing.T) {
 		// Assert
 		assert.Error(t, err)
 		assert.Nil(t, user)
-		assert.Contains(t, err.Error(), "area.detection_failed")
+		assert.Contains(t, err.Error(), "Unable to detect area from provided location data")
 
 		mockRepo.AssertExpectations(t)
 	})

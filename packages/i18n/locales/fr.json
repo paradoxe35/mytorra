@@ -73,5 +73,45 @@
   "error.not_found": "Ressource non trouvée",
   "error.bad_request": "Requête invalide",
   "error.rate_limit": "Trop de requêtes. Veuillez réessayer plus tard.",
-  "error.service_unavailable": "Service temporairement indisponible"
+  "error.service_unavailable": "Service temporairement indisponible",
+  "error.invalid_request_body": "Corps de requête invalide",
+  "error.invalid_user_id": "ID utilisateur invalide",
+  "error.invalid_token": "Token de vérification requis",
+  "error.file_required": "Image de pièce d'identité requise",
+  "error.invalid_form_data": "Échec de l'analyse des données du formulaire",
+
+  "area.no_location_data": "Aucune coordonnée GPS fournie et impossible de déterminer l'IP client",
+  "area.detection_failed": "Impossible de détecter la zone à partir des données de localisation fournies",
+  "area.fetch_failed": "Échec de la récupération des zones",
+
+  "auth.registration_failed": "Échec de l'inscription",
+  "auth.login_failed": "Identifiants invalides",
+  "auth.logout_failed": "Échec de la déconnexion",
+  "auth.logout_success_message": "Déconnexion réussie",
+  "auth.refresh_failed": "Token de rafraîchissement invalide",
+  "auth.request_failed": "Échec de la requête",
+  "auth.password_reset_email_sent": "Email de réinitialisation du mot de passe envoyé",
+  "auth.password_reset_success_message": "Réinitialisation du mot de passe réussie",
+  "auth.email_verified_message": "Email vérifié avec succès",
+  "auth.phone_verified_message": "Numéro de téléphone vérifié avec succès",
+  "auth.verification_failed": "Échec de la vérification",
+
+  "user.update_failed": "Échec de la mise à jour",
+  "user.delete_failed": "Échec de la suppression",
+  "user.deleted_successfully": "Utilisateur supprimé avec succès",
+  "user.mfa_enable_failed": "Échec de l'activation de l'authentification à deux facteurs",
+  "user.mfa_disable_failed": "Échec de la désactivation de l'authentification à deux facteurs",
+  "user.mfa_disabled_successfully": "Authentification à deux facteurs désactivée avec succès",
+  "user.government_id_verification_initiated": "Vérification de la pièce d'identité initiée",
+
+  "jwks.internal_server_error": "Erreur interne du serveur",
+  "jwks.no_active_key_found": "Aucune clé active trouvée",
+
+  "auth.missing_token": "En-tête d'autorisation requis",
+  "auth.invalid_token_format": "Format d'en-tête d'autorisation invalide",
+  "auth.invalid_token": "Format de token invalide",
+  "auth.missing_key_id": "ID de clé manquant dans le token",
+  "auth.invalid_key": "Clé de signature invalide",
+  "auth.invalid_or_expired_token": "Token invalide ou expiré",
+  "auth.invalid_claims": "Revendications de token invalides"
 }

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	httpPkg "github.com/paradoxe35/torra/packages/http"
+	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 	"github.com/paradoxe35/torra/packages/security"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
@@ -15,6 +17,7 @@ type JWKSHandler struct {
 	jwtKeyRepo ports.JWTKeyRepository
 	logger     logger.Interface
 	cache      ports.Cache
+	translator *i18n.Translator
 }
 
 // NewJWKSHandler creates a new JWKS handler
@@ -22,11 +25,13 @@ func NewJWKSHandler(
 	jwtKeyRepo ports.JWTKeyRepository,
 	logger logger.Interface,
 	cache ports.Cache,
+	translator *i18n.Translator,
 ) *JWKSHandler {
 	return &JWKSHandler{
 		jwtKeyRepo: jwtKeyRepo,
 		logger:     logger,
 		cache:      cache,
+		translator: translator,
 	}
 }
 
@@ -49,7 +54,7 @@ func (h *JWKSHandler) GetJWKS(w http.ResponseWriter, r *http.Request) {
 	activeKeys, err := h.jwtKeyRepo.FindAllActive(ctx)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to fetch active JWT keys")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpPkg.RespondError(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", h.translator.TWithContext(ctx, "jwks.internal_server_error"))
 		return
 	}
 
@@ -79,7 +84,7 @@ func (h *JWKSHandler) GetJWKS(w http.ResponseWriter, r *http.Request) {
 	jwksJSON, err := security.MarshalJWKS(jwks)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to marshal JWKS")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpPkg.RespondError(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", h.translator.TWithContext(ctx, "jwks.internal_server_error"))
 		return
 	}
 
@@ -105,7 +110,7 @@ func (h *JWKSHandler) GetPublicKey(w http.ResponseWriter, r *http.Request) {
 	activeKey, err := h.jwtKeyRepo.FindActiveKey(ctx)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to fetch active JWT key")
-		http.Error(w, "No active key found", http.StatusNotFound)
+		httpPkg.RespondError(w, http.StatusNotFound, "NO_ACTIVE_KEY_FOUND", h.translator.TWithContext(ctx, "jwks.no_active_key_found"))
 		return
 	}
 
@@ -135,7 +140,7 @@ func (h *JWKSHandler) GetKeyInfo(w http.ResponseWriter, r *http.Request) {
 	allKeys, err := h.jwtKeyRepo.FindAll(ctx)
 	if err != nil {
 		h.logger.WithError(err).Error("Failed to fetch JWT keys")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpPkg.RespondError(w, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", h.translator.TWithContext(ctx, "jwks.internal_server_error"))
 		return
 	}
 

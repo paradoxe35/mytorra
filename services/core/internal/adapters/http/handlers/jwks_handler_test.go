@@ -14,6 +14,7 @@ import (
 
 	"github.com/paradoxe35/torra/packages/cache"
 	"github.com/paradoxe35/torra/packages/errors"
+	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 	"github.com/paradoxe35/torra/packages/security"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
@@ -86,8 +87,9 @@ func TestJWKSHandler_GetJWKS(t *testing.T) {
 	mockRepo := new(mockJWTKeyRepository)
 	mockCache := cache.NewMockCache()
 	mockLogger := logger.New("test", "test")
+	translator, _ := i18n.New("en")
 
-	handler := NewJWKSHandler(mockRepo, mockLogger, mockCache)
+	handler := NewJWKSHandler(mockRepo, mockLogger, mockCache, translator)
 
 	t.Run("Returns cached JWKS", func(t *testing.T) {
 		// Setup

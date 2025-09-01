@@ -37,7 +37,7 @@ func main() {
 	appLogger := logger.New(cfg.Service.Name, cfg.Service.Environment)
 
 	// Initialize translator
-	translator, err := i18n.New("en")
+	translator, err := i18n.New("en", "fr")
 	if err != nil {
 		appLogger.Fatal("Failed to initialize translator")
 	}
@@ -116,16 +116,16 @@ func main() {
 	)
 
 	// Initialize HTTP handlers
-	authHandler := handlers.NewAuthHandler(authService, userService, appLogger)
-	userHandler := handlers.NewUserHandler(userService, appLogger)
-	areaHandler := handlers.NewAreaHandler(areaService, locationService, appLogger)
-	jwksHandler := handlers.NewJWKSHandler(jwtKeyRepo, appLogger, cacheClient)
+	authHandler := handlers.NewAuthHandler(authService, userService, appLogger, translator)
+	userHandler := handlers.NewUserHandler(userService, appLogger, translator)
+	areaHandler := handlers.NewAreaHandler(areaService, locationService, appLogger, translator)
+	jwksHandler := handlers.NewJWKSHandler(jwtKeyRepo, appLogger, cacheClient, translator)
 
 	// Initialize middleware
-	authMiddleware := middleware.NewAuthMiddleware(jwtKeyRepo, appLogger)
+	authMiddleware := middleware.NewAuthMiddleware(jwtKeyRepo, appLogger, translator)
 
 	// Setup router
-	router := adaptersHTTP.NewRouter(authHandler, userHandler, areaHandler, jwksHandler, authMiddleware)
+	router := adaptersHTTP.NewRouter(authHandler, userHandler, areaHandler, jwksHandler, authMiddleware, translator)
 	r := router.Setup()
 
 	// Create HTTP server

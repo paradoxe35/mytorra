@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
 
+	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/packages/logger"
 )
 
@@ -152,4 +153,27 @@ func GetClientIP(r *http.Request) string {
 	}
 
 	return strings.Split(r.RemoteAddr, ":")[0]
+}
+
+// Language middleware sets the language in context based on Accept-Language header
+func Language(translator *i18n.Translator, defaultLang string) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Get Accept-Language header
+			acceptLang := r.Header.Get("Accept-Language")
+
+			// Parse and find best match
+			lang := i18n.ParseAcceptLanguage(acceptLang, translator.GetSupportedLanguages())
+
+			// Fallback to default if no match
+			if lang == "" {
+				lang = defaultLang
+			}
+
+			// Add language to context
+			ctx := i18n.WithLanguage(r.Context(), lang)
+
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }

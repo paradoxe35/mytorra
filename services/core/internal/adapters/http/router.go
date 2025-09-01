@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	httpPkg "github.com/paradoxe35/torra/packages/http"
+	"github.com/paradoxe35/torra/packages/i18n"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
 	httpMiddleware "github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
 )
@@ -18,6 +19,7 @@ type Router struct {
 	areaHandler    *handlers.AreaHandler
 	jwksHandler    *handlers.JWKSHandler
 	authMiddleware *httpMiddleware.AuthMiddleware
+	translator     *i18n.Translator
 }
 
 func NewRouter(
@@ -26,6 +28,7 @@ func NewRouter(
 	areaHandler *handlers.AreaHandler,
 	jwksHandler *handlers.JWKSHandler,
 	authMiddleware *httpMiddleware.AuthMiddleware,
+	translator *i18n.Translator,
 ) *Router {
 	return &Router{
 		authHandler:    authHandler,
@@ -33,6 +36,7 @@ func NewRouter(
 		areaHandler:    areaHandler,
 		jwksHandler:    jwksHandler,
 		authMiddleware: authMiddleware,
+		translator:     translator,
 	}
 }
 
@@ -47,6 +51,7 @@ func (rt *Router) Setup() *chi.Mux {
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(httpPkg.SecurityHeaders)
 	r.Use(httpPkg.CORS)
+	r.Use(httpPkg.Language(rt.translator, "en")) // Add language middleware
 
 	// Health check endpoints
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

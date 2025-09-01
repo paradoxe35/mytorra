@@ -73,5 +73,45 @@
   "error.not_found": "Resource not found",
   "error.bad_request": "Invalid request",
   "error.rate_limit": "Too many requests. Please try again later.",
-  "error.service_unavailable": "Service temporarily unavailable"
+  "error.service_unavailable": "Service temporarily unavailable",
+  "error.invalid_request_body": "Invalid request body",
+  "error.invalid_user_id": "Invalid user ID",
+  "error.invalid_token": "Verification token is required",
+  "error.file_required": "Government ID image is required",
+  "error.invalid_form_data": "Failed to parse form data",
+
+  "area.no_location_data": "No GPS coordinates provided and unable to determine client IP",
+  "area.detection_failed": "Unable to detect area from provided location data",
+  "area.fetch_failed": "Failed to fetch areas",
+
+  "auth.registration_failed": "Registration failed",
+  "auth.login_failed": "Invalid credentials",
+  "auth.logout_failed": "Failed to logout",
+  "auth.logout_success_message": "Successfully logged out",
+  "auth.refresh_failed": "Invalid refresh token",
+  "auth.request_failed": "Request failed",
+  "auth.password_reset_email_sent": "Password reset email sent",
+  "auth.password_reset_success_message": "Password reset successful",
+  "auth.email_verified_message": "Email verified successfully",
+  "auth.phone_verified_message": "Phone verified successfully",
+  "auth.verification_failed": "Verification failed",
+
+  "user.update_failed": "Update failed",
+  "user.delete_failed": "Delete failed",
+  "user.deleted_successfully": "User deleted successfully",
+  "user.mfa_enable_failed": "Failed to enable MFA",
+  "user.mfa_disable_failed": "Failed to disable MFA",
+  "user.mfa_disabled_successfully": "MFA disabled successfully",
+  "user.government_id_verification_initiated": "Government ID verification initiated",
+
+  "jwks.internal_server_error": "Internal server error",
+  "jwks.no_active_key_found": "No active key found",
+
+  "auth.missing_token": "Authorization header is required",
+  "auth.invalid_token_format": "Invalid authorization header format",
+  "auth.invalid_token": "Invalid token format",
+  "auth.missing_key_id": "Token missing key ID",
+  "auth.invalid_key": "Invalid signing key",
+  "auth.invalid_or_expired_token": "Invalid or expired token",
+  "auth.invalid_claims": "Invalid token claims"
 }
