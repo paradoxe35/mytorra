@@ -138,6 +138,10 @@ func main() {
 		}
 	}()
 
+	// Start key rotation scheduler
+	stopKeyRotation := startKeyRotationScheduler(keyManagementService, appLogger)
+	defer stopKeyRotation()
+
 	// Wait for interrupt signal
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
@@ -155,4 +159,73 @@ func main() {
 	}
 
 	appLogger.Info("Server exited")
+}
+
+// startKeyRotationScheduler starts a background goroutine that handles automatic key rotation
+// and cleanup of expired keys. It runs daily and returns a stop function.
+func startKeyRotationScheduler(keyService *services.KeyManagementService, logger logger.Interface) func() {
+	ticker := time.NewTicker(24 * time.Hour) // Run daily
+	done := make(chan bool)
+
+	// Run immediately on startup
+	go func() {
+		ctx := context.Background()
+		performKeyMaintenance(ctx, keyService, logger)
+	}()
+
+	// Then run periodically
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				ctx := context.Background()
+				performKeyMaintenance(ctx, keyService, logger)
+			case <-done:
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
+	// Return stop function
+	return func() {
+		close(done)
+	}
+}
+
+func performKeyMaintenance(ctx context.Context, keyService *services.KeyManagementService, logger logger.Interface) {
+	logger.Info("Starting key maintenance tasks")
+
+	// Check if we need to rotate keys
+	activeKey, err := keyService.GetActiveKey(ctx)
+	if err != nil {
+		logger.WithError(err).Error("Failed to get active key")
+		// Try to generate a new key if no active key exists
+		if err := keyService.GenerateNewKeyPair(ctx); err != nil {
+			logger.WithError(err).Error("Failed to generate new key pair")
+		}
+		return
+	}
+
+	// Check if key expires within 5 days
+	daysUntilExpiry := time.Until(activeKey.ExpiresAt).Hours() / 24
+	logger.Info("Active key status",
+		"key_id", activeKey.KeyID,
+		"expires_in_days", int(daysUntilExpiry))
+
+	if daysUntilExpiry <= 5 {
+		logger.Info("Active key expiring soon, rotating keys")
+		if err := keyService.RotateKeys(ctx); err != nil {
+			logger.WithError(err).Error("Failed to rotate keys")
+		} else {
+			logger.Info("Keys rotated successfully")
+		}
+	}
+
+	// Cleanup expired keys
+	if err := keyService.CleanupExpiredKeys(ctx); err != nil {
+		logger.WithError(err).Error("Failed to cleanup expired keys")
+	} else {
+		logger.Info("Expired keys cleanup completed")
+	}
 }
