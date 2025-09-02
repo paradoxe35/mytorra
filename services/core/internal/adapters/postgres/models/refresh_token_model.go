@@ -1,32 +1,36 @@
 package models
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
-// RefreshTokenModel represents the GORM model for the refresh_tokens table
+// RefreshTokenModel represents the Bun model for the refresh_tokens table
 type RefreshTokenModel struct {
-	database.BaseModel
-	UserID     uuid.UUID  `gorm:"type:uuid;not null;index"`
-	User       *UserModel `gorm:"foreignKey:UserID"`
-	TokenHash  string     `gorm:"type:varchar(512);uniqueIndex;not null"`
-	DeviceID   string     `gorm:"type:varchar(255)"`
-	DeviceName string     `gorm:"type:varchar(255)"`
-	IPAddress  string     `gorm:"type:varchar(45)"`
-	UserAgent  string     `gorm:"type:text"`
-	ExpiresAt  time.Time  `gorm:"not null"`
-	LastUsedAt *time.Time
-	RevokedAt  *time.Time
+	database.BaseModel `bun:"table:refresh_tokens,alias:rt"`
+
+	UserID     uuid.UUID  `bun:"user_id,type:uuid,notnull"`
+	User       *UserModel `bun:"rel:belongs-to,join:user_id=id"`
+	TokenHash  string     `bun:"token_hash,notnull,unique"`
+	DeviceID   string     `bun:"device_id"`
+	DeviceName string     `bun:"device_name"`
+	IPAddress  string     `bun:"ip_address"`
+	UserAgent  string     `bun:"user_agent"`
+	ExpiresAt  time.Time  `bun:"expires_at,notnull"`
+	LastUsedAt *time.Time `bun:"last_used_at"`
+	RevokedAt  *time.Time `bun:"revoked_at"`
 }
 
-// TableName specifies the table name for the RefreshTokenModel
-func (RefreshTokenModel) TableName() string {
-	return "refresh_tokens"
+// BeforeAppendModel is called before inserting or updating the model
+func (r *RefreshTokenModel) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	// Add any custom logic here if needed
+	return nil
 }
 
 // ToEntity converts the GORM model to domain entity

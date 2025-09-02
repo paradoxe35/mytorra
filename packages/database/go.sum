@@ -40,6 +40,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/puzpuzpuz/xsync/v3 v3.5.1 h1:GJYJZwO6IdxN/IKbneznS6yPkVC+c3zyY/j19c++5Fg=
 github.com/puzpuzpuz/xsync/v3 v3.5.1/go.mod h1:VjzYrABPabuM4KyBh1Ftq6u8nhwY5tBPKP9jpmh0nnA=
+github.com/restayway/gogis v1.0.1 h1:Z52LuEXZdH1dh4J0VjDz2GnsLY8YbLYRHACyT4Chd3w=
+github.com/restayway/gogis v1.0.1/go.mod h1:OHzr9QWKy6pjKwCT/QRqJnNnjWMwIadJuVyzOTKjQgI=
 github.com/rogpeppe/go-internal v1.13.1 h1:KvO1DLK/DRN07sQ1LQKScxyZJuNnedQ5/wKSR38lUII=
 github.com/rogpeppe/go-internal v1.13.1/go.mod h1:uMEvuHeurkdAXX61udpOXGD/AzZDWNMNyH2VO9fmH0o=
 github.com/sagikazarmark/locafero v0.10.0 h1:FM8Cv6j2KqIhM2ZK7HZjm4mpj9NBktLgowT1aN9q5Cc=

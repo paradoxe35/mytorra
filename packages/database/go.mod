@@ -8,6 +8,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/paradoxe35/mytorra/packages/config v0.0.0
 	github.com/paradoxe35/mytorra/packages/logger v0.0.0
+	github.com/restayway/gogis v1.0.1
 	github.com/uptrace/bun v1.2.15
 	github.com/uptrace/bun/dialect/pgdialect v1.2.15
 	github.com/uptrace/bun/driver/pgdriver v1.2.15

@@ -1,10 +1,12 @@
 package models
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/types"
@@ -12,59 +14,61 @@ import (
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-// SubscriptionModel represents the GORM model for subscriptions table
+// SubscriptionModel represents the Bun model for subscriptions table
 type SubscriptionModel struct {
-	database.BaseModel
-	UserID     uuid.UUID  `gorm:"type:uuid;not null;index"`
-	User       *UserModel `gorm:"foreignKey:UserID"`
-	EntityID   uuid.UUID  `gorm:"type:uuid;not null;index"`
-	EntityType string     `gorm:"type:varchar(50);not null"`
+	database.BaseModel `bun:"table:subscriptions,alias:s"`
+
+	UserID     uuid.UUID  `bun:"user_id,type:uuid,notnull"`
+	User       *UserModel `bun:"rel:belongs-to,join:user_id=id"`
+	EntityID   uuid.UUID  `bun:"entity_id,type:uuid,notnull"`
+	EntityType string     `bun:"entity_type,notnull"`
 
 	// Plan details
-	Tier         string          `gorm:"type:varchar(50);not null"` // Store tier as string
-	PlanName     string          `gorm:"type:varchar(100);not null"`
-	Price        decimal.Decimal `gorm:"type:decimal(10,2);not null"`
-	Currency     string          `gorm:"type:varchar(3);not null"`
-	BillingCycle string          `gorm:"type:varchar(20);not null"`
+	Tier         string          `bun:"tier,notnull"` // Store tier as string
+	PlanName     string          `bun:"plan_name,notnull"`
+	Price        decimal.Decimal `bun:"price,type:decimal(10,2),notnull"`
+	Currency     string          `bun:"currency,notnull"`
+	BillingCycle string          `bun:"billing_cycle,notnull"`
 
 	// Status
-	Status string `gorm:"type:varchar(20);not null;default:'pending'"`
+	Status string `bun:"status,notnull,default:'pending'"`
 
 	// Trial
-	TrialEndsAt *time.Time `gorm:"type:timestamp"`
-	IsTrialing  bool       `gorm:"type:boolean;default:false"`
+	TrialEndsAt *time.Time `bun:"trial_ends_at"`
+	IsTrialing  bool       `bun:"is_trialing,default:false"`
 
 	// Billing
-	CurrentPeriodStart time.Time  `gorm:"type:timestamp;not null"`
-	CurrentPeriodEnd   time.Time  `gorm:"type:timestamp;not null"`
-	NextBillingDate    *time.Time `gorm:"type:timestamp"`
+	CurrentPeriodStart time.Time  `bun:"current_period_start,notnull"`
+	CurrentPeriodEnd   time.Time  `bun:"current_period_end,notnull"`
+	NextBillingDate    *time.Time `bun:"next_billing_date"`
 
 	// Payment provider integration
-	ProviderCustomerID     *string `gorm:"type:varchar(255)"`
-	ProviderSubscriptionID *string `gorm:"type:varchar(255);uniqueIndex"`
+	ProviderCustomerID     *string `bun:"provider_customer_id"`
+	ProviderSubscriptionID *string `bun:"provider_subscription_id,unique"`
 
 	// Metadata for storing additional information
-	Metadata types.JSONBValue `gorm:"type:jsonb"`
+	Metadata types.JSONBValue `bun:"metadata,type:jsonb"`
 
 	// Usage limits
-	UsageLimits  types.JSONBValue `gorm:"type:jsonb"`
-	CurrentUsage types.JSONBValue `gorm:"type:jsonb"`
+	UsageLimits  types.JSONBValue `bun:"usage_limits,type:jsonb"`
+	CurrentUsage types.JSONBValue `bun:"current_usage,type:jsonb"`
 
 	// Pause/Resume
-	PausedAt *time.Time `gorm:"type:timestamp"`
-	ResumeAt *time.Time `gorm:"type:timestamp"`
+	PausedAt *time.Time `bun:"paused_at"`
+	ResumeAt *time.Time `bun:"resume_at"`
 
 	// Cancellation
-	CanceledAt   *time.Time `gorm:"type:timestamp"`
-	CancelReason *string    `gorm:"type:text"`
+	CanceledAt   *time.Time `bun:"canceled_at"`
+	CancelReason *string    `bun:"cancel_reason"`
 
 	// Timestamps
-	ActivatedAt *time.Time `gorm:"type:timestamp"`
+	ActivatedAt *time.Time `bun:"activated_at"`
 }
 
-// TableName specifies the table name for the SubscriptionModel
-func (SubscriptionModel) TableName() string {
-	return "subscriptions"
+// BeforeAppendModel is called before inserting or updating the model
+func (s *SubscriptionModel) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	// Add any custom logic here if needed
+	return nil
 }
 
 // ToEntity converts the GORM model to domain entity

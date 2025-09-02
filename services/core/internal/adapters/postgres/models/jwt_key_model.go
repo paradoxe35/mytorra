@@ -1,27 +1,32 @@
 package models
 
 import (
+	"context"
 	"time"
+
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
-// JWTKeyModel represents the GORM model for the jwt_keys table
+// JWTKeyModel represents the Bun model for the jwt_keys table
 type JWTKeyModel struct {
-	database.BaseModel
-	KeyID      string `gorm:"type:varchar(255);uniqueIndex;not null"`
-	PublicKey  string `gorm:"type:text;not null"`
-	PrivateKey string `gorm:"type:text;not null"`
-	Algorithm  string `gorm:"type:varchar(10);not null;default:'RS256'"`
-	IsActive   bool   `gorm:"type:boolean;default:true;index"`
-	RotatedAt  *time.Time
-	ExpiresAt  *time.Time
+	database.BaseModel `bun:"table:jwt_keys,alias:jk"`
+
+	KeyID      string     `bun:"key_id,notnull,unique"`
+	PublicKey  string     `bun:"public_key,notnull"`
+	PrivateKey string     `bun:"private_key,notnull"`
+	Algorithm  string     `bun:"algorithm,notnull,default:'RS256'"`
+	IsActive   bool       `bun:"is_active,default:true"`
+	RotatedAt  *time.Time `bun:"rotated_at"`
+	ExpiresAt  *time.Time `bun:"expires_at"`
 }
 
-// TableName specifies the table name for the JWTKeyModel
-func (JWTKeyModel) TableName() string {
-	return "jwt_keys"
+// BeforeAppendModel is called before inserting or updating the model
+func (j *JWTKeyModel) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	// Add any custom logic here if needed
+	return nil
 }
 
 // ToEntity converts the GORM model to domain entity
