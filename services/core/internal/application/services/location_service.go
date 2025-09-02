@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
 // LocationService handles location detection and area matching

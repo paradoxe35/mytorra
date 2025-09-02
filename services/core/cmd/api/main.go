@@ -11,19 +11,22 @@ import (
 	"time"
 
 	// Shared packages
-	"github.com/paradoxe35/torra/packages/cache"
-	"github.com/paradoxe35/torra/packages/config"
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/packages/events"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/cache"
+	"github.com/paradoxe35/mytorra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/packages/events"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
 
 	// Internal packages
-	adaptersHTTP "github.com/paradoxe35/torra/services/core/internal/adapters/http"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/repositories"
-	"github.com/paradoxe35/torra/services/core/internal/application/services"
+	adaptersHTTP "github.com/paradoxe35/mytorra/services/core/internal/adapters/http"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/http/handlers"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/http/middleware"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/payment"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/repositories"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/services"
 )
 
 func main() {
@@ -60,11 +63,18 @@ func main() {
 		}
 	}()
 
+	// Initialize encryptor for OAuth tokens
+	encryptor := security.NewAESEncryptor(cfg.JWT.Secret)
+
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository(db)
 	areaRepo := repositories.NewAreaRepository(db)
 	refreshTokenRepo := repositories.NewRefreshTokenRepository(db)
 	jwtKeyRepo := repositories.NewJWTKeyRepository(db)
+	oauthRepo := repositories.NewOAuthRepository(db, encryptor, appLogger)
+	subscriptionRepo := repositories.NewSubscriptionRepository(db)
+	subscriptionTierRepo := repositories.NewSubscriptionTierRepository(db)
+	billingCycleRepo := repositories.NewBillingCycleRepository(db)
 
 	// Initialize event publisher
 	eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, appLogger)
@@ -115,11 +125,62 @@ func main() {
 		cfg.JWT,
 	)
 
+	oauthService := services.NewOAuthService(
+		oauthRepo,
+		userRepo,
+		authService,
+		userService,
+		eventPublisher,
+		appLogger,
+		translator,
+		encryptor,
+		cfg.OAuth,
+	)
+
+	// Initialize payment gateway
+	var paymentGateway ports.PaymentGateway
+	if cfg.Payment.Provider == "stripe" {
+		paymentGateway = payment.NewStripeAdapter(
+			cfg.Payment.Stripe.SecretKey,
+			cfg.Payment.Stripe.WebhookSecret,
+			appLogger,
+		)
+	} else {
+		// Use mock adapter for development/testing
+		paymentGateway = payment.NewMockAdapter(appLogger)
+	}
+
+	// Initialize subscription and billing services
+	subscriptionService := services.NewSubscriptionService(
+		subscriptionRepo,
+		subscriptionTierRepo,
+		billingCycleRepo,
+		paymentGateway,
+		userRepo,
+		eventPublisher,
+		appLogger,
+		translator,
+	)
+
+	billingService := services.NewBillingService(
+		subscriptionRepo,
+		billingCycleRepo,
+		nil, // paymentTransactionRepo - TODO: implement
+		paymentGateway,
+		nil, // notificationService - TODO: implement
+		eventPublisher,
+		appLogger,
+		translator,
+	)
+
 	// Initialize HTTP handlers
 	authHandler := handlers.NewAuthHandler(authService, userService, appLogger, translator)
 	userHandler := handlers.NewUserHandler(userService, appLogger, translator)
 	areaHandler := handlers.NewAreaHandler(areaService, locationService, appLogger, translator)
 	jwksHandler := handlers.NewJWKSHandler(jwtKeyRepo, appLogger, cacheClient, translator)
+	oauthHandler := handlers.NewOAuthHandler(oauthService, appLogger, translator)
+	subscriptionHandler := handlers.NewSubscriptionHandler(subscriptionService, appLogger, translator)
+	billingHandler := handlers.NewBillingHandler(billingService, subscriptionService, appLogger, translator)
 
 	// Initialize middleware
 	authMiddleware := middleware.NewAuthMiddleware(jwtKeyRepo, appLogger, translator)
@@ -130,6 +191,9 @@ func main() {
 		userHandler,
 		areaHandler,
 		jwksHandler,
+		oauthHandler,
+		subscriptionHandler,
+		billingHandler,
 		authMiddleware,
 		translator,
 		cfg.I18n.DefaultLanguage,

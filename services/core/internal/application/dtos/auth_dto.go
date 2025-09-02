@@ -9,9 +9,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 
-	"github.com/paradoxe35/torra/packages/errors"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/security"
+	"github.com/paradoxe35/mytorra/packages/errors"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/security"
 )
 
 // Custom validator instance
@@ -283,8 +283,9 @@ type UpdateAreaRequest struct {
 
 // OAuthCallbackRequest represents an OAuth callback request
 type OAuthCallbackRequest struct {
-	Code  string `json:"code" validate:"required"`
-	State string `json:"state" validate:"required"`
+	Code     string `json:"code" validate:"required"`
+	State    string `json:"state" validate:"required"`
+	Provider string `json:"provider" validate:"required,oneof=google facebook"`
 }
 
 // TokenClaims represents JWT token claims

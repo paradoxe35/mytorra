@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/dtos"
 )
 
 func setupTranslator(t *testing.T) *i18n.Translator {

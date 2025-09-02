@@ -15,8 +15,8 @@ A comprehensive multi-service platform for Bukavu and Goma, creating a localized
 
 ```bash
 # Clone the repository
-git clone https://github.com/paradoxe35/torra.git
-cd torra
+git clone https://github.com/paradoxe35/mytorra.git
+cd mytorra
 
 # Initial setup
 make setup
@@ -34,7 +34,7 @@ docker-compose up -d
 ## 📁 Project Structure
 
 ```
-torra/
+mytorra/
 ├── services/          # Microservices
 │   ├── core/         # User auth, payments, subscriptions
 │   ├── marketplace/  # MyTorra & TorraShop

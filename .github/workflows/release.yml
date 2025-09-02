@@ -172,10 +172,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}/torra-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
-            ${{ env.REGISTRY }}/${{ github.repository }}/torra-${{ matrix.service }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository }}/mytorra-${{ matrix.service }}:${{ needs.prepare.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/mytorra-${{ matrix.service }}:latest
           labels: |
-            org.opencontainers.image.title=torra-${{ matrix.service }}
+            org.opencontainers.image.title=mytorra-${{ matrix.service }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -258,7 +258,7 @@ jobs:
           # cp release-artifacts/helm-charts/*.tgz release-files/ || true
 
           # Create release archive
-          tar czf release-files/torra-platform-${{ needs.prepare.outputs.version }}.tar.gz \
+          tar czf release-files/mytorra-platform-${{ needs.prepare.outputs.version }}.tar.gz \
             -C release-artifacts .
 
       - name: Create release
@@ -275,8 +275,8 @@ jobs:
             ### 🐳 Docker Images
             All services are available on GitHub Container Registry:
             ```bash
-            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/torra-core:${{ needs.prepare.outputs.version }}
-            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/torra-marketplace:${{ needs.prepare.outputs.version }}
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/mytorra-core:${{ needs.prepare.outputs.version }}
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/mytorra-marketplace:${{ needs.prepare.outputs.version }}
             # ... and other services
             ```
 
@@ -285,7 +285,7 @@ jobs:
             <!--
             Install using Helm:
             ```bash
-            helm install torra ./torra-platform-${{ needs.prepare.outputs.version }}.tgz
+            helm install mytorra ./mytorra-platform-${{ needs.prepare.outputs.version }}.tgz
             ```
             -->
 
@@ -308,7 +308,7 @@ jobs:
   #   needs: [github-release, prepare]
   #   environment:
   #     name: production
-  #     url: https://torra.com
+  #     url: https://mytorra.com
   #   steps:
   #     - name: Checkout code
   #       uses: actions/checkout@v4
@@ -321,12 +321,12 @@ jobs:
   #     - name: Deploy to production
   #       run: |
   #         VERSION="${{ needs.prepare.outputs.version }}"
-  #         NAMESPACE="torra-production"
+  #         NAMESPACE="mytorra-production"
   #
   #         # Update deployments with new version
   #         for service in core marketplace delivery booking torracab media realtime; do
   #           kubectl set image deployment/${service} \
-  #             ${service}=${{ env.REGISTRY }}/${{ github.repository }}/torra-${service}:${VERSION} \
+  #             ${service}=${{ env.REGISTRY }}/${{ github.repository }}/mytorra-${service}:${VERSION} \
   #             -n ${NAMESPACE}
   #         done
   #
@@ -339,8 +339,8 @@ jobs:
   #         ./scripts/test-production.sh
   #
   #         # Check service health
-  #         kubectl get pods -n torra-production
-  #         kubectl top pods -n torra-production
+  #         kubectl get pods -n mytorra-production
+  #         kubectl top pods -n mytorra-production
   #
   #     - name: Update DNS and CDN
   #       run: |

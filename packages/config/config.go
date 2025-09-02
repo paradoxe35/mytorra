@@ -11,14 +11,18 @@ import (
 )
 
 type Config struct {
-	Service  ServiceConfig  `mapstructure:"service"`
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	AWS      AWSConfig      `mapstructure:"aws"`
-	I18n     I18nConfig     `mapstructure:"i18n"`
+	Service      ServiceConfig      `mapstructure:"service"`
+	Server       ServerConfig       `mapstructure:"server"`
+	Database     DatabaseConfig     `mapstructure:"database"`
+	Redis        RedisConfig        `mapstructure:"redis"`
+	RabbitMQ     RabbitMQConfig     `mapstructure:"rabbitmq"`
+	JWT          JWTConfig          `mapstructure:"jwt"`
+	AWS          AWSConfig          `mapstructure:"aws"`
+	I18n         I18nConfig         `mapstructure:"i18n"`
+	OAuth        OAuthConfig        `mapstructure:"oauth"`
+	Payment      PaymentConfig      `mapstructure:"payment"`
+	Subscription SubscriptionConfig `mapstructure:"subscription"`
+	Billing      BillingConfig      `mapstructure:"billing"`
 }
 
 type ServiceConfig struct {
@@ -69,6 +73,7 @@ type RabbitMQConfig struct {
 }
 
 type JWTConfig struct {
+	Secret          string        `mapstructure:"secret"`
 	AccessDuration  time.Duration `mapstructure:"access_duration"`
 	RefreshDuration time.Duration `mapstructure:"refresh_duration"`
 	Issuer          string        `mapstructure:"issuer"`
@@ -84,6 +89,48 @@ type AWSConfig struct {
 type I18nConfig struct {
 	DefaultLanguage    string   `mapstructure:"default_language"`
 	SupportedLanguages []string `mapstructure:"supported_languages"`
+}
+
+type OAuthConfig struct {
+	Google      OAuthProviderConfig `mapstructure:"google"`
+	Facebook    OAuthProviderConfig `mapstructure:"facebook"`
+	StateExpiry time.Duration       `mapstructure:"state_expiry"`
+	PKCEEnabled bool                `mapstructure:"pkce_enabled"`
+}
+
+type OAuthProviderConfig struct {
+	ClientID     string   `mapstructure:"client_id"`
+	ClientSecret string   `mapstructure:"client_secret"`
+	AppID        string   `mapstructure:"app_id"`     // For Facebook
+	AppSecret    string   `mapstructure:"app_secret"` // For Facebook
+	RedirectURI  string   `mapstructure:"redirect_uri"`
+	Scopes       []string `mapstructure:"scopes"`
+}
+
+type PaymentConfig struct {
+	Provider string       `mapstructure:"provider"` // stripe, paypal, mock
+	Stripe   StripeConfig `mapstructure:"stripe"`
+}
+
+type StripeConfig struct {
+	SecretKey      string `mapstructure:"secret_key"`
+	PublishableKey string `mapstructure:"publishable_key"`
+	WebhookSecret  string `mapstructure:"webhook_secret"`
+}
+
+type SubscriptionConfig struct {
+	TrialDaysDefault        int    `mapstructure:"trial_days_default"`
+	GracePeriodDays         int    `mapstructure:"grace_period_days"`
+	WebhookSecret           string `mapstructure:"webhook_secret"`
+	EnableProrations        bool   `mapstructure:"enable_prorations"`
+	AllowImmediateDowngrade bool   `mapstructure:"allow_immediate_downgrades"`
+}
+
+type BillingConfig struct {
+	ProcessHour              int   `mapstructure:"process_hour"`
+	RetryAttempts            int   `mapstructure:"retry_attempts"`
+	RetryDelayHours          int   `mapstructure:"retry_delay_hours"`
+	ReminderDaysBeforeExpiry []int `mapstructure:"reminder_days_before_expiry"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -149,12 +196,28 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rabbitmq.prefetch_count", 1)
 	v.SetDefault("rabbitmq.reconnect_delay", "5s")
 
+	v.SetDefault("jwt.secret", "change-this-secret-in-production")
 	v.SetDefault("jwt.access_duration", "15m")
 	v.SetDefault("jwt.refresh_duration", "7d")
 	v.SetDefault("jwt.issuer", "mytorra")
 
 	v.SetDefault("i18n.default_language", "en")
 	v.SetDefault("i18n.supported_languages", []string{"en", "fr"})
+
+	v.SetDefault("oauth.state_expiry", "10m")
+	v.SetDefault("oauth.pkce_enabled", true)
+
+	v.SetDefault("payment.provider", "mock")
+
+	v.SetDefault("subscription.trial_days_default", 7)
+	v.SetDefault("subscription.grace_period_days", 3)
+	v.SetDefault("subscription.enable_prorations", true)
+	v.SetDefault("subscription.allow_immediate_downgrades", false)
+
+	v.SetDefault("billing.process_hour", 2)
+	v.SetDefault("billing.retry_attempts", 3)
+	v.SetDefault("billing.retry_delay_hours", 24)
+	v.SetDefault("billing.reminder_days_before_expiry", []int{7, 3, 1})
 }
 
 func validate(cfg *Config) error {

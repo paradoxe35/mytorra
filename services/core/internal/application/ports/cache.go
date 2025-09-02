@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"github.com/paradoxe35/torra/packages/cache"
+	"github.com/paradoxe35/mytorra/packages/cache"
 )
 
 // Cache is an alias to the shared cache interface

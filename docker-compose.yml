@@ -4,9 +4,9 @@ services:
   # PostgreSQL with PostGIS
   postgres:
     image: postgis/postgis:17-3.5-alpine
-    container_name: torra-postgres
+    container_name: mytorra-postgres
     environment:
-      POSTGRES_USER: torra
+      POSTGRES_USER: mytorra
       POSTGRES_PASSWORD: torra_dev_password
       POSTGRES_DB: torra_dev
     ports:
@@ -14,9 +14,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - torra-network
+      - mytorra-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U torra"]
+      test: ["CMD-SHELL", "pg_isready -U mytorra"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,14 +24,14 @@ services:
   # Redis for caching and Asynq
   redis:
     image: redis:7-alpine
-    container_name: torra-redis
+    container_name: mytorra-redis
     command: redis-server --appendonly yes
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - torra-network
+      - mytorra-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -41,9 +41,9 @@ services:
   # RabbitMQ for message bus
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
-    container_name: torra-rabbitmq
+    container_name: mytorra-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: torra
+      RABBITMQ_DEFAULT_USER: mytorra
       RABBITMQ_DEFAULT_PASS: torra_dev_password
     ports:
       - "5672:5672" # AMQP port
@@ -51,7 +51,7 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     networks:
-      - torra-network
+      - mytorra-network
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -61,7 +61,7 @@ services:
   # Meilisearch for search functionality
   meilisearch:
     image: getmeili/meilisearch:v1.5
-    container_name: torra-meilisearch
+    container_name: mytorra-meilisearch
     environment:
       MEILI_MASTER_KEY: torra_dev_master_key
       MEILI_ENV: development
@@ -70,7 +70,7 @@ services:
     volumes:
       - meilisearch_data:/meili_data
     networks:
-      - torra-network
+      - mytorra-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
       interval: 10s
@@ -80,7 +80,7 @@ services:
   # Centrifugo for real-time messaging
   centrifugo:
     image: centrifugo/centrifugo:v5
-    container_name: torra-centrifugo
+    container_name: mytorra-centrifugo
     command: centrifugo --config=/centrifugo/config.json --admin
     ports:
       - "8000:8000" # WebSocket/SockJS
@@ -88,7 +88,7 @@ services:
     volumes:
       - ./infra/centrifugo/config.json:/centrifugo/config.json
     networks:
-      - torra-network
+      - mytorra-network
     healthcheck:
       test:
         [
@@ -106,7 +106,7 @@ services:
   # Asynqmon for job monitoring (optional in dev)
   asynqmon:
     image: hibiken/asynqmon:latest
-    container_name: torra-asynqmon
+    container_name: mytorra-asynqmon
     ports:
       - "8080:8080"
     command:
@@ -114,12 +114,12 @@ services:
     depends_on:
       - redis
     networks:
-      - torra-network
+      - mytorra-network
 
   # MinIO for S3-compatible object storage (development)
   minio:
     image: minio/minio:latest
-    container_name: torra-minio
+    container_name: mytorra-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: torra_minio
@@ -130,7 +130,7 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - torra-network
+      - mytorra-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -140,15 +140,15 @@ services:
   # Mailhog for email testing
   mailhog:
     image: mailhog/mailhog:latest
-    container_name: torra-mailhog
+    container_name: mytorra-mailhog
     ports:
       - "1025:1025" # SMTP
       - "8025:8025" # Web UI
     networks:
-      - torra-network
+      - mytorra-network
 
 networks:
-  torra-network:
+  mytorra-network:
     driver: bridge
 
 volumes:

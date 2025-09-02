@@ -3,12 +3,15 @@ package ports
 import (
 	"context"
 
-	"github.com/paradoxe35/torra/packages/events"
+	"github.com/paradoxe35/mytorra/packages/events"
 )
 
 // EventPublisher is an alias to the shared events interface
 // This allows the application layer to use the standardized events interface
 type EventPublisher = events.EventPublisher
+
+// EventBus is an alias for EventPublisher for backward compatibility
+type EventBus = events.EventPublisher
 
 // EventConsumer defines the interface for consuming domain events
 type EventConsumer interface {

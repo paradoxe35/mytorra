@@ -49,9 +49,27 @@ i18n:
     - en
     - fr
 
-stripe:
-  secret_key: ${STRIPE_SECRET_KEY}
-  webhook_secret: ${STRIPE_WEBHOOK_SECRET}
+payment:
+  provider: ${PAYMENT_PROVIDER:mock}  # stripe, mock
+  stripe:
+    secret_key: ${STRIPE_SECRET_KEY}
+    publishable_key: ${STRIPE_PUBLISHABLE_KEY}
+    webhook_secret: ${STRIPE_WEBHOOK_SECRET}
+  mock:
+    enabled: ${MOCK_PAYMENTS:true}
+
+subscription:
+  trial_days_default: 7
+  grace_period_days: 3
+  webhook_secret: ${WEBHOOK_SECRET}
+  enable_prorations: true
+  allow_immediate_downgrades: false
+
+billing:
+  process_hour: 2  # 2 AM
+  retry_attempts: 3
+  retry_delay_hours: 24
+  reminder_days_before_expiry: [7, 3, 1]
 
 sendgrid:
   api_key: ${SENDGRID_API_KEY}
@@ -74,3 +92,21 @@ metrics:
 rate_limit:
   requests_per_second: 10
   burst: 20
+
+oauth:
+  state_expiry: 10m
+  pkce_enabled: true
+  google:
+    client_id: ${GOOGLE_CLIENT_ID}
+    client_secret: ${GOOGLE_CLIENT_SECRET}
+    redirect_uri: ${GOOGLE_REDIRECT_URI:https://api.mytorra.com/auth/callback/google}
+    scopes:
+      - email
+      - profile
+  facebook:
+    app_id: ${FACEBOOK_APP_ID}
+    app_secret: ${FACEBOOK_APP_SECRET}
+    redirect_uri: ${FACEBOOK_REDIRECT_URI:https://api.mytorra.com/auth/callback/facebook}
+    scopes:
+      - email
+      - public_profile

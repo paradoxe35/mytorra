@@ -22,7 +22,7 @@ allow_k8s_contexts('my-k3s-etiolles')
 
 # Core API Service
 custom_build_with_restart(
-    'ghcr.io/paradoxe35/torra-core-api:dev',
+    'ghcr.io/paradoxe35/mytorra-core-api:dev',
     'docker build -t $EXPECTED_REF -f services/core/Dockerfile.api .',
     entrypoint='/app/core-api',
     deps=['services/core/', 'packages/'],

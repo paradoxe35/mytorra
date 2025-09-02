@@ -8,15 +8,15 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/paradoxe35/torra/packages/config"
-	"github.com/paradoxe35/torra/packages/errors"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/packages/security"
-	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/errors"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/dtos"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 type AuthService struct {
@@ -379,6 +379,28 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, user *entities.U
 }
 
 // toUserResponse converts a User entity to UserResponse DTO
+// GenerateTokensForUser generates access and refresh tokens for a user (used by OAuth service)
+func (s *AuthService) GenerateTokensForUser(ctx context.Context, user *entities.User) (*dtos.AuthResponse, error) {
+	// Generate access token
+	accessToken, err := s.generateAccessToken(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	// Generate refresh token
+	refreshToken, err := s.generateRefreshToken(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	return &dtos.AuthResponse{
+		User:         s.toUserResponse(user),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int(s.accessDuration.Seconds()),
+	}, nil
+}
+
 func (s *AuthService) toUserResponse(user *entities.User) *dtos.UserResponse {
 	return &dtos.UserResponse{
 		ID:                user.ID,

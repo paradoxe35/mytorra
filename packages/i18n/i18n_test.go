@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/paradoxe35/torra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/i18n"
 )
 
 func TestTranslator_New(t *testing.T) {

@@ -123,7 +123,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/paradoxe35/torra
+        - github.com/paradoxe35/mytorra
     gofumpt:
       extra-rules: true
 

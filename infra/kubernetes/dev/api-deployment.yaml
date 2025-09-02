@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: core-api
-  namespace: torra-dev
+  namespace: mytorra-dev
   labels:
     app: core-api
     service: core
@@ -25,7 +25,7 @@ spec:
     spec:
       containers:
         - name: core-api
-          image: ghcr.io/paradoxe35/torra-core-api:dev
+          image: ghcr.io/paradoxe35/mytorra-core-api:dev
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

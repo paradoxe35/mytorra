@@ -1,16 +1,17 @@
-module github.com/paradoxe35/torra/packages/http
+module github.com/paradoxe35/mytorra/packages/http
 
 go 1.25
 
 require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/google/uuid v1.6.0
-	github.com/paradoxe35/torra/packages/i18n v0.0.0
-	github.com/paradoxe35/torra/packages/logger v0.0.0
+	github.com/paradoxe35/mytorra/packages/i18n v0.0.0
+	github.com/paradoxe35/mytorra/packages/logger v0.0.0
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
@@ -19,6 +20,6 @@ require (
 )
 
 replace (
-	github.com/paradoxe35/torra/packages/i18n => ../i18n
-	github.com/paradoxe35/torra/packages/logger => ../logger
+	github.com/paradoxe35/mytorra/packages/i18n => ../i18n
+	github.com/paradoxe35/mytorra/packages/logger => ../logger
 )

@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -10,32 +9,29 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/models"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 func setupAreaRepo(t *testing.T) (*areaRepository, func()) {
-	// Skip test if database testing is not enabled
-	if !database.IsTestingEnabled() {
-		t.Skip("Skipping test: database testing not enabled. Set ENABLE_DB_TESTS=true or run in CI")
-	}
+	// Setup test database with GORM
+	testDB := database.NewTestDB(t)
 
-	// Setup test database
-	testDB, err := database.SetupTestDB(nil) // Use default config
+	// Auto-migrate required models
+	err := testDB.Migrate(&models.AreaModel{})
 	if err != nil {
-		t.Fatalf("Failed to setup test database: %v", err)
+		t.Fatalf("Failed to migrate test database: %v", err)
 	}
 
-	repo := &areaRepository{db: testDB.DB}
+	repo := NewAreaRepository(testDB.GormDB)
 
 	cleanup := func() {
-		if err := testDB.Close(); err != nil {
-			t.Errorf("Failed to cleanup test database: %v", err)
-		}
+		testDB.Close()
 	}
 
-	return repo, cleanup
+	return repo.(*areaRepository), cleanup
 }
 
 func createTestArea(t *testing.T, areaType valueobjects.AreaType) *entities.Area {
@@ -493,7 +489,7 @@ func TestAreaRepository_ConcurrentOperations(t *testing.T) {
 			// Get fresh area data to avoid conflicts
 			freshArea, err := repo.FindByID(ctx, area.ID)
 			if err == nil {
-				freshArea.Name = fmt.Sprintf("Name %d", i)
+				freshArea.Name = "Updated Name"
 				freshArea.UpdatedAt = time.Now()
 				repo.Update(ctx, freshArea)
 			}

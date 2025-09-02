@@ -1,10 +1,10 @@
-module github.com/paradoxe35/torra/packages/cache
+module github.com/paradoxe35/mytorra/packages/cache
 
 go 1.25
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/paradoxe35/torra/packages/config v0.0.0
+	github.com/paradoxe35/mytorra/packages/config v0.0.0
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -24,10 +24,10 @@ require (
 	github.com/spf13/viper v1.20.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	golang.org/x/net v0.42.0 // indirect
+	golang.org/x/net v0.43.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/paradoxe35/torra/packages/config => ../config
+replace github.com/paradoxe35/mytorra/packages/config => ../config

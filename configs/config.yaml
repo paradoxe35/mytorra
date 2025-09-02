@@ -34,7 +34,7 @@ redis:
 
 rabbitmq:
   url: "amqp://guest:guest@localhost:5672/"
-  exchange: "torra.events"
+  exchange: "mytorra.events"
   queue: "core.events"
   consumer_tag: "core-service"
   prefetch_count: 1
@@ -44,7 +44,7 @@ jwt:
   secret: "your-super-secret-jwt-key-change-this-in-production"
   access_duration: "15m"
   refresh_duration: "7d"
-  issuer: "torra-core-service"
+  issuer: "mytorra-core-service"
 
 aws:
   region: "us-east-1"

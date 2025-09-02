@@ -60,7 +60,7 @@ COPY --from=builder /build/packages/i18n/locales/ /app/locales/
 # Create necessary directories
 RUN mkdir -p /app/logs /app/tmp
 
-LABEL org.opencontainers.image.source=https://github.com/paradoxe35/torra
+LABEL org.opencontainers.image.source=https://github.com/paradoxe35/mytorra
 
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app

@@ -143,7 +143,7 @@ Use shared error package for consistency:
 
 ```go
 // Import shared error package
-import "github.com/paradoxe35/torra/packages/errors"
+import "github.com/paradoxe35/mytorra/packages/errors"
 
 // Repository pattern
 func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.User, error) {
@@ -269,9 +269,9 @@ ls -la services/core/internal/adapters/postgres/repositories/
 ```go
 // 1. Use shared packages for authentication
 import (
-    "github.com/paradoxe35/torra/packages/cache"
-    "github.com/paradoxe35/torra/packages/logger"
-    "github.com/paradoxe35/torra/packages/config"
+    "github.com/paradoxe35/mytorra/packages/cache"
+    "github.com/paradoxe35/mytorra/packages/logger"
+    "github.com/paradoxe35/mytorra/packages/config"
 )
 
 // 2. JWT validation with JWKS
@@ -299,14 +299,14 @@ All services MUST use these packages:
 
 ```go
 import (
-    "github.com/paradoxe35/torra/packages/config"     // Configuration management
-    "github.com/paradoxe35/torra/packages/database"  // Database connections
-    "github.com/paradoxe35/torra/packages/logger"    // Structured logging
-    "github.com/paradoxe35/torra/packages/errors"    // Error handling
-    "github.com/paradoxe35/torra/packages/http"      // HTTP responses
-    "github.com/paradoxe35/torra/packages/i18n"      // Internationalization
-    "github.com/paradoxe35/torra/packages/cache"     // Caching layer
-    "github.com/paradoxe35/torra/packages/security"  // Security utilities
+    "github.com/paradoxe35/mytorra/packages/config"     // Configuration management
+    "github.com/paradoxe35/mytorra/packages/database"  // Database connections
+    "github.com/paradoxe35/mytorra/packages/logger"    // Structured logging
+    "github.com/paradoxe35/mytorra/packages/errors"    // Error handling
+    "github.com/paradoxe35/mytorra/packages/http"      // HTTP responses
+    "github.com/paradoxe35/mytorra/packages/i18n"      // Internationalization
+    "github.com/paradoxe35/mytorra/packages/cache"     // Caching layer
+    "github.com/paradoxe35/mytorra/packages/security"  // Security utilities
 )
 ```
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 
-	"github.com/paradoxe35/torra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/config"
 )
 
 // BasicCache is the simple cache interface (keeping for backward compatibility)

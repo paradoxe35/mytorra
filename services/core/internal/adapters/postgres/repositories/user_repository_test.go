@@ -2,42 +2,37 @@ package repositories
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/packages/errors"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/packages/errors"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/models"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-func setupUserRepo(t *testing.T) (*userRepository, *sqlx.DB, func()) {
-	// Skip test if database testing is not enabled
-	if !database.IsTestingEnabled() {
-		t.Skip("Skipping test: database testing not enabled. Set ENABLE_DB_TESTS=true or run in CI")
-	}
+func setupUserRepo(t *testing.T) (*userRepository, *database.TestDB, func()) {
+	// Setup test database with GORM
+	testDB := database.NewTestDB(t)
 
-	// Setup test database
-	testDB, err := database.SetupTestDB(nil) // Use default config
+	// Auto-migrate required models
+	err := testDB.Migrate(&models.UserModel{}, &models.AreaModel{})
 	if err != nil {
-		t.Fatalf("Failed to setup test database: %v", err)
+		t.Fatalf("Failed to migrate test database: %v", err)
 	}
 
-	repo := &userRepository{db: testDB.DB}
+	repo := NewUserRepository(testDB.GormDB)
 
 	cleanup := func() {
-		if err := testDB.Close(); err != nil {
-			t.Errorf("Failed to cleanup test database: %v", err)
-		}
+		testDB.Close()
 	}
 
-	return repo, testDB.DB.DB, cleanup
+	return repo.(*userRepository), testDB, cleanup
 }
 
 func createTestUser(t *testing.T, areaID uuid.UUID) *entities.User {
@@ -73,31 +68,39 @@ func createTestUser(t *testing.T, areaID uuid.UUID) *entities.User {
 	}
 }
 
-func createTestAreaForUser(t *testing.T, db *sqlx.DB) uuid.UUID {
+func createTestAreaForUser(t *testing.T, db *database.TestDB) uuid.UUID {
 	areaID := uuid.New()
-	// Use UUID in code to ensure uniqueness
-	areaCode := fmt.Sprintf("TEST_%s", areaID.String()[:8])
 
-	query := `
-		INSERT INTO areas (
-			id, type, name, code, center_lat, center_lng,
-			center_point, operational_radius, status,
-			service_availability, settings, switching_mode,
-			allow_cross_trade, nearby_area_ids, transition_zones,
-			timezone, languages, currency, tax_rate, min_order_value,
-			delivery_fee_structure, cross_area_fees, operational_hours,
-			created_at, updated_at
-		) VALUES (
-			$1, 'town', 'Test Area', $2, 0, 0,
-			ST_SetSRID(ST_MakePoint(0, 0), 4326), 10, 'active',
-			'{}', '{}', 'manual',
-			false, '{}', '[]',
-			'UTC', '{"en"}', 'USD', 0, 0,
-			'{}', '{}', '{}',
-			NOW(), NOW()
-		)`
+	// Create test area using GORM
+	area := &entities.Area{
+		ID:                   areaID,
+		Type:                 valueobjects.AreaTypeTown,
+		Name:                 "Test Area",
+		Code:                 "TEST001",
+		CenterLat:            0,
+		CenterLng:            0,
+		OperationalRadius:    10,
+		Status:               valueobjects.AreaStatusActive,
+		ServiceAvailability:  make(map[string]bool),
+		Settings:             make(map[string]interface{}),
+		SwitchingMode:        entities.SwitchingModeManual,
+		AllowCrossTrade:      false,
+		NearbyAreaIDs:        []uuid.UUID{},
+		TransitionZones:      []entities.TransitionZone{},
+		Timezone:             "UTC",
+		Languages:            []string{"en"},
+		Currency:             "USD",
+		TaxRate:              0.0,
+		MinOrderValue:        0.0,
+		DeliveryFeeStructure: make(map[string]interface{}),
+		CrossAreaFees:        make(map[string]float64),
+		OperationalHours:     make(map[string]interface{}),
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
+	}
 
-	_, err := db.Exec(query, areaID, areaCode)
+	areaModel := models.AreaFromEntity(area)
+	err := db.DB.Create(areaModel).Error
 	require.NoError(t, err)
 
 	return areaID
@@ -397,18 +400,17 @@ func TestUserRepository_UpdateLastLogin(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test: Update last login using dedicated method
-	loginTime := time.Now()
-	err = repo.UpdateLastLogin(ctx, user.ID, loginTime)
+	err = repo.UpdateLastLogin(ctx, user.ID)
 	assert.NoError(t, err)
 
 	// Test: Verify last login was updated
 	updatedUser, err := repo.FindByID(ctx, user.ID)
 	assert.NoError(t, err)
 	assert.NotNil(t, updatedUser.LastLoginAt)
-	assert.WithinDuration(t, loginTime, *updatedUser.LastLoginAt, time.Second)
+	assert.WithinDuration(t, time.Now(), *updatedUser.LastLoginAt, 5*time.Second)
 
 	// Test: Update last login for non-existent user
-	err = repo.UpdateLastLogin(ctx, uuid.New(), time.Now())
+	err = repo.UpdateLastLogin(ctx, uuid.New())
 	assert.Error(t, err)
 	assert.Equal(t, errors.ErrNotFound, err)
 }
@@ -468,7 +470,7 @@ func TestUserRepository_ConcurrentOperations(t *testing.T) {
 			// Get fresh user data to avoid conflicts
 			freshUser, err := repo.FindByID(ctx, user.ID)
 			if err == nil {
-				freshUser.Name = fmt.Sprintf("Name %d", i)
+				freshUser.Name = "Updated Name"
 				freshUser.UpdatedAt = time.Now()
 				repo.Update(ctx, freshUser)
 			}
@@ -478,8 +480,7 @@ func TestUserRepository_ConcurrentOperations(t *testing.T) {
 	go func() {
 		defer func() { done <- true }()
 		for i := 0; i < 5; i++ {
-			loginTime := time.Now()
-			repo.UpdateLastLogin(ctx, user.ID, loginTime)
+			repo.UpdateLastLogin(ctx, user.ID)
 		}
 	}()
 

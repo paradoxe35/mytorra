@@ -6,11 +6,11 @@ import (
 	"strconv"
 	"strings"
 
-	httpPkg "github.com/paradoxe35/torra/packages/http"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/services/core/internal/application/services"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
+	httpPkg "github.com/paradoxe35/mytorra/packages/http"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/services"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
 type AreaHandler struct {

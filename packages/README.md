@@ -22,9 +22,9 @@ Import packages in your service:
 
 ```go
 import (
-    "github.com/paradoxe35/torra/packages/config"
-    "github.com/paradoxe35/torra/packages/logger"
-    "github.com/paradoxe35/torra/packages/security"
+    "github.com/paradoxe35/mytorra/packages/config"
+    "github.com/paradoxe35/mytorra/packages/logger"
+    "github.com/paradoxe35/mytorra/packages/security"
 )
 ```
 

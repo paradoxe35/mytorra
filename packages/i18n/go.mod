@@ -1,4 +1,4 @@
-module github.com/paradoxe35/torra/packages/i18n
+module github.com/paradoxe35/mytorra/packages/i18n
 
 go 1.25
 

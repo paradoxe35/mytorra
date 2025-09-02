@@ -41,11 +41,11 @@ JWKS_RETRY_DELAY=1000  # milliseconds
 
 **Note**: This implementation leverages existing MyTorra packages from `/packages/` directory including:
 
-- `github.com/paradoxe35/torra/packages/cache` - Cache implementation
-- `github.com/paradoxe35/torra/packages/logger` - Logging interface
-- `github.com/paradoxe35/torra/packages/config` - Configuration management
-- `github.com/paradoxe35/torra/packages/errors` - Error handling
-- `github.com/paradoxe35/torra/packages/security` - Security utilities
+- `github.com/paradoxe35/mytorra/packages/cache` - Cache implementation
+- `github.com/paradoxe35/mytorra/packages/logger` - Logging interface
+- `github.com/paradoxe35/mytorra/packages/config` - Configuration management
+- `github.com/paradoxe35/mytorra/packages/errors` - Error handling
+- `github.com/paradoxe35/mytorra/packages/security` - Security utilities
 
 ### 1. JWKS Types
 
@@ -126,9 +126,9 @@ import (
     "github.com/golang-jwt/jwt/v5"
 
     // Use MyTorra packages
-    "github.com/paradoxe35/torra/packages/cache"
-    "github.com/paradoxe35/torra/packages/logger"
-    "github.com/paradoxe35/torra/packages/errors"
+    "github.com/paradoxe35/mytorra/packages/cache"
+    "github.com/paradoxe35/mytorra/packages/logger"
+    "github.com/paradoxe35/mytorra/packages/errors"
 )
 
 // ServiceAuthenticator handles JWT validation for services
@@ -515,8 +515,8 @@ import (
     "encoding/json"
     "time"
 
-    "github.com/paradoxe35/torra/packages/cache"
-    "github.com/paradoxe35/torra/packages/config"
+    "github.com/paradoxe35/mytorra/packages/cache"
+    "github.com/paradoxe35/mytorra/packages/config"
 )
 
 // JWKSCacheManager manages JWKS caching using MyTorra cache
@@ -578,7 +578,7 @@ func (m *JWKSCacheManager) InvalidateJWKS(ctx context.Context) error {
 package auth
 
 import (
-    "github.com/paradoxe35/torra/packages/errors"
+    "github.com/paradoxe35/mytorra/packages/errors"
 )
 
 // Define authentication-specific errors using MyTorra error types
@@ -1029,9 +1029,9 @@ import (
     "github.com/gin-gonic/gin"
 
     // MyTorra packages
-    "github.com/paradoxe35/torra/packages/cache"
-    "github.com/paradoxe35/torra/packages/config"
-    "github.com/paradoxe35/torra/packages/logger"
+    "github.com/paradoxe35/mytorra/packages/cache"
+    "github.com/paradoxe35/mytorra/packages/config"
+    "github.com/paradoxe35/mytorra/packages/logger"
 
     // Your service packages
     "your-service/auth"
