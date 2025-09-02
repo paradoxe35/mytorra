@@ -11,16 +11,18 @@ import (
 )
 
 type Config struct {
-	Service  ServiceConfig  `mapstructure:"service"`
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	AWS      AWSConfig      `mapstructure:"aws"`
-	I18n     I18nConfig     `mapstructure:"i18n"`
-	OAuth    OAuthConfig    `mapstructure:"oauth"`
-	Payment  PaymentConfig  `mapstructure:"payment"`
+	Service      ServiceConfig      `mapstructure:"service"`
+	Server       ServerConfig       `mapstructure:"server"`
+	Database     DatabaseConfig     `mapstructure:"database"`
+	Redis        RedisConfig        `mapstructure:"redis"`
+	RabbitMQ     RabbitMQConfig     `mapstructure:"rabbitmq"`
+	JWT          JWTConfig          `mapstructure:"jwt"`
+	AWS          AWSConfig          `mapstructure:"aws"`
+	I18n         I18nConfig         `mapstructure:"i18n"`
+	OAuth        OAuthConfig        `mapstructure:"oauth"`
+	Payment      PaymentConfig      `mapstructure:"payment"`
+	Subscription SubscriptionConfig `mapstructure:"subscription"`
+	Billing      BillingConfig      `mapstructure:"billing"`
 }
 
 type ServiceConfig struct {
@@ -116,6 +118,21 @@ type StripeConfig struct {
 	WebhookSecret  string `mapstructure:"webhook_secret"`
 }
 
+type SubscriptionConfig struct {
+	TrialDaysDefault        int    `mapstructure:"trial_days_default"`
+	GracePeriodDays         int    `mapstructure:"grace_period_days"`
+	WebhookSecret           string `mapstructure:"webhook_secret"`
+	EnableProrations        bool   `mapstructure:"enable_prorations"`
+	AllowImmediateDowngrade bool   `mapstructure:"allow_immediate_downgrades"`
+}
+
+type BillingConfig struct {
+	ProcessHour              int   `mapstructure:"process_hour"`
+	RetryAttempts            int   `mapstructure:"retry_attempts"`
+	RetryDelayHours          int   `mapstructure:"retry_delay_hours"`
+	ReminderDaysBeforeExpiry []int `mapstructure:"reminder_days_before_expiry"`
+}
+
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
 
@@ -191,6 +208,16 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("oauth.pkce_enabled", true)
 
 	v.SetDefault("payment.provider", "mock")
+
+	v.SetDefault("subscription.trial_days_default", 7)
+	v.SetDefault("subscription.grace_period_days", 3)
+	v.SetDefault("subscription.enable_prorations", true)
+	v.SetDefault("subscription.allow_immediate_downgrades", false)
+
+	v.SetDefault("billing.process_hour", 2)
+	v.SetDefault("billing.retry_attempts", 3)
+	v.SetDefault("billing.retry_delay_hours", 24)
+	v.SetDefault("billing.reminder_days_before_expiry", []int{7, 3, 1})
 }
 
 func validate(cfg *Config) error {

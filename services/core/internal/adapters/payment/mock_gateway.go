@@ -10,7 +10,7 @@ import (
 
 	"github.com/paradoxe35/torra/packages/logger"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
 )
 
 // MockGateway is a mock implementation of the PaymentGateway interface for testing
@@ -31,140 +31,21 @@ func NewMockGateway(logger logger.Interface) *MockGateway {
 	}
 }
 
-// CreatePaymentIntent creates a mock payment intent
-func (m *MockGateway) CreatePaymentIntent(ctx context.Context, req ports.PaymentIntentRequest) (*ports.PaymentIntentResponse, error) {
-	m.logger.Info("Mock: Creating payment intent")
+// CreateCustomer creates a mock customer from user entity
+func (m *MockGateway) CreateCustomer(ctx context.Context, user *entities.User) (string, error) {
+	m.logger.Info("Mock: Creating customer from user")
 
-	return &ports.PaymentIntentResponse{
-		ID:           fmt.Sprintf("pi_%s", uuid.New().String()[:8]),
-		ClientSecret: fmt.Sprintf("pi_%s_secret", uuid.New().String()[:8]),
-		Status:       "requires_confirmation",
-		Amount:       req.Amount,
-		CreatedAt:    time.Now(),
-	}, nil
-}
-
-// ConfirmPayment confirms a mock payment
-func (m *MockGateway) ConfirmPayment(ctx context.Context, paymentIntentID string) (*ports.PaymentConfirmation, error) {
-	m.logger.Info("Mock: Confirming payment")
-
-	// Simulate random payment failures (10% failure rate)
-	if time.Now().Unix()%10 == 0 {
-		return nil, fmt.Errorf("mock payment failed: insufficient funds")
-	}
-
-	return &ports.PaymentConfirmation{
-		ID:        paymentIntentID,
-		Status:    "succeeded",
-		Amount:    valueobjects.Money{Amount: decimal.NewFromFloat(100), Currency: "USD"},
-		ChargeID:  fmt.Sprintf("ch_%s", uuid.New().String()[:8]),
-		CreatedAt: time.Now(),
-	}, nil
-}
-
-// CancelPayment cancels a mock payment
-func (m *MockGateway) CancelPayment(ctx context.Context, paymentIntentID string) error {
-	m.logger.Info("Mock: Canceling payment")
-	return nil
-}
-
-// RefundPayment processes a mock refund
-func (m *MockGateway) RefundPayment(ctx context.Context, paymentID string, amount *valueobjects.Money) (*ports.RefundResponse, error) {
-	m.logger.Info("Mock: Processing refund")
-
-	return &ports.RefundResponse{
-		RefundID:      fmt.Sprintf("re_%s", uuid.New().String()[:8]),
-		Amount:        amount.Amount,
-		Currency:      amount.Currency,
-		Status:        "succeeded",
-		TransactionID: fmt.Sprintf("txn_%s", uuid.New().String()[:8]),
-	}, nil
-}
-
-// CreatePaymentMethod creates a mock payment method
-func (m *MockGateway) CreatePaymentMethod(ctx context.Context, req ports.PaymentMethodRequest) (*ports.PaymentMethod, error) {
-	m.logger.Info("Mock: Creating payment method")
-
-	pm := &ports.PaymentMethod{
-		ID:   fmt.Sprintf("pm_%s", uuid.New().String()[:8]),
-		Type: req.Type,
-		Card: &ports.CardInfo{
-			Last4:    "4242",
-			Brand:    "visa",
-			ExpMonth: 12,
-			ExpYear:  2025,
-		},
-		Created: time.Now(),
-	}
-
-	m.paymentMethods[pm.ID] = pm
-	return pm, nil
-}
-
-// AttachPaymentMethod attaches a payment method to a customer
-func (m *MockGateway) AttachPaymentMethod(ctx context.Context, paymentMethodID, customerID string) error {
-	m.logger.Info("Mock: Attaching payment method to customer")
-	return nil
-}
-
-// DetachPaymentMethod detaches a payment method
-func (m *MockGateway) DetachPaymentMethod(ctx context.Context, paymentMethodID string) error {
-	m.logger.Info("Mock: Detaching payment method")
-	delete(m.paymentMethods, paymentMethodID)
-	return nil
-}
-
-// ListPaymentMethods lists payment methods for a customer
-func (m *MockGateway) ListPaymentMethods(ctx context.Context, customerID string) ([]*ports.PaymentMethod, error) {
-	m.logger.Info("Mock: Listing payment methods")
-
-	methods := make([]*ports.PaymentMethod, 0, len(m.paymentMethods))
-	for _, pm := range m.paymentMethods {
-		methods = append(methods, pm)
-	}
-	return methods, nil
-}
-
-// CreateCustomer creates a mock customer
-func (m *MockGateway) CreateCustomer(ctx context.Context, req ports.CustomerRequest) (*ports.Customer, error) {
-	m.logger.Info("Mock: Creating customer")
-
+	customerID := fmt.Sprintf("cus_%s", uuid.New().String()[:8])
 	customer := &ports.Customer{
-		ID:                   fmt.Sprintf("cus_%s", uuid.New().String()[:8]),
-		Email:                req.Email,
-		Name:                 req.Name,
+		ID:                   customerID,
+		Email:                user.Email.String(),
+		Name:                 user.Name,
 		DefaultPaymentMethod: "",
 		Created:              time.Now(),
 	}
 
-	m.customers[customer.ID] = customer
-	return customer, nil
-}
-
-// UpdateCustomer updates a mock customer
-func (m *MockGateway) UpdateCustomer(ctx context.Context, customerID string, req ports.CustomerRequest) (*ports.Customer, error) {
-	m.logger.Info("Mock: Updating customer")
-
-	if customer, exists := m.customers[customerID]; exists {
-		customer.Email = req.Email
-		customer.Name = req.Name
-		return customer, nil
-	}
-	return nil, fmt.Errorf("customer not found")
-}
-
-// DeleteCustomer deletes a mock customer
-func (m *MockGateway) DeleteCustomer(ctx context.Context, customerID string) error {
-	m.logger.Info("Mock: Deleting customer")
-	delete(m.customers, customerID)
-	return nil
-}
-
-// ValidateWebhook validates a mock webhook
-func (m *MockGateway) ValidateWebhook(ctx context.Context, payload []byte, signature string) (bool, error) {
-	m.logger.Info("Mock: Validating webhook")
-	// Always return true for mock
-	return true, nil
+	m.customers[customerID] = customer
+	return customerID, nil
 }
 
 // CreateSubscription creates a mock subscription
@@ -245,4 +126,112 @@ func (m *MockGateway) GetSubscription(ctx context.Context, subscriptionID string
 		return subscription, nil
 	}
 	return nil, fmt.Errorf("subscription not found")
+}
+
+// ChargePayment charges a mock payment
+func (m *MockGateway) ChargePayment(ctx context.Context, req ports.ChargePaymentRequest) (*ports.PaymentResponse, error) {
+	m.logger.Info("Mock: Charging payment")
+
+	// Simulate random payment failures (10% failure rate)
+	if time.Now().Unix()%10 == 0 {
+		return nil, fmt.Errorf("mock payment failed: insufficient funds")
+	}
+
+	return &ports.PaymentResponse{
+		PaymentID:     fmt.Sprintf("pi_%s", uuid.New().String()[:8]),
+		Amount:        req.Amount,
+		Currency:      req.Currency,
+		Status:        "succeeded",
+		TransactionID: fmt.Sprintf("txn_%s", uuid.New().String()[:8]),
+	}, nil
+}
+
+// RefundPayment processes a mock refund
+func (m *MockGateway) RefundPayment(ctx context.Context, req ports.RefundPaymentRequest) (*ports.RefundResponse, error) {
+	m.logger.Info("Mock: Processing refund")
+
+	return &ports.RefundResponse{
+		RefundID:      fmt.Sprintf("re_%s", uuid.New().String()[:8]),
+		Amount:        req.Amount,
+		Currency:      "USD", // Default currency for mock
+		Status:        "succeeded",
+		TransactionID: fmt.Sprintf("txn_%s", uuid.New().String()[:8]),
+	}, nil
+}
+
+// CreatePaymentMethod creates a mock payment method
+func (m *MockGateway) CreatePaymentMethod(ctx context.Context, req ports.CreatePaymentMethodRequest) (*ports.PaymentMethodResponse, error) {
+	m.logger.Info("Mock: Creating payment method")
+
+	pm := &ports.PaymentMethodResponse{
+		MethodID:  fmt.Sprintf("pm_%s", uuid.New().String()[:8]),
+		Type:      "card",
+		Last4:     "4242",
+		Brand:     "visa",
+		ExpMonth:  12,
+		ExpYear:   2025,
+		IsDefault: req.SetDefault,
+	}
+
+	return pm, nil
+}
+
+// DeletePaymentMethod deletes a mock payment method
+func (m *MockGateway) DeletePaymentMethod(ctx context.Context, methodID string) error {
+	m.logger.Info("Mock: Deleting payment method")
+	return nil
+}
+
+// GetPaymentMethods gets payment methods for a customer
+func (m *MockGateway) GetPaymentMethods(ctx context.Context, customerID string) ([]*ports.PaymentMethodResponse, error) {
+	m.logger.Info("Mock: Getting payment methods")
+
+	// Return some mock payment methods
+	methods := []*ports.PaymentMethodResponse{
+		{
+			MethodID:  fmt.Sprintf("pm_%s", uuid.New().String()[:8]),
+			Type:      "card",
+			Last4:     "4242",
+			Brand:     "visa",
+			ExpMonth:  12,
+			ExpYear:   2025,
+			IsDefault: true,
+		},
+	}
+
+	return methods, nil
+}
+
+// GetInvoice gets a mock invoice
+func (m *MockGateway) GetInvoice(ctx context.Context, invoiceID string) (*ports.InvoiceResponse, error) {
+	m.logger.Info("Mock: Getting invoice")
+
+	return &ports.InvoiceResponse{
+		InvoiceID: invoiceID,
+		Number:    fmt.Sprintf("INV-%s", uuid.New().String()[:8]),
+		Amount:    decimal.NewFromFloat(25.00),
+		Currency:  "USD",
+		Status:    "paid",
+		DueDate:   time.Now().AddDate(0, 0, 30),
+		Items: []ports.InvoiceItem{
+			{
+				Description: "Professional Plan - Monthly",
+				Amount:      decimal.NewFromFloat(25.00),
+				Quantity:    1,
+			},
+		},
+		DownloadURL: fmt.Sprintf("https://mock-gateway.com/invoices/%s.pdf", invoiceID),
+	}, nil
+}
+
+// ProcessWebhook processes a mock webhook
+func (m *MockGateway) ProcessWebhook(ctx context.Context, payload []byte, signature string) (*ports.WebhookEvent, error) {
+	m.logger.Info("Mock: Processing webhook")
+
+	return &ports.WebhookEvent{
+		ID:        fmt.Sprintf("evt_%s", uuid.New().String()[:8]),
+		Type:      "invoice.payment_succeeded",
+		Data:      payload,
+		Timestamp: time.Now(),
+	}, nil
 }

@@ -23,10 +23,10 @@ import (
 	adaptersHTTP "github.com/paradoxe35/torra/services/core/internal/adapters/http"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/payment"
 	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/repositories"
 	"github.com/paradoxe35/torra/services/core/internal/application/ports"
 	"github.com/paradoxe35/torra/services/core/internal/application/services"
-	"github.com/paradoxe35/torra/services/core/internal/infrastructure/payment"
 )
 
 func main() {
