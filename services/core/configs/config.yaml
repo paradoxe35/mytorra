@@ -74,3 +74,21 @@ metrics:
 rate_limit:
   requests_per_second: 10
   burst: 20
+
+oauth:
+  state_expiry: 10m
+  pkce_enabled: true
+  google:
+    client_id: ${GOOGLE_CLIENT_ID}
+    client_secret: ${GOOGLE_CLIENT_SECRET}
+    redirect_uri: ${GOOGLE_REDIRECT_URI:https://api.mytorra.com/auth/callback/google}
+    scopes:
+      - email
+      - profile
+  facebook:
+    app_id: ${FACEBOOK_APP_ID}
+    app_secret: ${FACEBOOK_APP_SECRET}
+    redirect_uri: ${FACEBOOK_REDIRECT_URI:https://api.mytorra.com/auth/callback/facebook}
+    scopes:
+      - email
+      - public_profile

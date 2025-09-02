@@ -30,10 +30,14 @@ require (
 	github.com/paradoxe35/torra/packages/i18n v0.0.0
 	github.com/paradoxe35/torra/packages/logger v0.0.0
 	github.com/paradoxe35/torra/packages/security v0.0.0-00010101000000-000000000000
+	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.11.1
+	github.com/stripe/stripe-go/v76 v76.25.0
+	golang.org/x/oauth2 v0.30.0
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

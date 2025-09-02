@@ -10,6 +10,9 @@ import (
 // This allows the application layer to use the standardized events interface
 type EventPublisher = events.EventPublisher
 
+// EventBus is an alias for EventPublisher for backward compatibility
+type EventBus = events.EventPublisher
+
 // EventConsumer defines the interface for consuming domain events
 type EventConsumer interface {
 	Subscribe(ctx context.Context, topic string, handler EventHandler) error

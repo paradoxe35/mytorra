@@ -379,6 +379,28 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, user *entities.U
 }
 
 // toUserResponse converts a User entity to UserResponse DTO
+// GenerateTokensForUser generates access and refresh tokens for a user (used by OAuth service)
+func (s *AuthService) GenerateTokensForUser(ctx context.Context, user *entities.User) (*dtos.AuthResponse, error) {
+	// Generate access token
+	accessToken, err := s.generateAccessToken(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	// Generate refresh token
+	refreshToken, err := s.generateRefreshToken(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	return &dtos.AuthResponse{
+		User:         s.toUserResponse(user),
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int(s.accessDuration.Seconds()),
+	}, nil
+}
+
 func (s *AuthService) toUserResponse(user *entities.User) *dtos.UserResponse {
 	return &dtos.UserResponse{
 		ID:                user.ID,

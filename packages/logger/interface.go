@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+// Fields is a type alias for map[string]any for logging fields
+type Fields = map[string]any
+
 // Interface defines the logger interface for application services
 type Interface interface {
 	Debug(msg string, fields ...any)

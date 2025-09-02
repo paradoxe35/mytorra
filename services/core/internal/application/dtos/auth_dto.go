@@ -283,8 +283,9 @@ type UpdateAreaRequest struct {
 
 // OAuthCallbackRequest represents an OAuth callback request
 type OAuthCallbackRequest struct {
-	Code  string `json:"code" validate:"required"`
-	State string `json:"state" validate:"required"`
+	Code     string `json:"code" validate:"required"`
+	State    string `json:"state" validate:"required"`
+	Provider string `json:"provider" validate:"required,oneof=google facebook"`
 }
 
 // TokenClaims represents JWT token claims

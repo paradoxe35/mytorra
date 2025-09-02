@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 
 	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
 )
@@ -59,7 +60,7 @@ const (
 
 // Domain methods
 func (w *Wallet) CanWithdraw(amount float64) bool {
-	return w.Status == WalletStatusActive && w.Balance.Amount >= amount
+	return w.Status == WalletStatusActive && w.Balance.Amount.GreaterThanOrEqual(decimal.NewFromFloat(amount))
 }
 
 func (w *Wallet) IsActive() bool {
