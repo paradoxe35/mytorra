@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm/logger"
 
 	"github.com/paradoxe35/torra/packages/config"
+	pkgLogger "github.com/paradoxe35/torra/packages/logger"
 )
 
 // GormDB wraps the GORM database connection
@@ -59,9 +60,12 @@ func NewGormDB(cfg *config.DatabaseConfig) (*GormDB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	// Enable PostGIS extension if not already enabled
-	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS postgis").Error; err != nil {
-		return nil, fmt.Errorf("failed to enable PostGIS extension: %w", err)
+	extensions := []string{"postgis", "uuid-ossp", "pg_trgm"}
+	log := pkgLogger.New("database", "production")
+	for _, ext := range extensions {
+		if err := db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", ext)).Error; err != nil {
+			log.WithError(err).Error("Failed to enable %s extension", ext)
+		}
 	}
 
 	return &GormDB{db}, nil

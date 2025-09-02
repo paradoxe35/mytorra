@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -13,80 +12,83 @@ import (
 	"github.com/paradoxe35/torra/packages/database"
 	"github.com/paradoxe35/torra/packages/errors"
 	"github.com/paradoxe35/torra/packages/security"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/models"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
 )
 
-func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, *database.DB, func()) {
-	// Skip test if database testing is not enabled
-	if !database.IsTestingEnabled() {
-		t.Skip("Skipping test: database testing not enabled. Set ENABLE_DB_TESTS=true or run in CI")
-	}
+func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, *database.TestDB, func()) {
+	// Setup test database with GORM
+	testDB := database.NewTestDB(t)
 
-	// Setup test database
-	testDB, err := database.SetupTestDB(nil) // Use default config
+	// Auto-migrate required models
+	err := testDB.Migrate(&models.RefreshTokenModel{}, &models.UserModel{}, &models.AreaModel{})
 	if err != nil {
-		t.Fatalf("Failed to setup test database: %v", err)
+		t.Fatalf("Failed to migrate test database: %v", err)
 	}
 
-	repo := &refreshTokenRepository{db: testDB.DB}
+	repo := NewRefreshTokenRepository(testDB.GormDB)
 
 	cleanup := func() {
-		if err := testDB.Close(); err != nil {
-			t.Errorf("Failed to cleanup test database: %v", err)
-		}
+		testDB.Close()
 	}
 
-	return repo, testDB.DB, cleanup
+	return repo.(*refreshTokenRepository), testDB, cleanup
 }
 
-func createTestUserForRefreshToken(t *testing.T, db *database.DB) uuid.UUID {
-	// First create a test area
+func createTestUserForRefreshToken(t *testing.T, db *database.TestDB) uuid.UUID {
+	// Create a test area first
 	areaID := uuid.New()
-	areaCode := fmt.Sprintf("TEST_%s", areaID.String()[:8])
+	area := &entities.Area{
+		ID:                   areaID,
+		Type:                 valueobjects.AreaTypeTown,
+		Name:                 "Test Area",
+		Code:                 "TEST001",
+		CenterLat:            0,
+		CenterLng:            0,
+		OperationalRadius:    10,
+		Status:               valueobjects.AreaStatusActive,
+		ServiceAvailability:  make(map[string]bool),
+		Settings:             make(map[string]interface{}),
+		SwitchingMode:        entities.SwitchingModeManual,
+		AllowCrossTrade:      false,
+		NearbyAreaIDs:        []uuid.UUID{},
+		TransitionZones:      []entities.TransitionZone{},
+		Timezone:             "UTC",
+		Languages:            []string{"en"},
+		Currency:             "USD",
+		TaxRate:              0.0,
+		MinOrderValue:        0.0,
+		DeliveryFeeStructure: make(map[string]interface{}),
+		CrossAreaFees:        make(map[string]float64),
+		OperationalHours:     make(map[string]interface{}),
+		CreatedAt:            time.Now(),
+		UpdatedAt:            time.Now(),
+	}
 
-	areaQuery := `
-		INSERT INTO areas (
-			id, type, name, code, center_lat, center_lng,
-			center_point, operational_radius, status,
-			service_availability, settings, switching_mode,
-			allow_cross_trade, nearby_area_ids, transition_zones,
-			timezone, languages, currency, tax_rate, min_order_value,
-			delivery_fee_structure, cross_area_fees, operational_hours,
-			created_at, updated_at
-		) VALUES (
-			$1, 'town', 'Test Area', $2, 0, 0,
-			ST_SetSRID(ST_MakePoint(0, 0), 4326), 10, 'active',
-			'{}', '{}', 'manual',
-			false, '{}', '[]',
-			'UTC', '{"en"}', 'USD', 0, 0,
-			'{}', '{}', '{}',
-			NOW(), NOW()
-		)`
-
-	_, err := db.Exec(areaQuery, areaID, areaCode)
+	areaModel := models.AreaFromEntity(area)
+	err := db.DB.Create(areaModel).Error
 	require.NoError(t, err)
 
-	// Now create a test user
+	// Create a test user
 	userID := uuid.New()
-	userQuery := `
-		INSERT INTO users (
-			id, email, phone, name, password_hash,
-			profile_image_url, email_verified, phone_verified,
-			id_verified, verification_level, google_id, facebook_id,
-			mfa_enabled, mfa_secret, area_id, last_known_lat, last_known_lng,
-			status, created_at, updated_at
-		) VALUES (
-			$1, $2, $3, 'Test User', 'hashed_password',
-			'', false, false,
-			false, 0, NULL, NULL,
-			false, NULL, $4, NULL, NULL,
-			'active', NOW(), NOW()
-		)`
+	email, _ := valueobjects.NewEmail("test@example.com")
+	phone, _ := valueobjects.NewPhone("+1234567890")
 
-	email := fmt.Sprintf("test_%s@example.com", userID.String()[:8])
-	phone := fmt.Sprintf("+123456%s", userID.String()[:4])
+	user := &entities.User{
+		ID:           userID,
+		Email:        email,
+		Phone:        phone,
+		Name:         "Test User",
+		PasswordHash: "hashed_password",
+		Status:       entities.UserStatusActive,
+		AreaID:       areaID,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
 
-	_, err = db.Exec(userQuery, userID, email, phone, areaID)
+	userModel := models.UserFromEntity(user)
+	err = db.DB.Create(userModel).Error
 	require.NoError(t, err)
 
 	return userID

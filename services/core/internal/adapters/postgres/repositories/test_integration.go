@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package gorm_repositories
+package repositories
 
 import (
 	"context"
@@ -35,7 +35,7 @@ func TestGORMWithPostGIS(t *testing.T) {
 	defer db.Close()
 
 	// Auto-migrate test tables
-	err = db.AutoMigrate(&models.Area{}, &models.User{})
+	err = db.AutoMigrate(&models.AreaModel{}, &models.UserModel{})
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -124,9 +124,8 @@ func TestGORMWithPostGIS(t *testing.T) {
 
 	t.Run("Spatial queries with gogis", func(t *testing.T) {
 		// Create multiple areas
-		areas := []models.Area{
+		areas := []models.AreaModel{
 			{
-				ID:          uuid.New(),
 				Type:        "city",
 				Name:        "New York",
 				Code:        "NYC",
@@ -134,7 +133,6 @@ func TestGORMWithPostGIS(t *testing.T) {
 				Status:      "active",
 			},
 			{
-				ID:          uuid.New(),
 				Type:        "city",
 				Name:        "Philadelphia",
 				Code:        "PHL",
@@ -142,7 +140,6 @@ func TestGORMWithPostGIS(t *testing.T) {
 				Status:      "active",
 			},
 			{
-				ID:          uuid.New(),
 				Type:        "city",
 				Name:        "Boston",
 				Code:        "BOS",
@@ -156,7 +153,7 @@ func TestGORMWithPostGIS(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Find nearest city to a point
-		var nearest models.Area
+		var nearest models.AreaModel
 		testLat, testLng := 40.0000, -74.5000
 
 		err = db.
@@ -168,7 +165,7 @@ func TestGORMWithPostGIS(t *testing.T) {
 		assert.Equal(t, "NYC", nearest.Code) // NYC should be nearest
 
 		// Find all cities within 200km
-		var withinRange []models.Area
+		var withinRange []models.AreaModel
 		err = db.
 			Where("ST_DWithin(center_point::geography, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)",
 				testLng, testLat, 200000). // 200km in meters

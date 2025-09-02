@@ -2,7 +2,6 @@ package repositories
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -12,30 +11,27 @@ import (
 
 	"github.com/paradoxe35/torra/packages/database"
 	"github.com/paradoxe35/torra/packages/errors"
+	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/models"
 	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
 )
 
 func setupJWTKeyRepo(t *testing.T) (*jwtKeyRepository, func()) {
-	// Skip test if database testing is not enabled
-	if !database.IsTestingEnabled() {
-		t.Skip("Skipping test: database testing not enabled. Set ENABLE_DB_TESTS=true or run in CI")
-	}
+	// Setup test database with GORM
+	testDB := database.NewTestDB(t)
 
-	// Setup test database
-	testDB, err := database.SetupTestDB(nil) // Use default config
+	// Auto-migrate required models
+	err := testDB.Migrate(&models.JWTKeyModel{})
 	if err != nil {
-		t.Fatalf("Failed to setup test database: %v", err)
+		t.Fatalf("Failed to migrate test database: %v", err)
 	}
 
-	repo := &jwtKeyRepository{db: testDB.DB}
+	repo := NewJWTKeyRepository(testDB.GormDB)
 
 	cleanup := func() {
-		if err := testDB.Close(); err != nil {
-			t.Errorf("Failed to cleanup test database: %v", err)
-		}
+		testDB.Close()
 	}
 
-	return repo, cleanup
+	return repo.(*jwtKeyRepository), cleanup
 }
 
 func createTestJWTKey(t *testing.T) *entities.JWTKey {
@@ -334,7 +330,7 @@ func TestJWTKeyRepository_ConcurrentOperations(t *testing.T) {
 		defer func() { done <- true }()
 		for i := 0; i < 5; i++ {
 			key := createTestJWTKey(t)
-			key.KeyID = fmt.Sprintf("concurrent-key-1-%d", i)
+			key.KeyID = "concurrent-key-1"
 			if err := repo.Create(ctx, key); err == nil {
 				createdKeys <- key
 			}
@@ -345,7 +341,7 @@ func TestJWTKeyRepository_ConcurrentOperations(t *testing.T) {
 		defer func() { done <- true }()
 		for i := 0; i < 5; i++ {
 			key := createTestJWTKey(t)
-			key.KeyID = fmt.Sprintf("concurrent-key-2-%d", i)
+			key.KeyID = "concurrent-key-2"
 			if err := repo.Create(ctx, key); err == nil {
 				createdKeys <- key
 			}
