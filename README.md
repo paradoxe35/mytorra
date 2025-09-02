@@ -37,10 +37,10 @@ docker-compose up -d
 mytorra/
 ├── services/          # Microservices
 │   ├── core/         # User auth, payments, subscriptions
-│   ├── marketplace/  # MyTorra & TorraShop
-│   ├── delivery/     # TorraFood & TorraDelivery
-│   ├── booking/      # TorraBooking & TorraFlight
-│   └── torracab/     # Ride-hailing service
+│   ├── marketplace/  # MyTorra & MyTorraShop
+│   ├── delivery/     # MyTorraFood & MyTorraDelivery
+│   ├── booking/      # MyTorraBooking & MyTorraFlight
+│   └── mytorracab/     # Ride-hailing service
 ├── packages/         # Shared packages
 │   ├── config/       # Configuration management
 │   ├── logger/       # Structured logging

@@ -74,7 +74,7 @@ jobs:
     strategy:
       matrix:
         service:
-          [core, marketplace, delivery, booking, torracab, media, realtime]
+          [core, marketplace, delivery, booking, mytorracab, media, realtime]
         os: [linux, darwin, windows]
         arch: [amd64, arm64]
         exclude:
@@ -146,7 +146,7 @@ jobs:
     strategy:
       matrix:
         service:
-          [core, marketplace, delivery, booking, torracab, media, realtime]
+          [core, marketplace, delivery, booking, mytorracab, media, realtime]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -324,7 +324,7 @@ jobs:
   #         NAMESPACE="mytorra-production"
   #
   #         # Update deployments with new version
-  #         for service in core marketplace delivery booking torracab media realtime; do
+  #         for service in core marketplace delivery booking mytorracab media realtime; do
   #           kubectl set image deployment/${service} \
   #             ${service}=${{ env.REGISTRY }}/${{ github.repository }}/mytorra-${service}:${VERSION} \
   #             -n ${NAMESPACE}

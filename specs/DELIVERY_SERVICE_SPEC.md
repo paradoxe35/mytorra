@@ -1,7 +1,7 @@
 # Delivery Service Specification
 
 ## Overview
-The Delivery Service manages TorraFood (restaurant ordering and delivery) and TorraDelivery (package/parcel delivery). It coordinates a shared pool of delivery agents, handles route optimization, and manages the complete order fulfillment lifecycle.
+The Delivery Service manages MyTorraFood (restaurant ordering and delivery) and MyTorraDelivery (package/parcel delivery). It coordinates a shared pool of delivery agents, handles route optimization, and manages the complete order fulfillment lifecycle.
 
 ## Service Responsibilities
 
@@ -147,7 +147,7 @@ placed -> accepted -> preparing -> ready -> picked_up -> in_transit -> delivered
   - Delivery tracking
   - ETA updates
 
-### 3. TorraDelivery (Package Delivery)
+### 3. MyTorraDelivery (Package Delivery)
 
 #### Package Delivery Services
 - **Same-Day Delivery**
@@ -555,7 +555,7 @@ CREATE TABLE package_deliveries (
 - Seller shipping options
 - Order fulfillment coordination
 
-### With TorraCab Service
+### With MyTorraCab Service
 - Shared delivery agent pool
 - Cross-service agent availability
 - Unified location tracking

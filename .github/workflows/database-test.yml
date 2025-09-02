@@ -29,8 +29,8 @@ permissions:
 
 env:
   POSTGRES_USER: mytorra
-  POSTGRES_PASSWORD: torra_test_password
-  POSTGRES_DB: torra_test
+  POSTGRES_PASSWORD: mytorra_test_password
+  POSTGRES_DB: mytorra_test
 
 jobs:
   detect-services:
@@ -105,8 +105,8 @@ jobs:
         image: postgis/postgis:17-3.5-alpine
         env:
           POSTGRES_USER: mytorra
-          POSTGRES_PASSWORD: torra_test_password
-          POSTGRES_DB: torra_test
+          POSTGRES_PASSWORD: mytorra_test_password
+          POSTGRES_DB: mytorra_test
         options: >-
           --health-cmd "pg_isready -U mytorra"
           --health-interval 10s
@@ -269,8 +269,8 @@ jobs:
         image: postgis/postgis:17-3.5-alpine
         env:
           POSTGRES_USER: mytorra
-          POSTGRES_PASSWORD: torra_test_password
-          POSTGRES_DB: torra_test
+          POSTGRES_PASSWORD: mytorra_test_password
+          POSTGRES_DB: mytorra_test
         options: >-
           --health-cmd "pg_isready -U mytorra"
           --health-interval 10s

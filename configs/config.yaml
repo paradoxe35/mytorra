@@ -15,7 +15,7 @@ database:
   port: 5432
   user: "postgres"
   password: "postgres"
-  database: "torra_dev"
+  database: "mytorra_dev"
   ssl_mode: "disable"
   max_open_conns: 25
   max_idle_conns: 25

@@ -11,7 +11,7 @@ help: ## Show this help message
 # Variables
 GO := go
 GOFLAGS := -v
-SERVICES := core marketplace delivery booking torracab media realtime
+SERVICES := core marketplace delivery booking mytorracab media realtime
 PACKAGES := config logger security http database events errors cache
 COVERAGE_THRESHOLD := 80
 

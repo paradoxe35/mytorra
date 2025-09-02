@@ -290,8 +290,8 @@ Environment variables:
   POSTGRES_HOST      - PostgreSQL host (default: localhost)
   POSTGRES_PORT      - PostgreSQL port (default: 5432)
   POSTGRES_USER      - PostgreSQL user (default: mytorra)
-  POSTGRES_PASSWORD  - PostgreSQL password (default: torra_dev_password)
-  POSTGRES_DB        - Base database name (default: torra_dev)
+  POSTGRES_PASSWORD  - PostgreSQL password (default: mytorra_dev_password)
+  POSTGRES_DB        - Base database name (default: mytorra_dev)
   POSTGRES_SSLMODE   - SSL mode (default: disable)
 
 Examples:

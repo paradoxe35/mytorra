@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS areas (
 
     -- Configuration
     status VARCHAR(20) NOT NULL DEFAULT 'active',
-    service_availability JSONB, -- {"mytorra": true, "torra_shop": true, ...}
+    service_availability JSONB, -- {"mytorra": true, "mytorra_shop": true, ...}
     settings JSONB, -- Area-specific settings
 
     -- Area Behavior Settings

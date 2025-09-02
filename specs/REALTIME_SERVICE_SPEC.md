@@ -120,7 +120,7 @@ The Realtime Service is a specialized service running Centrifugo that manages pe
   - Delivery confirmations
   - Customer feedback
 
-#### TorraCab Real-time
+#### MyTorraCab Real-time
 - **Ride Management**
   - Ride requests
   - Driver assignment
@@ -267,7 +267,7 @@ err := realtimeClient.Publish("private:order:456", map[string]interface{}{
 })
 ```
 
-#### TorraCab Service Integration
+#### MyTorraCab Service Integration
 ```go
 // Broadcast driver location
 err := realtimeClient.Publish("ride:789", map[string]interface{}{
