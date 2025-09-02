@@ -17,9 +17,9 @@ import (
 	"github.com/stripe/stripe-go/v76/subscription"
 	"github.com/stripe/stripe-go/v76/webhook"
 
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
 type StripeAdapter struct {

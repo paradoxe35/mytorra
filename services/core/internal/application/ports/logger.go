@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"github.com/paradoxe35/torra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/logger"
 )
 
 // Logger is an alias to the shared logger interface

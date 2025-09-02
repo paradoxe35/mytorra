@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Configuration
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
-POSTGRES_USER="${POSTGRES_USER:-torra}"
+POSTGRES_USER="${POSTGRES_USER:-mytorra}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-torra_dev_password}"
 POSTGRES_DB="${POSTGRES_DB:-torra_dev}"
 POSTGRES_SSLMODE="${POSTGRES_SSLMODE:-disable}"
@@ -289,7 +289,7 @@ Arguments:
 Environment variables:
   POSTGRES_HOST      - PostgreSQL host (default: localhost)
   POSTGRES_PORT      - PostgreSQL port (default: 5432)
-  POSTGRES_USER      - PostgreSQL user (default: torra)
+  POSTGRES_USER      - PostgreSQL user (default: mytorra)
   POSTGRES_PASSWORD  - PostgreSQL password (default: torra_dev_password)
   POSTGRES_DB        - Base database name (default: torra_dev)
   POSTGRES_SSLMODE   - SSL mode (default: disable)

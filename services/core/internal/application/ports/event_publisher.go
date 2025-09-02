@@ -3,7 +3,7 @@ package ports
 import (
 	"context"
 
-	"github.com/paradoxe35/torra/packages/events"
+	"github.com/paradoxe35/mytorra/packages/events"
 )
 
 // EventPublisher is an alias to the shared events interface

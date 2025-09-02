@@ -9,9 +9,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 
-	"github.com/paradoxe35/torra/packages/errors"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/security"
+	"github.com/paradoxe35/mytorra/packages/errors"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/security"
 )
 
 // Custom validator instance

@@ -11,22 +11,22 @@ import (
 	"time"
 
 	// Shared packages
-	"github.com/paradoxe35/torra/packages/cache"
-	"github.com/paradoxe35/torra/packages/config"
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/packages/events"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/packages/security"
+	"github.com/paradoxe35/mytorra/packages/cache"
+	"github.com/paradoxe35/mytorra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/packages/events"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
 
 	// Internal packages
-	adaptersHTTP "github.com/paradoxe35/torra/services/core/internal/adapters/http"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/payment"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/repositories"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/application/services"
+	adaptersHTTP "github.com/paradoxe35/mytorra/services/core/internal/adapters/http"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/http/handlers"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/http/middleware"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/payment"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/repositories"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/services"
 )
 
 func main() {

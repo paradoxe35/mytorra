@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
 // MockAdapter is a mock implementation of the PaymentGateway interface for testing

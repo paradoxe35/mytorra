@@ -28,7 +28,7 @@ permissions:
   actions: write
 
 env:
-  POSTGRES_USER: torra
+  POSTGRES_USER: mytorra
   POSTGRES_PASSWORD: torra_test_password
   POSTGRES_DB: torra_test
 
@@ -104,11 +104,11 @@ jobs:
       postgres:
         image: postgis/postgis:17-3.5-alpine
         env:
-          POSTGRES_USER: torra
+          POSTGRES_USER: mytorra
           POSTGRES_PASSWORD: torra_test_password
           POSTGRES_DB: torra_test
         options: >-
-          --health-cmd "pg_isready -U torra"
+          --health-cmd "pg_isready -U mytorra"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -268,11 +268,11 @@ jobs:
       postgres:
         image: postgis/postgis:17-3.5-alpine
         env:
-          POSTGRES_USER: torra
+          POSTGRES_USER: mytorra
           POSTGRES_PASSWORD: torra_test_password
           POSTGRES_DB: torra_test
         options: >-
-          --health-cmd "pg_isready -U torra"
+          --health-cmd "pg_isready -U mytorra"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5

@@ -58,7 +58,7 @@ func GenerateAPIKey() (string, error) {
 // GenerateMFASecret generates a base32 secret for MFA/TOTP
 func GenerateMFASecret() (string, error) {
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "Torra",
+		Issuer:      "MyTorra",
 		AccountName: "",
 		SecretSize:  32,
 	})

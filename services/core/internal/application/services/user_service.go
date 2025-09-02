@@ -10,16 +10,16 @@ import (
 	"github.com/google/uuid"
 
 	// Use shared packages
-	appErrors "github.com/paradoxe35/torra/packages/errors"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/packages/security"
+	appErrors "github.com/paradoxe35/mytorra/packages/errors"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
 
-	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/events"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/dtos"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/events"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 type UserService struct {
@@ -342,7 +342,7 @@ func (s *UserService) EnableMFA(ctx context.Context, userID uuid.UUID) (*dtos.En
 
 	return &dtos.EnableMFAResponse{
 		Secret: string(secret),
-		QRCode: fmt.Sprintf("otpauth://totp/Torra:%s?secret=%s&issuer=Torra", user.Email.String(), secret),
+		QRCode: fmt.Sprintf("otpauth://totp/MyTorra:%s?secret=%s&issuer=MyTorra", user.Email.String(), secret),
 	}, nil
 }
 

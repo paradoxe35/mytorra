@@ -1,3 +1,3 @@
-module github.com/paradoxe35/torra/packages/errors
+module github.com/paradoxe35/mytorra/packages/errors
 
 go 1.25

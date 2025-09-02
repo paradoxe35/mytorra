@@ -1,4 +1,4 @@
-module github.com/paradoxe35/torra/packages/security
+module github.com/paradoxe35/mytorra/packages/security
 
 go 1.25
 

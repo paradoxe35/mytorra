@@ -3,8 +3,8 @@ package models
 import (
 	"time"
 
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
 // JWTKeyModel represents the GORM model for the jwt_keys table

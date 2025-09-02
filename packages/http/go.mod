@@ -1,12 +1,12 @@
-module github.com/paradoxe35/torra/packages/http
+module github.com/paradoxe35/mytorra/packages/http
 
 go 1.25
 
 require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/google/uuid v1.6.0
-	github.com/paradoxe35/torra/packages/i18n v0.0.0
-	github.com/paradoxe35/torra/packages/logger v0.0.0
+	github.com/paradoxe35/mytorra/packages/i18n v0.0.0
+	github.com/paradoxe35/mytorra/packages/logger v0.0.0
 )
 
 require (
@@ -20,6 +20,6 @@ require (
 )
 
 replace (
-	github.com/paradoxe35/torra/packages/i18n => ../i18n
-	github.com/paradoxe35/torra/packages/logger => ../logger
+	github.com/paradoxe35/mytorra/packages/i18n => ../i18n
+	github.com/paradoxe35/mytorra/packages/logger => ../logger
 )

@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 // SubscriptionCreated event is published when a subscription is created

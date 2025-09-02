@@ -1,9 +1,9 @@
 {
-  "token_hmac_secret_key": "torra-centrifugo-secret-key-dev",
+  "token_hmac_secret_key": "mytorra-centrifugo-secret-key-dev",
   "admin": true,
   "admin_password": "torra_admin",
-  "admin_secret": "torra-admin-secret-dev",
-  "api_key": "torra-api-key-dev",
+  "admin_secret": "mytorra-admin-secret-dev",
+  "api_key": "mytorra-api-key-dev",
   "allowed_origins": ["http://localhost:3000", "http://localhost:8080"],
   "health": true,
   "prometheus": true,

@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	httpPkg "github.com/paradoxe35/torra/packages/http"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/packages/security"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
+	httpPkg "github.com/paradoxe35/mytorra/packages/http"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
 )
 
 // JWKSHandler handles JWKS endpoint requests

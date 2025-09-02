@@ -10,15 +10,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/paradoxe35/torra/packages/config"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/packages/security"
-	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports/mocks"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/dtos"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports/mocks"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 func setupOAuthServiceTest(t *testing.T) (*OAuthService, *mocks.OAuthRepository, *mocks.UserRepository, *mocks.EventBus, *mocks.OAuthProvider) {

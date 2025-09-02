@@ -7,10 +7,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	httpPkg "github.com/paradoxe35/torra/packages/http"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/http/handlers"
-	httpMiddleware "github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
+	httpPkg "github.com/paradoxe35/mytorra/packages/http"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/http/handlers"
+	httpMiddleware "github.com/paradoxe35/mytorra/services/core/internal/adapters/http/middleware"
 )
 
 type Router struct {

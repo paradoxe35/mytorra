@@ -1,17 +1,17 @@
-module github.com/paradoxe35/torra/services/core
+module github.com/paradoxe35/mytorra/services/core
 
 go 1.25
 
 replace (
-	github.com/paradoxe35/torra/packages/cache => ../../packages/cache
-	github.com/paradoxe35/torra/packages/config => ../../packages/config
-	github.com/paradoxe35/torra/packages/database => ../../packages/database
-	github.com/paradoxe35/torra/packages/errors => ../../packages/errors
-	github.com/paradoxe35/torra/packages/events => ../../packages/events
-	github.com/paradoxe35/torra/packages/http => ../../packages/http
-	github.com/paradoxe35/torra/packages/i18n => ../../packages/i18n
-	github.com/paradoxe35/torra/packages/logger => ../../packages/logger
-	github.com/paradoxe35/torra/packages/security => ../../packages/security
+	github.com/paradoxe35/mytorra/packages/cache => ../../packages/cache
+	github.com/paradoxe35/mytorra/packages/config => ../../packages/config
+	github.com/paradoxe35/mytorra/packages/database => ../../packages/database
+	github.com/paradoxe35/mytorra/packages/errors => ../../packages/errors
+	github.com/paradoxe35/mytorra/packages/events => ../../packages/events
+	github.com/paradoxe35/mytorra/packages/http => ../../packages/http
+	github.com/paradoxe35/mytorra/packages/i18n => ../../packages/i18n
+	github.com/paradoxe35/mytorra/packages/logger => ../../packages/logger
+	github.com/paradoxe35/mytorra/packages/security => ../../packages/security
 )
 
 require (
@@ -21,15 +21,15 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
-	github.com/paradoxe35/torra/packages/cache v0.0.0-00010101000000-000000000000
-	github.com/paradoxe35/torra/packages/config v0.0.0
-	github.com/paradoxe35/torra/packages/database v0.0.0-00010101000000-000000000000
-	github.com/paradoxe35/torra/packages/errors v0.0.0-00010101000000-000000000000
-	github.com/paradoxe35/torra/packages/events v0.0.0-00010101000000-000000000000
-	github.com/paradoxe35/torra/packages/http v0.0.0-00010101000000-000000000000
-	github.com/paradoxe35/torra/packages/i18n v0.0.0
-	github.com/paradoxe35/torra/packages/logger v0.0.0
-	github.com/paradoxe35/torra/packages/security v0.0.0-00010101000000-000000000000
+	github.com/paradoxe35/mytorra/packages/cache v0.0.0-00010101000000-000000000000
+	github.com/paradoxe35/mytorra/packages/config v0.0.0
+	github.com/paradoxe35/mytorra/packages/database v0.0.0-00010101000000-000000000000
+	github.com/paradoxe35/mytorra/packages/errors v0.0.0-00010101000000-000000000000
+	github.com/paradoxe35/mytorra/packages/events v0.0.0-00010101000000-000000000000
+	github.com/paradoxe35/mytorra/packages/http v0.0.0-00010101000000-000000000000
+	github.com/paradoxe35/mytorra/packages/i18n v0.0.0
+	github.com/paradoxe35/mytorra/packages/logger v0.0.0
+	github.com/paradoxe35/mytorra/packages/security v0.0.0-00010101000000-000000000000
 	github.com/restayway/gogis v1.0.1
 	github.com/shopspring/decimal v1.4.0
 	github.com/stretchr/testify v1.11.1

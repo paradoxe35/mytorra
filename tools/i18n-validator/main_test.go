@@ -101,7 +101,7 @@ func TestI18nValidator_ScanCodeForI18nKeys(t *testing.T) {
 
 import (
 	"context"
-	"github.com/paradoxe35/torra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/i18n"
 )
 
 func main() {

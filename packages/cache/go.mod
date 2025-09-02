@@ -1,10 +1,10 @@
-module github.com/paradoxe35/torra/packages/cache
+module github.com/paradoxe35/mytorra/packages/cache
 
 go 1.25
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/paradoxe35/torra/packages/config v0.0.0
+	github.com/paradoxe35/mytorra/packages/config v0.0.0
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -30,4 +30,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/paradoxe35/torra/packages/config => ../config
+replace github.com/paradoxe35/mytorra/packages/config => ../config

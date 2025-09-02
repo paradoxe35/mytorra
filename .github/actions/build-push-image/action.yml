@@ -75,8 +75,8 @@ runs:
         REPO="${{ inputs.repository }}"
         TAG="${{ inputs.tag }}"
 
-        API_IMAGE="$REGISTRY/$REPO/torra-${{ inputs.service-name }}-api:$TAG"
-        WORKER_IMAGE="$REGISTRY/$REPO/torra-${{ inputs.service-name }}-worker:$TAG"
+        API_IMAGE="$REGISTRY/$REPO/mytorra-${{ inputs.service-name }}-api:$TAG"
+        WORKER_IMAGE="$REGISTRY/$REPO/mytorra-${{ inputs.service-name }}-worker:$TAG"
 
         echo "image-api=$API_IMAGE" >> $GITHUB_OUTPUT
         echo "image-worker=$WORKER_IMAGE" >> $GITHUB_OUTPUT

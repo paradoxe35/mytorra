@@ -8,12 +8,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	httpPkg "github.com/paradoxe35/torra/packages/http"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/http/middleware"
-	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
-	"github.com/paradoxe35/torra/services/core/internal/application/services"
+	httpPkg "github.com/paradoxe35/mytorra/packages/http"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/http/middleware"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/dtos"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/services"
 )
 
 // OAuthHandler handles OAuth-related HTTP requests

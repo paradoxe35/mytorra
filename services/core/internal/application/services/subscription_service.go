@@ -8,14 +8,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/paradoxe35/torra/packages/events"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	domainEvents "github.com/paradoxe35/torra/services/core/internal/domain/events"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/events"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/dtos"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	domainEvents "github.com/paradoxe35/mytorra/services/core/internal/domain/events"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 // SubscriptionService handles subscription business logic

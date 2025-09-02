@@ -57,7 +57,7 @@ COPY --from=builder /build/services/core/migrations/ /app/migrations/
 # Copy locale files for i18n
 COPY --from=builder /build/packages/i18n/locales/ /app/locales/
 
-LABEL org.opencontainers.image.source=https://github.com/paradoxe35/torra
+LABEL org.opencontainers.image.source=https://github.com/paradoxe35/mytorra
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/tmp

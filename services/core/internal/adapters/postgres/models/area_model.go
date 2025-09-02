@@ -7,10 +7,10 @@ import (
 	"github.com/lib/pq"
 	"github.com/restayway/gogis"
 
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/types"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/types"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 // AreaModel represents the GORM model for the areas table

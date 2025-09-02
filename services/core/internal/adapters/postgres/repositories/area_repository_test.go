@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/models"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/models"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 func setupAreaRepo(t *testing.T) (*areaRepository, func()) {

@@ -6,10 +6,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/types"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/types"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 // SubscriptionModel represents the GORM model for subscriptions table

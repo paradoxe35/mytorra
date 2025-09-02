@@ -1,4 +1,4 @@
-module github.com/paradoxe35/torra/packages/config
+module github.com/paradoxe35/mytorra/packages/config
 
 go 1.25
 

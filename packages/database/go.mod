@@ -1,11 +1,11 @@
-module github.com/paradoxe35/torra/packages/database
+module github.com/paradoxe35/mytorra/packages/database
 
 go 1.25
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/paradoxe35/torra/packages/config v0.0.0
-	github.com/paradoxe35/torra/packages/logger v0.0.0
+	github.com/paradoxe35/mytorra/packages/config v0.0.0
+	github.com/paradoxe35/mytorra/packages/logger v0.0.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.2
 )
@@ -39,6 +39,6 @@ require (
 )
 
 replace (
-	github.com/paradoxe35/torra/packages/config => ../config
-	github.com/paradoxe35/torra/packages/logger => ../logger
+	github.com/paradoxe35/mytorra/packages/config => ../config
+	github.com/paradoxe35/mytorra/packages/logger => ../logger
 )

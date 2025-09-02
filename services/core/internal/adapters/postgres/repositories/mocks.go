@@ -6,11 +6,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/paradoxe35/torra/packages/cache"
-	"github.com/paradoxe35/torra/packages/events"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/cache"
+	"github.com/paradoxe35/mytorra/packages/events"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 // MockUserRepository implements ports.UserRepository for tests

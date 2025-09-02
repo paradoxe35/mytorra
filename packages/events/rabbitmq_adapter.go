@@ -8,8 +8,8 @@ import (
 
 	"github.com/streadway/amqp"
 
-	"github.com/paradoxe35/torra/packages/config"
-	"github.com/paradoxe35/torra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/logger"
 )
 
 // RabbitMQAdapter implements the EventPublisher interface using RabbitMQ

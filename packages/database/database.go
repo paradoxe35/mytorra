@@ -10,8 +10,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/paradoxe35/torra/packages/config"
-	pkgLogger "github.com/paradoxe35/torra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/config"
+	pkgLogger "github.com/paradoxe35/mytorra/packages/logger"
 )
 
 // GormDB wraps the GORM database connection

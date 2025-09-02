@@ -1,4 +1,4 @@
-module github.com/paradoxe35/torra/packages/logger
+module github.com/paradoxe35/mytorra/packages/logger
 
 go 1.25
 

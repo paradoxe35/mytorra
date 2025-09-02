@@ -14,8 +14,8 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/facebook"
 
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
 )
 
 const (

@@ -9,13 +9,13 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	"github.com/paradoxe35/torra/packages/database"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/packages/security"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/postgres/models"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/database"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/models"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 type oauthRepository struct {

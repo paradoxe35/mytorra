@@ -11,12 +11,12 @@ MyTorra is a comprehensive multi-service platform with dynamic area management, 
 ### 1.2 Core Modules
 
 1. **MyTorra** - Used products marketplace
-2. **Torra Shop** - New products promotion platform
-3. **Torra Cab** - Transportation services
-4. **Torra Flight** - Flight booking
-5. **Torra Booking** - Reservation services
-6. **Torra Food** - Food ordering & delivery
-7. **Torra Delivery** - Courier & logistics
+2. **MyTorra Shop** - New products promotion platform
+3. **MyTorra Cab** - Transportation services
+4. **MyTorra Flight** - Flight booking
+5. **MyTorra Booking** - Reservation services
+6. **MyTorra Food** - Food ordering & delivery
+7. **MyTorra Delivery** - Courier & logistics
 
 ### 1.3 Strategic Differentiators
 
@@ -190,7 +190,7 @@ MyTorra is a comprehensive multi-service platform with dynamic area management, 
 ### 3.1 How the Want System Works
 
 **Creating a Want Request:**
-When users can't find what they're looking for, they create a "want" that actively searches across both MyTorra (used items) and Torra Shop (new items). This makes the platform proactive rather than passive, bringing products to users instead of users endlessly searching.
+When users can't find what they're looking for, they create a "want" that actively searches across both MyTorra (used items) and MyTorra Shop (new items). This makes the platform proactive rather than passive, bringing products to users instead of users endlessly searching.
 
 **Want Creation Process:**
 
@@ -202,7 +202,7 @@ When users can't find what they're looking for, they create a "want" that active
    - Urgency level (immediate, within week, within month)
    - Preferred locations for pickup/delivery
    - Valid duration (how long to keep searching)
-3. System immediately searches existing inventory in both MyTorra and Torra Shop
+3. System immediately searches existing inventory in both MyTorra and MyTorra Shop
 4. Shows instant matches if available
 5. If no matches, want becomes active and enters monitoring mode
 
@@ -213,7 +213,7 @@ When users can't find what they're looking for, they create a "want" that active
 **Immediate Matching:**
 
 - System scans all current listings in MyTorra for used items
-- Simultaneously searches Torra Shop for new alternatives
+- Simultaneously searches MyTorra Shop for new alternatives
 - Applies match scoring (0-100%) based on criteria alignment
 - Presents results ranked by match percentage and seller reputation
 
@@ -244,7 +244,7 @@ When users can't find what they're looking for, they create a "want" that active
 - "Seller with 4.8 stars has your wanted item"
 - "Price drop on item matching your want"
 
-**From Torra Shop (New Items):**
+**From MyTorra Shop (New Items):**
 
 - "New [product] available matching your specifications"
 - "Special offer: 20% off on your wanted item"
@@ -254,7 +254,7 @@ When users can't find what they're looking for, they create a "want" that active
 
 - If want is for "iPhone" at $200, system shows:
   - Used iPhone 11 from MyTorra at $180
-  - New iPhone SE from Torra Shop at $220 with payment plan
+  - New iPhone SE from MyTorra Shop at $220 with payment plan
   - Suggests alternative: "Samsung A52 at similar price point"
 
 **Notification Timing:**
@@ -400,7 +400,7 @@ When users can't find what they're looking for, they create a "want" that active
 
 ---
 
-## 5. Torra Shop - New Products Platform
+## 5. MyTorra Shop - New Products Platform
 
 ### 5.1 Subscription-Based Seller Platform
 
@@ -529,7 +529,7 @@ When users can't find what they're looking for, they create a "want" that active
 
 ---
 
-## 6. Torra Cab - Transportation Services
+## 6. MyTorra Cab - Transportation Services
 
 ### 6.1 Service Framework
 
@@ -567,7 +567,7 @@ When users can't find what they're looking for, they create a "want" that active
 
 ---
 
-## 7. Torra Food - Restaurant Delivery Service
+## 7. MyTorra Food - Restaurant Delivery Service
 
 ### 7.1 Business Model
 
@@ -577,7 +577,7 @@ When users can't find what they're looking for, they create a "want" that active
 
 **Starter Package (Monthly Subscription)**
 
-- Listing on Torra Food platform
+- Listing on MyTorra Food platform
 - Up to 50 orders per month
 - Basic analytics dashboard
 - Standard delivery radius (5km)
@@ -680,7 +680,7 @@ When users can't find what they're looking for, they create a "want" that active
 
 **Notification Types:**
 
-- Want matches from MyTorra and Torra Shop
+- Want matches from MyTorra and MyTorra Shop
 - Price drops on wishlisted items
 - New products in interested categories
 - Delivery status updates
@@ -805,7 +805,7 @@ When users can't find what they're looking for, they create a "want" that active
 
 **Subscription Revenue (Recurring):**
 
-**Torra Shop Seller Subscriptions:**
+**MyTorra Shop Seller Subscriptions:**
 
 - Basic: Free (limited features)
 - Professional: $25/month per seller
@@ -813,7 +813,7 @@ When users can't find what they're looking for, they create a "want" that active
 - Enterprise: Custom pricing for large businesses
 - Target: 500 paid sellers in Year 1
 
-**Torra Food Restaurant Subscriptions:**
+**MyTorra Food Restaurant Subscriptions:**
 
 - Starter: $50/month + 20% commission
 - Growth: $150/month + 15% commission
@@ -832,10 +832,10 @@ When users can't find what they're looking for, they create a "want" that active
 **Transaction-Based Revenue:**
 
 - MyTorra marketplace: 3-5% on successful sales
-- Torra Shop featured listings: $2-10 per boost
-- Torra Cab rides: 15-20% commission
-- Torra Food: Commission based on tier (10-20%)
-- Torra Delivery: Fixed fee + distance charges
+- MyTorra Shop featured listings: $2-10 per boost
+- MyTorra Cab rides: 15-20% commission
+- MyTorra Food: Commission based on tier (10-20%)
+- MyTorra Delivery: Fixed fee + distance charges
 - Payment processing: 1.5% on all transactions
 
 **Promotional & Advertising Revenue:**
@@ -918,7 +918,7 @@ When users can't find what they're looking for, they create a "want" that active
    - `area_history`: Previously visited areas
    - `area_preferences`: Settings per area
 
-2. **Product/Listing Entity (MyTorra & Torra Shop)**
+2. **Product/Listing Entity (MyTorra & MyTorra Shop)**
    - `primary_area_id`: Main listing area
    - `secondary_area_ids[]`: Additional areas (if expanded)
    - `area_pricing{}`: Different prices per area
@@ -930,12 +930,12 @@ When users can't find what they're looking for, they create a "want" that active
    - `delivery_area_id`: Actual delivery area (may differ)
    - `cross_area_fee`: Additional fee if applicable
 
-4. **Restaurant Entity (Torra Food)**
+4. **Restaurant Entity (MyTorra Food)**
    - `area_id`: Restaurant location
    - `delivery_areas[]`: Areas they can deliver to
    - `area_specific_menu{}`: Menu variations per area
 
-5. **Driver Entity (Torra Cab & Delivery)**
+5. **Driver Entity (MyTorra Cab & Delivery)**
    - `operating_area_id`: Primary operating area
    - `allowed_areas[]`: Areas driver can operate in
    - `current_area_id`: Real-time area location
@@ -961,28 +961,28 @@ When users can't find what they're looking for, they create a "want" that active
 - Area trending products
 - Local pickup points per area
 
-**Torra Shop (New Products):**
+**MyTorra Shop (New Products):**
 - Area-specific featured products
 - Regional promotional campaigns
 - Area-based inventory management
 - Drop-shipping to different areas
 - Area performance analytics for sellers
 
-**Torra Food:**
+**MyTorra Food:**
 - Restaurant discovery by area
 - Delivery zone management
 - Area-specific cuisines and preferences
 - Peak hour management per area
 - Ghost kitchen allocation by demand
 
-**Torra Cab:**
+**MyTorra Cab:**
 - Driver distribution per area
 - Cross-area ride requests
 - Area-specific pricing (urban vs suburban)
 - Airport/station special zones
 - Driver area transfer requests
 
-**Torra Delivery:**
+**MyTorra Delivery:**
 - Package routing between areas
 - Hub and spoke model for areas
 - Express vs standard per distance
@@ -1067,16 +1067,16 @@ When users can't find what they're looking for, they create a "want" that active
 **Phase 2 (Months 7-12): Geographic Expansion**
 
 - Expand to Goma
-- Launch Torra Shop
-- Introduce Torra Food
+- Launch MyTorra Shop
+- Introduce MyTorra Food
 - Implement want system
 - Enhance matching algorithms
 
 **Phase 3 (Year 2): Service Diversification**
 
-- Launch Torra Cab
-- Add Torra Delivery
-- Implement Torra Booking
+- Launch MyTorra Cab
+- Add MyTorra Delivery
+- Implement MyTorra Booking
 - Cross-module integration
 - Advanced analytics
 

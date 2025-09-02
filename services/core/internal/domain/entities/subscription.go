@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 type Subscription struct {

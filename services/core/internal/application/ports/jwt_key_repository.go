@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 )
 
 // JWTKeyRepository defines the interface for JWT key persistence

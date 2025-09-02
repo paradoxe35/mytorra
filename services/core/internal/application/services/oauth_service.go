@@ -11,17 +11,17 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/paradoxe35/torra/packages/config"
-	"github.com/paradoxe35/torra/packages/errors"
-	"github.com/paradoxe35/torra/packages/i18n"
-	"github.com/paradoxe35/torra/packages/logger"
-	"github.com/paradoxe35/torra/packages/security"
-	"github.com/paradoxe35/torra/services/core/internal/adapters/oauth"
-	"github.com/paradoxe35/torra/services/core/internal/application/dtos"
-	"github.com/paradoxe35/torra/services/core/internal/application/ports"
-	"github.com/paradoxe35/torra/services/core/internal/domain/entities"
-	"github.com/paradoxe35/torra/services/core/internal/domain/events"
-	"github.com/paradoxe35/torra/services/core/internal/domain/valueobjects"
+	"github.com/paradoxe35/mytorra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/errors"
+	"github.com/paradoxe35/mytorra/packages/i18n"
+	"github.com/paradoxe35/mytorra/packages/logger"
+	"github.com/paradoxe35/mytorra/packages/security"
+	"github.com/paradoxe35/mytorra/services/core/internal/adapters/oauth"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/dtos"
+	"github.com/paradoxe35/mytorra/services/core/internal/application/ports"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/events"
+	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
 // OAuthService handles OAuth-related business logic

@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/paradoxe35/torra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/config"
 )
 
 // TestDB provides a test database instance

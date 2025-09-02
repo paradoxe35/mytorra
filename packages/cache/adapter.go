@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 
-	"github.com/paradoxe35/torra/packages/config"
+	"github.com/paradoxe35/mytorra/packages/config"
 )
 
 // RedisCacheAdapter implements the Cache interface using Redis
