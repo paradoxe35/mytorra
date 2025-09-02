@@ -269,35 +269,32 @@ install: ## Install all service binaries
 #     Database      #
 #===================#
 
-.PHONY: migrate-up
-migrate-up: ## Run database migrations up
-	@echo "$(GREEN)Running migrations up...$(NC)"
-	@for svc in $(SERVICES); do \
-		if [ -d "services/$$svc/migrations" ]; then \
-			echo "Migrating $$svc..."; \
-			migrate -path services/$$svc/migrations -database "$${DATABASE_URL}" up; \
-		fi \
-	done
+# Makefile
+.PHONY: migrate-new migrate-apply migrate-status migrate-lint
 
-.PHONY: migrate-down
-migrate-down: ## Run database migrations down
-	@echo "$(YELLOW)Running migrations down...$(NC)"
-	@for svc in $(SERVICES); do \
-		if [ -d "services/$$svc/migrations" ]; then \
-			echo "Rolling back $$svc..."; \
-			migrate -path services/$$svc/migrations -database "$${DATABASE_URL}" down 1; \
-		fi \
-	done
+# Apply migrations
+migrate-apply:
+	@read -p "Enter service name: " name; \
+	cd services/$$name && \
+	atlas migrate apply --url $(DATABASE_URL) --env bun
 
-.PHONY: migrate-create
-migrate-create: ## Create new migration (use SERVICE=core NAME=create_users)
-	@if [ -z "$(SERVICE)" ] || [ -z "$(NAME)" ]; then \
-		echo "$(RED)Please specify SERVICE=<service_name> NAME=<migration_name>$(NC)"; \
-		exit 1; \
-	fi
-	@echo "$(GREEN)Creating migration for $(SERVICE): $(NAME)$(NC)"
-	@mkdir -p services/$(SERVICE)/migrations
-	migrate create -ext sql -dir services/$(SERVICE)/migrations -seq $(NAME)
+# Check migration status
+migrate-status:
+	@read -p "Enter service name: " service; \
+	cd services/$$service && \
+	atlas migrate status --url $(DATABASE_URL) --env bun
+
+# Lint migrations
+migrate-lint:
+	@read -p "Enter service name: " service; \
+	cd services/$$service && \
+	atlas migrate lint --env bun --latest 1
+
+# Generate migration from schema changes
+migrate-diff:
+	@read -p "Enter service name: " service; \
+	cd services/$$service && \
+	atlas migrate diff --env bun
 
 #===================#
 #      Docker       #

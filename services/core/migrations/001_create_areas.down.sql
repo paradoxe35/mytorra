@@ -1,3 +1,0 @@
-DROP VIEW IF EXISTS area_hierarchy;
-DROP TABLE IF EXISTS area_relationships;
-DROP TABLE IF EXISTS areas CASCADE;

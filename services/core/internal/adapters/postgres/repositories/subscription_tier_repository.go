@@ -2,10 +2,10 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/packages/errors"
@@ -15,18 +15,20 @@ import (
 )
 
 type subscriptionTierRepository struct {
-	db *database.GormDB
+	db *database.DB
 }
 
 // NewSubscriptionTierRepository creates a new subscription tier repository
-func NewSubscriptionTierRepository(db *database.GormDB) ports.SubscriptionTierRepository {
+func NewSubscriptionTierRepository(db *database.DB) ports.SubscriptionTierRepository {
 	return &subscriptionTierRepository{db: db}
 }
 
 func (r *subscriptionTierRepository) Create(ctx context.Context, tier *entities.SubscriptionTier) error {
 	model := models.SubscriptionTierFromEntity(tier)
 
-	err := r.db.WithContext(ctx).Create(model).Error
+	_, err := r.db.NewInsert().
+		Model(model).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create subscription tier: %w", err)
 	}
@@ -37,12 +39,21 @@ func (r *subscriptionTierRepository) Create(ctx context.Context, tier *entities.
 func (r *subscriptionTierRepository) Update(ctx context.Context, tier *entities.SubscriptionTier) error {
 	model := models.SubscriptionTierFromEntity(tier)
 
-	result := r.db.WithContext(ctx).Model(&models.SubscriptionTierModel{}).Where("id = ?", model.ID).Updates(model)
-	if result.Error != nil {
-		return fmt.Errorf("failed to update subscription tier: %w", result.Error)
+	result, err := r.db.NewUpdate().
+		Model(model).
+		Where("id = ?", model.ID).
+		OmitZero().
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update subscription tier: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -52,9 +63,12 @@ func (r *subscriptionTierRepository) Update(ctx context.Context, tier *entities.
 func (r *subscriptionTierRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.SubscriptionTier, error) {
 	var model models.SubscriptionTierModel
 
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&model).Error
+	err := r.db.NewSelect().
+		Model(&model).
+		Where("id = ?", id).
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find subscription tier: %w", err)
@@ -71,9 +85,12 @@ func (r *subscriptionTierRepository) FindByID(ctx context.Context, id uuid.UUID)
 func (r *subscriptionTierRepository) FindByCode(ctx context.Context, code string) (*entities.SubscriptionTier, error) {
 	var model models.SubscriptionTierModel
 
-	err := r.db.WithContext(ctx).Where("code = ? AND is_active = ?", code, true).First(&model).Error
+	err := r.db.NewSelect().
+		Model(&model).
+		Where("code = ? AND is_active = ?", code, true).
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find subscription tier by code: %w", err)
@@ -90,7 +107,10 @@ func (r *subscriptionTierRepository) FindByCode(ctx context.Context, code string
 func (r *subscriptionTierRepository) FindAll(ctx context.Context) ([]*entities.SubscriptionTier, error) {
 	var models []models.SubscriptionTierModel
 
-	err := r.db.WithContext(ctx).Order("sort_order ASC, created_at ASC").Find(&models).Error
+	err := r.db.NewSelect().
+		Model(&models).
+		Order("sort_order ASC", "created_at ASC").
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find subscription tiers: %w", err)
 	}
@@ -110,7 +130,11 @@ func (r *subscriptionTierRepository) FindAll(ctx context.Context) ([]*entities.S
 func (r *subscriptionTierRepository) FindActive(ctx context.Context) ([]*entities.SubscriptionTier, error) {
 	var models []models.SubscriptionTierModel
 
-	err := r.db.WithContext(ctx).Where("is_active = ?", true).Order("sort_order ASC, created_at ASC").Find(&models).Error
+	err := r.db.NewSelect().
+		Model(&models).
+		Where("is_active = ?", true).
+		Order("sort_order ASC", "created_at ASC").
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find active subscription tiers: %w", err)
 	}
@@ -128,12 +152,20 @@ func (r *subscriptionTierRepository) FindActive(ctx context.Context) ([]*entitie
 }
 
 func (r *subscriptionTierRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.SubscriptionTierModel{})
-	if result.Error != nil {
-		return fmt.Errorf("failed to delete subscription tier: %w", result.Error)
+	result, err := r.db.NewDelete().
+		Model(&models.SubscriptionTierModel{}).
+		Where("id = ?", id).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete subscription tier: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 

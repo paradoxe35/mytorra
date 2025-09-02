@@ -36,7 +36,6 @@ require (
 	github.com/stripe/stripe-go/v76 v76.25.0
 	github.com/uptrace/bun v1.2.15
 	golang.org/x/oauth2 v0.30.0
-	gorm.io/gorm v1.30.2
 )
 
 require (
@@ -59,7 +58,6 @@ require (
 	github.com/jackc/pgx/v5 v5.7.5 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
-	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

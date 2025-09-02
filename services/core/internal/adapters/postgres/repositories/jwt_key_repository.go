@@ -2,10 +2,11 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/packages/errors"
@@ -15,18 +16,20 @@ import (
 )
 
 type jwtKeyRepository struct {
-	db *database.GormDB
+	db *database.DB
 }
 
-// NewJWTKeyRepository creates a new GORM-based JWT key repository
-func NewJWTKeyRepository(db *database.GormDB) ports.JWTKeyRepository {
+// NewJWTKeyRepository creates a new Bun-based JWT key repository
+func NewJWTKeyRepository(db *database.DB) ports.JWTKeyRepository {
 	return &jwtKeyRepository{db: db}
 }
 
 func (r *jwtKeyRepository) Create(ctx context.Context, key *entities.JWTKey) error {
 	model := models.JWTKeyFromEntity(key)
 
-	err := r.db.WithContext(ctx).Create(model).Error
+	_, err := r.db.NewInsert().
+		Model(model).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create JWT key: %w", err)
 	}
@@ -39,11 +42,12 @@ func (r *jwtKeyRepository) Create(ctx context.Context, key *entities.JWTKey) err
 func (r *jwtKeyRepository) FindByKeyID(ctx context.Context, keyID string) (*entities.JWTKey, error) {
 	var keyModel models.JWTKeyModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&keyModel).
 		Where("key_id = ?", keyID).
-		First(&keyModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find JWT key: %w", err)
@@ -56,12 +60,14 @@ func (r *jwtKeyRepository) FindActiveKey(ctx context.Context) (*entities.JWTKey,
 	var keyModel models.JWTKeyModel
 
 	now := time.Now()
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&keyModel).
 		Where("is_active = ? AND (expires_at IS NULL OR expires_at > ?)", true, now).
 		Order("created_at DESC").
-		First(&keyModel).Error
+		Limit(1).
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find active JWT key: %w", err)
@@ -74,10 +80,11 @@ func (r *jwtKeyRepository) FindAllActive(ctx context.Context) ([]*entities.JWTKe
 	var keyModels []models.JWTKeyModel
 
 	now := time.Now()
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&keyModels).
 		Where("is_active = ? AND (expires_at IS NULL OR expires_at > ?)", true, now).
 		Order("created_at DESC").
-		Find(&keyModels).Error
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find all active JWT keys: %w", err)
 	}
@@ -93,9 +100,10 @@ func (r *jwtKeyRepository) FindAllActive(ctx context.Context) ([]*entities.JWTKe
 func (r *jwtKeyRepository) FindAll(ctx context.Context) ([]*entities.JWTKey, error) {
 	var keyModels []models.JWTKeyModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&keyModels).
 		Order("created_at DESC").
-		Find(&keyModels).Error
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find all JWT keys: %w", err)
 	}
@@ -111,16 +119,21 @@ func (r *jwtKeyRepository) FindAll(ctx context.Context) ([]*entities.JWTKey, err
 func (r *jwtKeyRepository) Update(ctx context.Context, key *entities.JWTKey) error {
 	model := models.JWTKeyFromEntity(key)
 
-	result := r.db.WithContext(ctx).
-		Model(&models.JWTKeyModel{}).
+	result, err := r.db.NewUpdate().
+		Model(model).
 		Where("id = ?", key.ID).
-		Updates(model)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to update JWT key: %w", result.Error)
+		OmitZero().
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update JWT key: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -128,21 +141,25 @@ func (r *jwtKeyRepository) Update(ctx context.Context, key *entities.JWTKey) err
 }
 
 func (r *jwtKeyRepository) RotateKey(ctx context.Context, newKey *entities.JWTKey) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	return r.db.Transaction(ctx, func(ctx context.Context, tx bun.Tx) error {
 		// Deactivate all current active keys
 		now := time.Now()
-		if err := tx.Model(&models.JWTKeyModel{}).
+		_, err := tx.NewUpdate().
+			Model(&models.JWTKeyModel{}).
 			Where("is_active = ?", true).
-			Updates(map[string]interface{}{
-				"is_active":  false,
-				"rotated_at": now,
-			}).Error; err != nil {
+			Set("is_active = ?", false).
+			Set("rotated_at = ?", now).
+			Exec(ctx)
+		if err != nil {
 			return fmt.Errorf("failed to deactivate old keys: %w", err)
 		}
 
 		// Create the new active key
 		model := models.JWTKeyFromEntity(newKey)
-		if err := tx.Create(model).Error; err != nil {
+		_, err = tx.NewInsert().
+			Model(model).
+			Exec(ctx)
+		if err != nil {
 			return fmt.Errorf("failed to create new JWT key: %w", err)
 		}
 
@@ -155,28 +172,38 @@ func (r *jwtKeyRepository) RotateKey(ctx context.Context, newKey *entities.JWTKe
 func (r *jwtKeyRepository) DeactivateExpired(ctx context.Context) (int64, error) {
 	now := time.Now()
 
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewUpdate().
 		Model(&models.JWTKeyModel{}).
 		Where("is_active = ? AND expires_at IS NOT NULL AND expires_at < ?", true, now).
-		Update("is_active", false)
-
-	if result.Error != nil {
-		return 0, fmt.Errorf("failed to deactivate expired JWT keys: %w", result.Error)
+		Set("is_active = ?", false).
+		Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to deactivate expired JWT keys: %w", err)
 	}
 
-	return result.RowsAffected, nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	return rowsAffected, nil
 }
 
 func (r *jwtKeyRepository) DeleteOldKeys(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoffTime := time.Now().Add(-olderThan)
 
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewDelete().
+		Model(&models.JWTKeyModel{}).
 		Where("created_at < ? AND is_active = ?", cutoffTime, false).
-		Delete(&models.JWTKeyModel{})
-
-	if result.Error != nil {
-		return 0, fmt.Errorf("failed to delete old JWT keys: %w", result.Error)
+		Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete old JWT keys: %w", err)
 	}
 
-	return result.RowsAffected, nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	return rowsAffected, nil
 }
