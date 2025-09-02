@@ -4,8 +4,6 @@ go 1.25
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/jmoiron/sqlx v1.4.0
-	github.com/lib/pq v1.10.9
 	github.com/paradoxe35/torra/packages/config v0.0.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.2

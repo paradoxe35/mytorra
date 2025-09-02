@@ -3,8 +3,10 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/paradoxe35/torra/packages/database"
 	"github.com/paradoxe35/torra/packages/errors"
@@ -14,28 +16,18 @@ import (
 )
 
 type billingCycleRepository struct {
-	db *database.DB
+	db *database.GormDB
 }
 
 // NewBillingCycleRepository creates a new billing cycle repository
-func NewBillingCycleRepository(db *database.DB) ports.BillingCycleRepository {
+func NewBillingCycleRepository(db *database.GormDB) ports.BillingCycleRepository {
 	return &billingCycleRepository{db: db}
 }
 
 func (r *billingCycleRepository) Create(ctx context.Context, cycle *entities.BillingCycle) error {
-	model := models.FromBillingCycleEntity(cycle)
+	model := models.BillingCycleFromEntity(cycle)
 
-	query := `
-		INSERT INTO billing_cycles (
-			id, subscription_id, start_date, end_date, amount, currency,
-			status, invoice_id, paid_at, created_at, updated_at
-		) VALUES (
-			:id, :subscription_id, :start_date, :end_date, :amount, :currency,
-			:status, :invoice_id, :paid_at, :created_at, :updated_at
-		)
-	`
-
-	_, err := r.db.NamedExecContext(ctx, query, model)
+	err := r.db.WithContext(ctx).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("failed to create billing cycle: %w", err)
 	}
@@ -44,32 +36,14 @@ func (r *billingCycleRepository) Create(ctx context.Context, cycle *entities.Bil
 }
 
 func (r *billingCycleRepository) Update(ctx context.Context, cycle *entities.BillingCycle) error {
-	model := models.FromBillingCycleEntity(cycle)
+	model := models.BillingCycleFromEntity(cycle)
 
-	query := `
-		UPDATE billing_cycles SET
-			start_date = :start_date,
-			end_date = :end_date,
-			amount = :amount,
-			currency = :currency,
-			status = :status,
-			invoice_id = :invoice_id,
-			paid_at = :paid_at,
-			updated_at = :updated_at
-		WHERE id = :id
-	`
-
-	result, err := r.db.NamedExecContext(ctx, query, model)
-	if err != nil {
-		return fmt.Errorf("failed to update billing cycle: %w", err)
+	result := r.db.WithContext(ctx).Model(&models.BillingCycleModel{}).Where("id = ?", model.ID).Updates(model)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update billing cycle: %w", result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -79,39 +53,37 @@ func (r *billingCycleRepository) Update(ctx context.Context, cycle *entities.Bil
 func (r *billingCycleRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.BillingCycle, error) {
 	var model models.BillingCycleModel
 
-	query := `
-		SELECT * FROM billing_cycles
-		WHERE id = $1
-	`
-
-	err := r.db.GetContext(ctx, &model, query, id)
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find billing cycle: %w", err)
 	}
 
-	return model.ToEntity(), nil
+	entity, err := model.ToEntity()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+	}
+
+	return entity, nil
 }
 
 func (r *billingCycleRepository) FindBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) ([]*entities.BillingCycle, error) {
 	var models []models.BillingCycleModel
 
-	query := `
-		SELECT * FROM billing_cycles
-		WHERE subscription_id = $1
-		ORDER BY start_date DESC
-	`
-
-	err := r.db.SelectContext(ctx, &models, query, subscriptionID)
+	err := r.db.WithContext(ctx).Where("subscription_id = ?", subscriptionID).Order("start_date DESC").Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find billing cycles: %w", err)
 	}
 
 	cycles := make([]*entities.BillingCycle, len(models))
 	for i, model := range models {
-		cycles[i] = model.ToEntity()
+		entity, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+		}
+		cycles[i] = entity
 	}
 
 	return cycles, nil
@@ -120,21 +92,18 @@ func (r *billingCycleRepository) FindBySubscriptionID(ctx context.Context, subsc
 func (r *billingCycleRepository) FindPending(ctx context.Context) ([]*entities.BillingCycle, error) {
 	var models []models.BillingCycleModel
 
-	query := `
-		SELECT * FROM billing_cycles
-		WHERE status = 'pending'
-		AND end_date <= NOW()
-		ORDER BY end_date ASC
-	`
-
-	err := r.db.SelectContext(ctx, &models, query)
+	err := r.db.WithContext(ctx).Where("status = ? AND end_date <= ?", "pending", time.Now()).Order("end_date ASC").Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find pending billing cycles: %w", err)
 	}
 
 	cycles := make([]*entities.BillingCycle, len(models))
 	for i, model := range models {
-		cycles[i] = model.ToEntity()
+		entity, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+		}
+		cycles[i] = entity
 	}
 
 	return cycles, nil
@@ -143,41 +112,34 @@ func (r *billingCycleRepository) FindPending(ctx context.Context) ([]*entities.B
 func (r *billingCycleRepository) FindOverdue(ctx context.Context) ([]*entities.BillingCycle, error) {
 	var models []models.BillingCycleModel
 
-	query := `
-		SELECT * FROM billing_cycles
-		WHERE status IN ('pending', 'failed')
-		AND end_date < NOW() - INTERVAL '3 days'
-		AND paid_at IS NULL
-		ORDER BY end_date ASC
-	`
-
-	err := r.db.SelectContext(ctx, &models, query)
+	threeDaysAgo := time.Now().AddDate(0, 0, -3)
+	err := r.db.WithContext(ctx).Where(
+		"status IN (?) AND end_date < ? AND paid_at IS NULL",
+		[]string{"pending", "failed"}, threeDaysAgo,
+	).Order("end_date ASC").Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find overdue billing cycles: %w", err)
 	}
 
 	cycles := make([]*entities.BillingCycle, len(models))
 	for i, model := range models {
-		cycles[i] = model.ToEntity()
+		entity, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+		}
+		cycles[i] = entity
 	}
 
 	return cycles, nil
 }
 
 func (r *billingCycleRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM billing_cycles WHERE id = $1`
-
-	result, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete billing cycle: %w", err)
+	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.BillingCycleModel{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete billing cycle: %w", result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -187,21 +149,22 @@ func (r *billingCycleRepository) Delete(ctx context.Context, id uuid.UUID) error
 func (r *billingCycleRepository) FindCurrentBySubscriptionID(ctx context.Context, subscriptionID uuid.UUID) (*entities.BillingCycle, error) {
 	var model models.BillingCycleModel
 
-	query := `
-		SELECT * FROM billing_cycles
-		WHERE subscription_id = $1
-		AND start_date <= NOW()
-		AND end_date >= NOW()
-		LIMIT 1
-	`
-
-	err := r.db.GetContext(ctx, &model, query, subscriptionID)
+	now := time.Now()
+	err := r.db.WithContext(ctx).Where(
+		"subscription_id = ? AND start_date <= ? AND end_date >= ?",
+		subscriptionID, now, now,
+	).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find current billing cycle: %w", err)
 	}
 
-	return model.ToEntity(), nil
+	entity, err := model.ToEntity()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+	}
+
+	return entity, nil
 }

@@ -24,7 +24,7 @@ func NewAreaRepository(db *database.GormDB) ports.AreaRepository {
 }
 
 func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.Area, error) {
-	var areaModel models.Area
+	var areaModel models.AreaModel
 
 	err := r.db.WithContext(ctx).
 		Where("id = ?", id).
@@ -40,7 +40,7 @@ func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 }
 
 func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities.Area, error) {
-	var areaModel models.Area
+	var areaModel models.AreaModel
 
 	err := r.db.WithContext(ctx).
 		Where("code = ?", code).
@@ -56,7 +56,7 @@ func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities
 }
 
 func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID) ([]*entities.Area, error) {
-	var areaModels []models.Area
+	var areaModels []models.AreaModel
 
 	query := r.db.WithContext(ctx)
 
@@ -84,7 +84,7 @@ func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID
 }
 
 func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.AreaType) ([]*entities.Area, error) {
-	var areaModels []models.Area
+	var areaModels []models.AreaModel
 
 	err := r.db.WithContext(ctx).
 		Where("type = ?", string(areaType)).
@@ -107,7 +107,7 @@ func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.A
 }
 
 func (r *areaRepository) FindActive(ctx context.Context) ([]*entities.Area, error) {
-	var areaModels []models.Area
+	var areaModels []models.AreaModel
 
 	err := r.db.WithContext(ctx).
 		Where("status = ? AND activated_at IS NOT NULL", valueobjects.AreaStatusActive).
@@ -130,7 +130,7 @@ func (r *areaRepository) FindActive(ctx context.Context) ([]*entities.Area, erro
 }
 
 func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64) ([]*entities.Area, error) {
-	var areaModel models.Area
+	var areaModel models.AreaModel
 
 	// Using PostGIS ST_Contains to find area containing the point
 	err := r.db.WithContext(ctx).
@@ -153,7 +153,7 @@ func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64)
 }
 
 func (r *areaRepository) FindNearbyAreas(ctx context.Context, areaID uuid.UUID, maxDistanceKm float64) ([]*entities.Area, error) {
-	var areaModels []models.Area
+	var areaModels []models.AreaModel
 
 	// Find nearby areas using PostGIS ST_DWithin
 	subQuery := r.db.Table("areas").
@@ -183,7 +183,7 @@ func (r *areaRepository) FindNearbyAreas(ctx context.Context, areaID uuid.UUID, 
 }
 
 func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
-	model := models.FromEntity(area)
+	model := models.AreaFromEntity(area)
 
 	err := r.db.WithContext(ctx).Save(model).Error
 	if err != nil {
@@ -201,7 +201,7 @@ func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 }
 
 func (r *areaRepository) Update(ctx context.Context, area *entities.Area) error {
-	model := models.FromEntity(area)
+	model := models.AreaFromEntity(area)
 
 	err := r.db.WithContext(ctx).
 		Model(&models.AreaModel{}).
@@ -240,7 +240,7 @@ func (r *areaRepository) ExistsByCode(ctx context.Context, code string) (bool, e
 }
 
 func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]*entities.Area, error) {
-	var areaModels []models.Area
+	var areaModels []models.AreaModel
 
 	// Recursive CTE to get all parent areas
 	err := r.db.WithContext(ctx).

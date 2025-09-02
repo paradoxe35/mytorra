@@ -2,12 +2,12 @@ package repositories
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/paradoxe35/torra/packages/database"
 	"github.com/paradoxe35/torra/packages/logger"
@@ -19,13 +19,13 @@ import (
 )
 
 type oauthRepository struct {
-	db        *database.DB
+	db        *database.GormDB
 	encryptor security.Encryptor
 	logger    logger.Interface
 }
 
 // NewOAuthRepository creates a new OAuth repository instance
-func NewOAuthRepository(db *database.DB, encryptor security.Encryptor, logger logger.Interface) ports.OAuthRepository {
+func NewOAuthRepository(db *database.GormDB, encryptor security.Encryptor, logger logger.Interface) ports.OAuthRepository {
 	return &oauthRepository{
 		db:        db,
 		encryptor: encryptor,
@@ -49,31 +49,14 @@ func (r *oauthRepository) CreateOAuthProfile(ctx context.Context, profile *entit
 		}
 	}
 
-	query := `
-		INSERT INTO oauth_profiles (
-			id, user_id, provider, provider_id, email, name, picture,
-			access_token, refresh_token, token_expiry, scopes, raw_profile,
-			created_at, updated_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-		)`
+	// Create a copy of the profile with encrypted tokens for the model
+	encryptedProfile := *profile
+	encryptedProfile.AccessToken = encryptedAccessToken
+	encryptedProfile.RefreshToken = encryptedRefreshToken
 
-	_, err = r.db.ExecContext(ctx, query,
-		profile.ID,
-		profile.UserID,
-		profile.Provider.String(),
-		profile.ProviderID,
-		sql.NullString{String: profile.Email, Valid: profile.Email != ""},
-		sql.NullString{String: profile.Name, Valid: profile.Name != ""},
-		sql.NullString{String: profile.Picture, Valid: profile.Picture != ""},
-		encryptedAccessToken,
-		sql.NullString{String: encryptedRefreshToken, Valid: encryptedRefreshToken != ""},
-		profile.TokenExpiry,
-		profile.Scopes,
-		profile.RawProfile,
-		profile.CreatedAt,
-		profile.UpdatedAt,
-	)
+	model := models.OAuthProfileFromEntity(&encryptedProfile)
+
+	err = r.db.WithContext(ctx).Create(model).Error
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			return fmt.Errorf("oauth profile already exists for this provider: %w", err)
@@ -87,16 +70,10 @@ func (r *oauthRepository) CreateOAuthProfile(ctx context.Context, profile *entit
 // GetOAuthProfile retrieves an OAuth profile by provider and provider ID
 func (r *oauthRepository) GetOAuthProfile(ctx context.Context, provider valueobjects.OAuthProvider, providerID string) (*entities.OAuthProfile, error) {
 	var model models.OAuthProfileModel
-	query := `
-		SELECT id, user_id, provider, provider_id, email, name, picture,
-			   access_token, refresh_token, token_expiry, scopes, raw_profile,
-			   created_at, updated_at
-		FROM oauth_profiles
-		WHERE provider = $1 AND provider_id = $2`
 
-	err := r.db.GetContext(ctx, &model, query, provider.String(), providerID)
+	err := r.db.WithContext(ctx).Where("provider = ? AND provider_id = ?", provider.String(), providerID).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("oauth profile not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to get oauth profile: %w", err)
@@ -108,16 +85,10 @@ func (r *oauthRepository) GetOAuthProfile(ctx context.Context, provider valueobj
 // GetOAuthProfileByUserAndProvider retrieves an OAuth profile by user ID and provider
 func (r *oauthRepository) GetOAuthProfileByUserAndProvider(ctx context.Context, userID uuid.UUID, provider valueobjects.OAuthProvider) (*entities.OAuthProfile, error) {
 	var model models.OAuthProfileModel
-	query := `
-		SELECT id, user_id, provider, provider_id, email, name, picture,
-			   access_token, refresh_token, token_expiry, scopes, raw_profile,
-			   created_at, updated_at
-		FROM oauth_profiles
-		WHERE user_id = $1 AND provider = $2`
 
-	err := r.db.GetContext(ctx, &model, query, userID, provider.String())
+	err := r.db.WithContext(ctx).Where("user_id = ? AND provider = ?", userID, provider.String()).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("oauth profile not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to get oauth profile: %w", err)
@@ -129,15 +100,8 @@ func (r *oauthRepository) GetOAuthProfileByUserAndProvider(ctx context.Context, 
 // GetUserOAuthProfiles retrieves all OAuth profiles for a user
 func (r *oauthRepository) GetUserOAuthProfiles(ctx context.Context, userID uuid.UUID) ([]*entities.OAuthProfile, error) {
 	var models []models.OAuthProfileModel
-	query := `
-		SELECT id, user_id, provider, provider_id, email, name, picture,
-			   access_token, refresh_token, token_expiry, scopes, raw_profile,
-			   created_at, updated_at
-		FROM oauth_profiles
-		WHERE user_id = $1
-		ORDER BY created_at DESC`
 
-	err := r.db.SelectContext(ctx, &models, query, userID)
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user oauth profiles: %w", err)
 	}
@@ -163,25 +127,23 @@ func (r *oauthRepository) UpdateOAuthTokens(ctx context.Context, profileID uuid.
 		return fmt.Errorf("failed to encrypt access token: %w", err)
 	}
 
-	encryptedRefreshToken := ""
+	updates := map[string]interface{}{
+		"access_token": encryptedAccessToken,
+		"token_expiry": expiry,
+		"updated_at":   time.Now(),
+	}
+
 	if refreshToken != "" {
-		encryptedRefreshToken, err = r.encryptor.Encrypt(refreshToken)
+		encryptedRefreshToken, err := r.encryptor.Encrypt(refreshToken)
 		if err != nil {
 			return fmt.Errorf("failed to encrypt refresh token: %w", err)
 		}
+		updates["refresh_token"] = encryptedRefreshToken
+	} else {
+		updates["refresh_token"] = ""
 	}
 
-	query := `
-		UPDATE oauth_profiles
-		SET access_token = $2, refresh_token = $3, token_expiry = $4, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1`
-
-	_, err = r.db.ExecContext(ctx, query,
-		profileID,
-		encryptedAccessToken,
-		sql.NullString{String: encryptedRefreshToken, Valid: encryptedRefreshToken != ""},
-		expiry,
-	)
+	err = r.db.WithContext(ctx).Model(&models.OAuthProfileModel{}).Where("id = ?", profileID).Updates(updates).Error
 	if err != nil {
 		return fmt.Errorf("failed to update oauth tokens: %w", err)
 	}
@@ -210,24 +172,19 @@ func (r *oauthRepository) UpdateOAuthProfile(ctx context.Context, profile *entit
 		}
 	}
 
-	query := `
-		UPDATE oauth_profiles
-		SET email = $2, name = $3, picture = $4, access_token = $5,
-			refresh_token = $6, token_expiry = $7, scopes = $8,
-			raw_profile = $9, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $1`
+	updates := map[string]interface{}{
+		"email":         profile.Email,
+		"name":          profile.Name,
+		"picture":       profile.Picture,
+		"access_token":  encryptedAccessToken,
+		"refresh_token": encryptedRefreshToken,
+		"token_expiry":  profile.TokenExpiry,
+		"scopes":        profile.Scopes,
+		"raw_profile":   profile.RawProfile,
+		"updated_at":    time.Now(),
+	}
 
-	_, err := r.db.ExecContext(ctx, query,
-		profile.ID,
-		sql.NullString{String: profile.Email, Valid: profile.Email != ""},
-		sql.NullString{String: profile.Name, Valid: profile.Name != ""},
-		sql.NullString{String: profile.Picture, Valid: profile.Picture != ""},
-		encryptedAccessToken,
-		sql.NullString{String: encryptedRefreshToken, Valid: encryptedRefreshToken != ""},
-		profile.TokenExpiry,
-		profile.Scopes,
-		profile.RawProfile,
-	)
+	err := r.db.WithContext(ctx).Model(&models.OAuthProfileModel{}).Where("id = ?", profile.ID).Updates(updates).Error
 	if err != nil {
 		return fmt.Errorf("failed to update oauth profile: %w", err)
 	}
@@ -237,19 +194,12 @@ func (r *oauthRepository) UpdateOAuthProfile(ctx context.Context, profile *entit
 
 // DeleteOAuthProfile deletes an OAuth profile
 func (r *oauthRepository) DeleteOAuthProfile(ctx context.Context, userID uuid.UUID, provider valueobjects.OAuthProvider) error {
-	query := `DELETE FROM oauth_profiles WHERE user_id = $1 AND provider = $2`
-
-	result, err := r.db.ExecContext(ctx, query, userID, provider.String())
-	if err != nil {
-		return fmt.Errorf("failed to delete oauth profile: %w", err)
+	result := r.db.WithContext(ctx).Where("user_id = ? AND provider = ?", userID, provider.String()).Delete(&models.OAuthProfileModel{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete oauth profile: %w", result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return fmt.Errorf("oauth profile not found")
 	}
 
@@ -258,33 +208,34 @@ func (r *oauthRepository) DeleteOAuthProfile(ctx context.Context, userID uuid.UU
 
 // SaveOAuthState saves an OAuth state for CSRF protection
 func (r *oauthRepository) SaveOAuthState(ctx context.Context, state *valueobjects.OAuthState) error {
-	query := `
-		INSERT INTO oauth_states (
-			state, code_verifier, redirect_uri, provider, ip_address,
-			user_agent, user_id, created_at, expires_at
-		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9
-		)`
+	model := &models.OAuthStateModel{
+		State:       state.State,
+		RedirectURI: state.RedirectURI,
+		Provider:    state.Provider.String(),
+		CreatedAt:   state.CreatedAt,
+		ExpiresAt:   state.ExpiresAt,
+	}
 
-	var userID *uuid.UUID
+	if state.CodeVerifier != "" {
+		model.CodeVerifier = &state.CodeVerifier
+	}
+
+	if state.IPAddress != "" {
+		model.IPAddress = &state.IPAddress
+	}
+
+	if state.UserAgent != "" {
+		model.UserAgent = &state.UserAgent
+	}
+
 	if state.UserID != nil {
 		uid, err := uuid.Parse(*state.UserID)
 		if err == nil {
-			userID = &uid
+			model.UserID = &uid
 		}
 	}
 
-	_, err := r.db.ExecContext(ctx, query,
-		state.State,
-		sql.NullString{String: state.CodeVerifier, Valid: state.CodeVerifier != ""},
-		state.RedirectURI,
-		state.Provider.String(),
-		sql.NullString{String: state.IPAddress, Valid: state.IPAddress != ""},
-		sql.NullString{String: state.UserAgent, Valid: state.UserAgent != ""},
-		userID,
-		state.CreatedAt,
-		state.ExpiresAt,
-	)
+	err := r.db.WithContext(ctx).Create(model).Error
 	if err != nil {
 		return fmt.Errorf("failed to save oauth state: %w", err)
 	}
@@ -295,15 +246,10 @@ func (r *oauthRepository) SaveOAuthState(ctx context.Context, state *valueobject
 // GetOAuthState retrieves an OAuth state
 func (r *oauthRepository) GetOAuthState(ctx context.Context, state string) (*valueobjects.OAuthState, error) {
 	var model models.OAuthStateModel
-	query := `
-		SELECT state, code_verifier, redirect_uri, provider, ip_address,
-			   user_agent, user_id, created_at, expires_at
-		FROM oauth_states
-		WHERE state = $1`
 
-	err := r.db.GetContext(ctx, &model, query, state)
+	err := r.db.WithContext(ctx).Where("state = ?", state).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("oauth state not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to get oauth state: %w", err)
@@ -320,13 +266,28 @@ func (r *oauthRepository) GetOAuthState(ctx context.Context, state string) (*val
 		userID = &uid
 	}
 
+	var codeVerifier string
+	if model.CodeVerifier != nil {
+		codeVerifier = *model.CodeVerifier
+	}
+
+	var ipAddress string
+	if model.IPAddress != nil {
+		ipAddress = *model.IPAddress
+	}
+
+	var userAgent string
+	if model.UserAgent != nil {
+		userAgent = *model.UserAgent
+	}
+
 	return &valueobjects.OAuthState{
 		State:        model.State,
-		CodeVerifier: model.CodeVerifier.String,
+		CodeVerifier: codeVerifier,
 		RedirectURI:  model.RedirectURI,
 		Provider:     provider,
-		IPAddress:    model.IPAddress.String,
-		UserAgent:    model.UserAgent.String,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
 		UserID:       userID,
 		CreatedAt:    model.CreatedAt,
 		ExpiresAt:    model.ExpiresAt,
@@ -335,9 +296,7 @@ func (r *oauthRepository) GetOAuthState(ctx context.Context, state string) (*val
 
 // DeleteOAuthState deletes an OAuth state
 func (r *oauthRepository) DeleteOAuthState(ctx context.Context, state string) error {
-	query := `DELETE FROM oauth_states WHERE state = $1`
-
-	_, err := r.db.ExecContext(ctx, query, state)
+	err := r.db.WithContext(ctx).Where("state = ?", state).Delete(&models.OAuthStateModel{}).Error
 	if err != nil {
 		return fmt.Errorf("failed to delete oauth state: %w", err)
 	}
@@ -347,20 +306,13 @@ func (r *oauthRepository) DeleteOAuthState(ctx context.Context, state string) er
 
 // CleanupExpiredStates removes expired OAuth states
 func (r *oauthRepository) CleanupExpiredStates(ctx context.Context) error {
-	query := `DELETE FROM oauth_states WHERE expires_at < CURRENT_TIMESTAMP`
-
-	result, err := r.db.ExecContext(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to cleanup expired oauth states: %w", err)
+	result := r.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.OAuthStateModel{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to cleanup expired oauth states: %w", result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected > 0 {
-		r.logger.WithField("count", rowsAffected).Info("Cleaned up expired OAuth states")
+	if result.RowsAffected > 0 {
+		r.logger.WithField("count", result.RowsAffected).Info("Cleaned up expired OAuth states")
 	}
 
 	return nil
@@ -384,8 +336,8 @@ func (r *oauthRepository) modelToEntity(model *models.OAuthProfileModel) (*entit
 	}
 
 	decryptedRefreshToken := ""
-	if model.RefreshToken.Valid && model.RefreshToken.String != "" {
-		decryptedRefreshToken, err = r.encryptor.Decrypt(model.RefreshToken.String)
+	if model.RefreshToken != "" {
+		decryptedRefreshToken, err = r.encryptor.Decrypt(model.RefreshToken)
 		if err != nil {
 			r.logger.WithError(err).Error("Failed to decrypt refresh token")
 			// Don't fail, just use empty token
@@ -393,8 +345,8 @@ func (r *oauthRepository) modelToEntity(model *models.OAuthProfileModel) (*entit
 	}
 
 	var tokenExpiry *time.Time
-	if model.TokenExpiry.Valid {
-		tokenExpiry = &model.TokenExpiry.Time
+	if model.TokenExpiry != nil {
+		tokenExpiry = model.TokenExpiry
 	}
 
 	scopes := []string{}
@@ -404,7 +356,7 @@ func (r *oauthRepository) modelToEntity(model *models.OAuthProfileModel) (*entit
 
 	rawProfile := json.RawMessage(nil)
 	if model.RawProfile != nil {
-		rawProfile = model.RawProfile
+		rawProfile = json.RawMessage(model.RawProfile)
 	}
 
 	return &entities.OAuthProfile{
@@ -412,9 +364,9 @@ func (r *oauthRepository) modelToEntity(model *models.OAuthProfileModel) (*entit
 		UserID:       model.UserID,
 		Provider:     provider,
 		ProviderID:   model.ProviderID,
-		Email:        model.Email.String,
-		Name:         model.Name.String,
-		Picture:      model.Picture.String,
+		Email:        model.Email,
+		Name:         model.Name,
+		Picture:      model.Picture,
 		AccessToken:  decryptedAccessToken,
 		RefreshToken: decryptedRefreshToken,
 		TokenExpiry:  tokenExpiry,

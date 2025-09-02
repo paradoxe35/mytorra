@@ -26,7 +26,7 @@ func NewUserRepository(db *database.GormDB) ports.UserRepository {
 }
 
 func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.User, error) {
-	var userModel models.UserModelModel
+	var userModel models.UserModel
 
 	err := r.db.WithContext(ctx).
 		Where("id = ?", id).
@@ -207,7 +207,7 @@ func (r *userRepository) UpdateLocation(ctx context.Context, userID uuid.UUID, l
 }
 
 func (r *userRepository) FindByAreaID(ctx context.Context, areaID uuid.UUID, pagination *database.Pagination) ([]*entities.User, error) {
-	var userModels []models.User
+	var userModels []models.UserModel
 
 	query := r.db.WithContext(ctx).
 		Where("area_id = ?", areaID)
@@ -295,7 +295,7 @@ func contains(s, substr string) bool {
 }
 
 func (r *userRepository) ListByArea(ctx context.Context, area string, limit, offset int) ([]*entities.User, error) {
-	var userModels []models.User
+	var userModels []models.UserModel
 
 	query := r.db.WithContext(ctx)
 

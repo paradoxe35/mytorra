@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"github.com/paradoxe35/torra/packages/database"
 	"github.com/paradoxe35/torra/packages/errors"
@@ -15,81 +16,34 @@ import (
 )
 
 type subscriptionRepository struct {
-	db *database.DB
+	db *database.GormDB
 }
 
 // NewSubscriptionRepository creates a new subscription repository
-func NewSubscriptionRepository(db *database.DB) ports.SubscriptionRepository {
+func NewSubscriptionRepository(db *database.GormDB) ports.SubscriptionRepository {
 	return &subscriptionRepository{db: db}
 }
 
 func (r *subscriptionRepository) Create(ctx context.Context, subscription *entities.Subscription) error {
-	model := models.FromSubscriptionEntity(subscription)
+	model := models.SubscriptionFromEntity(subscription)
 
-	query := `
-		INSERT INTO subscriptions (
-			id, user_id, entity_id, entity_type, tier_id, tier, plan_name,
-			price, currency, billing_cycle, status, current_period_start,
-			current_period_end, trial_ends_at, is_trialing, next_billing_date,
-			stripe_customer_id, stripe_subscription_id, usage_limits, current_usage,
-			metadata, paused_at, resume_at, canceled_at, cancel_reason,
-			activated_at, created_at, updated_at
-		) VALUES (
-			:id, :user_id, :entity_id, :entity_type, :tier_id, :tier, :plan_name,
-			:price, :currency, :billing_cycle, :status, :current_period_start,
-			:current_period_end, :trial_ends_at, :is_trialing, :next_billing_date,
-			:stripe_customer_id, :stripe_subscription_id, :usage_limits, :current_usage,
-			:metadata, :paused_at, :resume_at, :canceled_at, :cancel_reason,
-			:activated_at, :created_at, :updated_at
-		)
-	`
+	err := r.db.WithContext(ctx).Create(model).Error
+	if err != nil {
+		return fmt.Errorf("failed to create subscription: %w", err)
+	}
 
-	_, err := r.db.NamedExecContext(ctx, query, model)
-	return err
+	return nil
 }
 
 func (r *subscriptionRepository) Update(ctx context.Context, subscription *entities.Subscription) error {
-	model := models.FromSubscriptionEntity(subscription)
+	model := models.SubscriptionFromEntity(subscription)
 
-	query := `
-		UPDATE subscriptions SET
-			tier_id = :tier_id,
-			tier = :tier,
-			plan_name = :plan_name,
-			price = :price,
-			currency = :currency,
-			billing_cycle = :billing_cycle,
-			status = :status,
-			current_period_start = :current_period_start,
-			current_period_end = :current_period_end,
-			trial_ends_at = :trial_ends_at,
-			is_trialing = :is_trialing,
-			next_billing_date = :next_billing_date,
-			stripe_customer_id = :stripe_customer_id,
-			stripe_subscription_id = :stripe_subscription_id,
-			usage_limits = :usage_limits,
-			current_usage = :current_usage,
-			metadata = :metadata,
-			paused_at = :paused_at,
-			resume_at = :resume_at,
-			canceled_at = :canceled_at,
-			cancel_reason = :cancel_reason,
-			activated_at = :activated_at,
-			updated_at = :updated_at
-		WHERE id = :id
-	`
-
-	result, err := r.db.NamedExecContext(ctx, query, model)
-	if err != nil {
-		return err
+	result := r.db.WithContext(ctx).Model(&models.SubscriptionModel{}).Where("id = ?", model.ID).Updates(model)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update subscription: %w", result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -99,39 +53,37 @@ func (r *subscriptionRepository) Update(ctx context.Context, subscription *entit
 func (r *subscriptionRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.Subscription, error) {
 	var model models.SubscriptionModel
 
-	query := `
-		SELECT * FROM subscriptions
-		WHERE id = $1
-	`
-
-	err := r.db.GetContext(ctx, &model, query, id)
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find subscription: %w", err)
 	}
 
-	return model.ToEntity(), nil
+	entity, err := model.ToEntity()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+	}
+
+	return entity, nil
 }
 
 func (r *subscriptionRepository) FindByUserID(ctx context.Context, userID uuid.UUID) ([]*entities.Subscription, error) {
 	var models []models.SubscriptionModel
 
-	query := `
-		SELECT * FROM subscriptions
-		WHERE user_id = $1
-		ORDER BY created_at DESC
-	`
-
-	err := r.db.SelectContext(ctx, &models, query, userID)
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find subscriptions: %w", err)
 	}
 
 	subscriptions := make([]*entities.Subscription, len(models))
 	for i, model := range models {
-		subscriptions[i] = model.ToEntity()
+		entity, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+		}
+		subscriptions[i] = entity
 	}
 
 	return subscriptions, nil
@@ -140,42 +92,40 @@ func (r *subscriptionRepository) FindByUserID(ctx context.Context, userID uuid.U
 func (r *subscriptionRepository) FindActiveByUserID(ctx context.Context, userID uuid.UUID) (*entities.Subscription, error) {
 	var model models.SubscriptionModel
 
-	query := `
-		SELECT * FROM subscriptions
-		WHERE user_id = $1
-		AND status IN ('active', 'trialing')
-		LIMIT 1
-	`
-
-	err := r.db.GetContext(ctx, &model, query, userID)
+	err := r.db.WithContext(ctx).Where("user_id = ? AND status IN (?)", userID, []string{"active", "trialing"}).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find active subscription: %w", err)
 	}
 
-	return model.ToEntity(), nil
+	entity, err := model.ToEntity()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+	}
+
+	return entity, nil
 }
 
 func (r *subscriptionRepository) FindExpiring(ctx context.Context, beforeDate time.Time) ([]*entities.Subscription, error) {
 	var models []models.SubscriptionModel
 
-	query := `
-		SELECT * FROM subscriptions
-		WHERE (trial_ends_at IS NOT NULL AND trial_ends_at <= $1)
-		OR (next_billing_date IS NOT NULL AND next_billing_date <= $1)
-		AND status IN ('active', 'trialing')
-	`
-
-	err := r.db.SelectContext(ctx, &models, query, beforeDate)
+	err := r.db.WithContext(ctx).Where(
+		"((trial_ends_at IS NOT NULL AND trial_ends_at <= ?) OR (next_billing_date IS NOT NULL AND next_billing_date <= ?)) AND status IN (?)",
+		beforeDate, beforeDate, []string{"active", "trialing"},
+	).Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find expiring subscriptions: %w", err)
 	}
 
 	subscriptions := make([]*entities.Subscription, len(models))
 	for i, model := range models {
-		subscriptions[i] = model.ToEntity()
+		entity, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+		}
+		subscriptions[i] = entity
 	}
 
 	return subscriptions, nil
@@ -184,13 +134,7 @@ func (r *subscriptionRepository) FindExpiring(ctx context.Context, beforeDate ti
 func (r *subscriptionRepository) CountByTier(ctx context.Context, tierID uuid.UUID) (int64, error) {
 	var count int64
 
-	query := `
-		SELECT COUNT(*) FROM subscriptions
-		WHERE tier_id = $1
-		AND status IN ('active', 'trialing')
-	`
-
-	err := r.db.GetContext(ctx, &count, query, tierID)
+	err := r.db.WithContext(ctx).Model(&models.SubscriptionModel{}).Where("tier_id = ? AND status IN (?)", tierID, []string{"active", "trialing"}).Count(&count).Error
 	if err != nil {
 		return 0, fmt.Errorf("failed to count subscriptions by tier: %w", err)
 	}
@@ -201,61 +145,49 @@ func (r *subscriptionRepository) CountByTier(ctx context.Context, tierID uuid.UU
 func (r *subscriptionRepository) FindActiveByUserAndEntity(ctx context.Context, userID, entityID uuid.UUID) (*entities.Subscription, error) {
 	var model models.SubscriptionModel
 
-	query := `
-		SELECT * FROM subscriptions
-		WHERE user_id = $1
-		AND entity_id = $2
-		AND status IN ('active', 'trialing')
-		LIMIT 1
-	`
-
-	err := r.db.GetContext(ctx, &model, query, userID, entityID)
+	err := r.db.WithContext(ctx).Where("user_id = ? AND entity_id = ? AND status IN (?)", userID, entityID, []string{"active", "trialing"}).First(&model).Error
 	if err != nil {
-		if database.IsNoRowsError(err) {
+		if err == gorm.ErrRecordNotFound {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find subscription: %w", err)
 	}
 
-	return model.ToEntity(), nil
+	entity, err := model.ToEntity()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+	}
+
+	return entity, nil
 }
 
 func (r *subscriptionRepository) FindByEntityID(ctx context.Context, entityID uuid.UUID) ([]*entities.Subscription, error) {
 	var models []models.SubscriptionModel
 
-	query := `
-		SELECT * FROM subscriptions
-		WHERE entity_id = $1
-		ORDER BY created_at DESC
-	`
-
-	err := r.db.SelectContext(ctx, &models, query, entityID)
+	err := r.db.WithContext(ctx).Where("entity_id = ?", entityID).Order("created_at DESC").Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find subscriptions: %w", err)
 	}
 
 	subscriptions := make([]*entities.Subscription, len(models))
 	for i, model := range models {
-		subscriptions[i] = model.ToEntity()
+		entity, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+		}
+		subscriptions[i] = entity
 	}
 
 	return subscriptions, nil
 }
 
 func (r *subscriptionRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	query := `DELETE FROM subscriptions WHERE id = $1`
-
-	result, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete subscription: %w", err)
+	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&models.SubscriptionModel{})
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete subscription: %w", result.Error)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -263,26 +195,19 @@ func (r *subscriptionRepository) Delete(ctx context.Context, id uuid.UUID) error
 }
 
 func (r *subscriptionRepository) Cancel(ctx context.Context, id uuid.UUID, reason string) error {
-	query := `
-		UPDATE subscriptions
-		SET status = 'canceled',
-		    canceled_at = NOW(),
-		    cancel_reason = $2,
-		    updated_at = NOW()
-		WHERE id = $1
-	`
-
-	result, err := r.db.ExecContext(ctx, query, id, reason)
-	if err != nil {
-		return fmt.Errorf("failed to cancel subscription: %w", err)
+	updates := map[string]interface{}{
+		"status":        "canceled",
+		"canceled_at":   time.Now(),
+		"cancel_reason": reason,
+		"updated_at":    time.Now(),
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
+	result := r.db.WithContext(ctx).Model(&models.SubscriptionModel{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("failed to cancel subscription: %w", result.Error)
 	}
 
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -290,26 +215,19 @@ func (r *subscriptionRepository) Cancel(ctx context.Context, id uuid.UUID, reaso
 }
 
 func (r *subscriptionRepository) Pause(ctx context.Context, id uuid.UUID, until *time.Time) error {
-	query := `
-		UPDATE subscriptions
-		SET status = 'paused',
-		    paused_at = NOW(),
-		    resume_at = $2,
-		    updated_at = NOW()
-		WHERE id = $1
-	`
-
-	result, err := r.db.ExecContext(ctx, query, id, until)
-	if err != nil {
-		return fmt.Errorf("failed to pause subscription: %w", err)
+	updates := map[string]interface{}{
+		"status":     "paused",
+		"paused_at":  time.Now(),
+		"resume_at":  until,
+		"updated_at": time.Now(),
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
+	result := r.db.WithContext(ctx).Model(&models.SubscriptionModel{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("failed to pause subscription: %w", result.Error)
 	}
 
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -317,26 +235,19 @@ func (r *subscriptionRepository) Pause(ctx context.Context, id uuid.UUID, until 
 }
 
 func (r *subscriptionRepository) Resume(ctx context.Context, id uuid.UUID) error {
-	query := `
-		UPDATE subscriptions
-		SET status = 'active',
-		    paused_at = NULL,
-		    resume_at = NULL,
-		    updated_at = NOW()
-		WHERE id = $1
-	`
-
-	result, err := r.db.ExecContext(ctx, query, id)
-	if err != nil {
-		return fmt.Errorf("failed to resume subscription: %w", err)
+	updates := map[string]interface{}{
+		"status":     "active",
+		"paused_at":  nil,
+		"resume_at":  nil,
+		"updated_at": time.Now(),
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
+	result := r.db.WithContext(ctx).Model(&models.SubscriptionModel{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("failed to resume subscription: %w", result.Error)
 	}
 
-	if rowsAffected == 0 {
+	if result.RowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -346,23 +257,25 @@ func (r *subscriptionRepository) Resume(ctx context.Context, id uuid.UUID) error
 func (r *subscriptionRepository) GetExpiringSubscriptions(ctx context.Context, days int) ([]*entities.Subscription, error) {
 	var models []models.SubscriptionModel
 
-	query := `
-		SELECT * FROM subscriptions
-		WHERE status IN ('active', 'trialing')
-		AND (
-			(trial_ends_at IS NOT NULL AND trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '%d days')
-			OR (next_billing_date IS NOT NULL AND next_billing_date BETWEEN NOW() AND NOW() + INTERVAL '%d days')
-		)
-	`
-
-	err := r.db.SelectContext(ctx, &models, fmt.Sprintf(query, days, days))
+	err := r.db.WithContext(ctx).Where(
+		"status IN (?) AND ((trial_ends_at IS NOT NULL AND trial_ends_at BETWEEN ? AND ?) OR (next_billing_date IS NOT NULL AND next_billing_date BETWEEN ? AND ?))",
+		[]string{"active", "trialing"},
+		time.Now(),
+		time.Now().AddDate(0, 0, days),
+		time.Now(),
+		time.Now().AddDate(0, 0, days),
+	).Find(&models).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to find expiring subscriptions: %w", err)
 	}
 
 	subscriptions := make([]*entities.Subscription, len(models))
 	for i, model := range models {
-		subscriptions[i] = model.ToEntity()
+		entity, err := model.ToEntity()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert model to entity: %w", err)
+		}
+		subscriptions[i] = entity
 	}
 
 	return subscriptions, nil

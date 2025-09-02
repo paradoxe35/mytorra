@@ -6,134 +6,138 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/paradoxe35/torra/packages/config"
 )
 
-type DB struct {
-	*sqlx.DB
+// GormDB wraps the GORM database connection
+type GormDB struct {
+	*gorm.DB
 }
 
-func New(cfg *config.DatabaseConfig) (*DB, error) {
-	db, err := sqlx.Connect("postgres", cfg.DSN())
+// New creates a new GORM database connection (migrated from NewGormDB)
+func New(cfg *config.DatabaseConfig) (*GormDB, error) {
+	return NewGormDB(cfg)
+}
+
+// NewGormDB creates a new GORM database connection
+func NewGormDB(cfg *config.DatabaseConfig) (*GormDB, error) {
+	// Configure GORM
+	gormConfig := &gorm.Config{
+		NowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+		QueryFields: true,
+		Logger:      logger.Default.LogMode(logger.Info),
+	}
+
+	// Open database connection
+	db, err := gorm.Open(postgres.Open(cfg.DSN()), gormConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	db.SetMaxOpenConns(cfg.MaxOpenConns)
-	db.SetMaxIdleConns(cfg.MaxIdleConns)
-	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	// Get underlying SQL database to configure connection pool
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get database instance: %w", err)
+	}
 
+	// Configure connection pool
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+
+	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := db.PingContext(ctx); err != nil {
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return &DB{db}, nil
+	// Enable PostGIS extension if not already enabled
+	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS postgis").Error; err != nil {
+		return nil, fmt.Errorf("failed to enable PostGIS extension: %w", err)
+	}
+
+	return &GormDB{db}, nil
 }
 
-func (db *DB) InTransaction(ctx context.Context, fn func(*sqlx.Tx) error) error {
-	tx, err := db.BeginTxx(ctx, nil)
+// Transaction executes a function within a database transaction
+func (db *GormDB) Transaction(fn func(*gorm.DB) error, opts ...*sql.TxOptions) error {
+	return db.DB.Transaction(fn, opts...)
+}
+
+// WithContext returns a new DB instance with the provided context
+func (db *GormDB) WithContext(ctx context.Context) *gorm.DB {
+	return db.DB.WithContext(ctx)
+}
+
+// Close closes the database connection
+func (db *GormDB) Close() error {
+	sqlDB, err := db.DB.DB()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return err
 	}
+	return sqlDB.Close()
+}
 
-	defer func() {
-		if p := recover(); p != nil {
-			tx.Rollback()
-			panic(p)
-		} else if err != nil {
-			tx.Rollback()
-		} else {
-			err = tx.Commit()
+// Paginate creates a paginated scope for GORM queries
+func Paginate(page, perPage int) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		if page <= 0 {
+			page = 1
 		}
-	}()
+		if perPage <= 0 {
+			perPage = 20
+		}
+		if perPage > 100 {
+			perPage = 100
+		}
 
-	err = fn(tx)
-	return err
+		offset := (page - 1) * perPage
+		return db.Offset(offset).Limit(perPage)
+	}
 }
 
-func (db *DB) ExistsContext(ctx context.Context, query string, args ...interface{}) (bool, error) {
-	var exists bool
-	query = fmt.Sprintf("SELECT EXISTS(%s)", query)
-	err := db.GetContext(ctx, &exists, query, args...)
-	return exists, err
-}
-
+// Pagination holds pagination parameters
 type Pagination struct {
-	Page    int
-	PerPage int
+	Page    int `json:"page"`
+	PerPage int `json:"per_page"`
 }
 
-func (p *Pagination) Offset() int {
-	if p.Page <= 0 {
-		p.Page = 1
+// PaginationResult holds pagination metadata
+type PaginationResult struct {
+	Page       int   `json:"page"`
+	PerPage    int   `json:"per_page"`
+	Total      int64 `json:"total"`
+	TotalPages int   `json:"total_pages"`
+}
+
+// NewPaginationResult creates a new pagination result
+func NewPaginationResult(page, perPage int, total int64) *PaginationResult {
+	if page <= 0 {
+		page = 1
 	}
-	if p.PerPage <= 0 {
-		p.PerPage = 20
+	if perPage <= 0 {
+		perPage = 20
 	}
-	return (p.Page - 1) * p.PerPage
-}
 
-func (p *Pagination) Limit() int {
-	if p.PerPage <= 0 {
-		return 20
+	totalPages := int(total) / perPage
+	if int(total)%perPage > 0 {
+		totalPages++
 	}
-	if p.PerPage > 100 {
-		return 100
+
+	return &PaginationResult{
+		Page:       page,
+		PerPage:    perPage,
+		Total:      total,
+		TotalPages: totalPages,
 	}
-	return p.PerPage
-}
-
-type QueryBuilder struct {
-	query string
-	args  []interface{}
-}
-
-func NewQueryBuilder(base string) *QueryBuilder {
-	return &QueryBuilder{
-		query: base,
-		args:  make([]interface{}, 0),
-	}
-}
-
-func (qb *QueryBuilder) Where(condition string, args ...interface{}) *QueryBuilder {
-	qb.query += " WHERE " + condition
-	qb.args = append(qb.args, args...)
-	return qb
-}
-
-func (qb *QueryBuilder) And(condition string, args ...interface{}) *QueryBuilder {
-	qb.query += " AND " + condition
-	qb.args = append(qb.args, args...)
-	return qb
-}
-
-func (qb *QueryBuilder) OrderBy(order string) *QueryBuilder {
-	qb.query += " ORDER BY " + order
-	return qb
-}
-
-func (qb *QueryBuilder) Limit(limit int) *QueryBuilder {
-	qb.query += fmt.Sprintf(" LIMIT %d", limit)
-	return qb
-}
-
-func (qb *QueryBuilder) Offset(offset int) *QueryBuilder {
-	qb.query += fmt.Sprintf(" OFFSET %d", offset)
-	return qb
-}
-
-func (qb *QueryBuilder) Build() (string, []interface{}) {
-	return qb.query, qb.args
-}
-
-func IsNoRowsError(err error) bool {
-	return err == sql.ErrNoRows
 }
 
 // IsUniqueViolation checks if the error is a unique constraint violation
@@ -141,19 +145,16 @@ func IsUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
-	// PostgreSQL unique violation error code is 23505
-	return contains(err.Error(), "23505") || contains(err.Error(), "duplicate key")
+	errStr := err.Error()
+	return contains(errStr, "23505") || contains(errStr, "duplicate key") || contains(errStr, "unique constraint")
 }
 
+// contains checks if a string contains a substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || (len(s) > 0 && len(substr) > 0 && indexOf(s, substr) >= 0))
-}
-
-func indexOf(s, substr string) int {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
-			return i
+			return true
 		}
 	}
-	return -1
+	return false
 }
