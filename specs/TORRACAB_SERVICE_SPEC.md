@@ -7,15 +7,84 @@ TorraCab is a standalone ride-hailing service optimized for high-frequency, real
 
 ### Primary Functions
 1. **Driver Management** - Driver onboarding, verification, and performance tracking
-2. **Vehicle Management** - Vehicle registration and maintenance tracking
-3. **Ride Request Processing** - Real-time ride matching and dispatch
-4. **Fare Calculation** - Dynamic pricing and fare computation
-5. **Live Tracking** - Real-time GPS tracking for rides
-6. **Route Optimization** - Efficient routing and navigation
+2. **Fleet Organization Management** - Multi-driver fleet operations with hierarchical management
+3. **Vehicle Management** - Vehicle registration and maintenance tracking
+4. **Ride Request Processing** - Real-time ride matching and dispatch
+5. **Fare Calculation** - Dynamic pricing and fare computation
+6. **Live Tracking** - Real-time GPS tracking for rides
+7. **Route Optimization** - Efficient routing and navigation
 
 ## Features & Functionality
 
-### 1. Driver Management System
+### 1. Fleet Organization Management
+
+#### Fleet Structure Types
+- **Individual Drivers**
+  - Independent driver-operators
+  - Own vehicle management
+  - Direct platform relationship
+  - Individual subscription plans
+  - Personal earnings management
+
+- **Fleet Organizations**
+  - Multi-driver operations
+  - Centralized vehicle management
+  - Hierarchical management structure
+  - Organization-level subscriptions
+  - Shared revenue models
+
+#### Fleet Organization Features
+- **Fleet Registration**
+  - Business license verification
+  - Fleet operator certification
+  - Insurance coverage validation
+  - Financial capacity assessment
+  - Operational area definition
+
+- **Driver-Organization Relationships**
+  - Driver invitation and onboarding
+  - Role-based access within fleet
+  - Performance tracking per driver
+  - Revenue sharing configuration
+  - Disciplinary action management
+
+#### Fleet Management Roles
+- **Fleet Owner**
+  - Complete fleet oversight
+  - Financial management
+  - Strategic planning
+  - Regulatory compliance
+  - Partnership negotiations
+
+- **Fleet Manager**
+  - Daily operations management
+  - Driver scheduling and assignments
+  - Performance monitoring
+  - Customer service coordination
+  - Route optimization oversight
+
+- **Dispatch Manager**
+  - Real-time ride assignment
+  - Driver coordination
+  - Emergency response
+  - Quality control
+  - Shift management
+
+- **Maintenance Manager**
+  - Vehicle maintenance scheduling
+  - Repair coordination
+  - Parts inventory management
+  - Safety compliance
+  - Cost optimization
+
+- **Driver**
+  - Ride execution
+  - Customer service
+  - Vehicle care
+  - Performance reporting
+  - Schedule adherence
+
+### 2. Driver Management System
 
 #### Driver Onboarding
 - **Driver Registration**
@@ -180,6 +249,53 @@ TorraCab is a standalone ride-hailing service optimized for high-frequency, real
   - Driver fatigue detection
   - Passenger safety checks
 
+## Fleet Management Dashboard Features
+
+### 1. Fleet Owner Dashboard
+- **Fleet Overview**
+  - Total drivers and vehicles
+  - Active vs inactive drivers
+  - Daily/weekly/monthly revenue
+  - Fleet utilization rates
+  - Performance metrics summary
+
+- **Driver Management**
+  - Driver roster with status
+  - Performance rankings
+  - Driver onboarding pipeline
+  - Disciplinary actions tracking
+  - Payroll and commission management
+
+- **Financial Management**
+  - Revenue breakdown by driver
+  - Commission structure management
+  - Expense tracking and reporting
+  - Profit and loss statements
+  - Tax reporting tools
+
+### 2. Fleet Manager Dashboard
+- **Operations Overview**
+  - Real-time driver locations
+  - Active ride monitoring
+  - Driver availability status
+  - Performance alerts
+  - Customer feedback summary
+
+- **Driver Coordination**
+  - Shift scheduling
+  - Driver assignment tools
+  - Performance coaching
+  - Issue resolution
+  - Communication tools
+
+### 3. Dispatch Manager Dashboard
+- **Live Dispatch**
+  - Real-time ride requests
+  - Driver assignment interface
+  - Route optimization tools
+  - Emergency response
+  - Quality monitoring
+
 ## Driver Dashboard Features
 
 ### 1. Earnings & Performance
@@ -323,6 +439,19 @@ TorraCab is a standalone ride-hailing service optimized for high-frequency, real
 
 ## API Endpoints
 
+### Fleet Management
+```
+POST /fleets/register
+GET /fleets/profile
+PUT /fleets/profile
+GET /fleets/drivers
+POST /fleets/drivers/invite
+PUT /fleets/drivers/{driverId}/role
+DELETE /fleets/drivers/{driverId}
+GET /fleets/analytics
+GET /fleets/earnings
+```
+
 ### Driver Management
 ```
 POST /drivers/register
@@ -331,6 +460,8 @@ PUT /drivers/profile
 PUT /drivers/status
 POST /drivers/documents
 GET /drivers/earnings
+POST /drivers/join-fleet
+DELETE /drivers/leave-fleet
 ```
 
 ### Vehicle Management
@@ -372,11 +503,32 @@ POST /location/route
 
 ## Database Schema
 
+### Fleet Organizations Table
+```sql
+CREATE TABLE fleet_organizations (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL, -- References Core Service organizations
+    name VARCHAR(200) NOT NULL,
+    business_license VARCHAR(100),
+    operating_areas JSONB,
+    commission_structure JSONB,
+    settings JSONB,
+    status ENUM('pending', 'active', 'suspended', 'closed') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_organization_id (organization_id),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at)
+);
+```
+
 ### Drivers Table
 ```sql
 CREATE TABLE drivers (
     id UUID PRIMARY KEY,
     user_id UUID NOT NULL,
+    fleet_organization_id UUID REFERENCES fleet_organizations(id), -- NULL for independent drivers
     license_number VARCHAR(50) UNIQUE NOT NULL,
     license_expiry DATE NOT NULL,
     background_check_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
@@ -394,6 +546,7 @@ CREATE TABLE drivers (
     updated_at TIMESTAMP DEFAULT NOW(),
 
     INDEX idx_user_id (user_id),
+    INDEX idx_fleet_organization_id (fleet_organization_id),
     INDEX idx_license_number (license_number),
     INDEX idx_status (status),
     INDEX idx_rating (rating),
@@ -439,9 +592,9 @@ CREATE TABLE rides (
     driver_id UUID REFERENCES drivers(id),
     vehicle_id UUID REFERENCES vehicles(id),
     status ENUM('requested', 'accepted', 'driver_arrived', 'in_progress', 'completed', 'cancelled') DEFAULT 'requested',
-    pickup_location JSONB NOT NULL,
+    pickup_location geometry(POINT, 4326) NOT NULL, -- PostGIS geometry using gogis
     pickup_address TEXT,
-    destination_location JSONB NOT NULL,
+    destination_location geometry(POINT, 4326) NOT NULL, -- PostGIS geometry using gogis
     destination_address TEXT,
     requested_at TIMESTAMP DEFAULT NOW(),
     accepted_at TIMESTAMP,
@@ -469,8 +622,8 @@ CREATE TABLE rides (
     INDEX idx_driver_id (driver_id),
     INDEX idx_status (status),
     INDEX idx_requested_at (requested_at),
-    INDEX idx_pickup_location ((CAST(pickup_location AS POINT))),
-    INDEX idx_destination_location ((CAST(destination_location AS POINT)))
+    SPATIAL INDEX idx_pickup_location (pickup_location),
+    SPATIAL INDEX idx_destination_location (destination_location)
 );
 ```
 
@@ -479,7 +632,7 @@ CREATE TABLE rides (
 CREATE TABLE driver_locations (
     id UUID PRIMARY KEY,
     driver_id UUID REFERENCES drivers(id),
-    location POINT NOT NULL,
+    location geometry(POINT, 4326) NOT NULL, -- PostGIS geometry using gogis
     heading INTEGER, -- 0-359 degrees
     speed_kmh DECIMAL(5,2),
     accuracy_meters INTEGER,
@@ -489,7 +642,7 @@ CREATE TABLE driver_locations (
     updated_at TIMESTAMP DEFAULT NOW(),
 
     INDEX idx_driver_id (driver_id),
-    SPATIAL INDEX idx_location (location),
+    SPATIAL INDEX idx_driver_location (location),
     INDEX idx_is_online (is_online),
     INDEX idx_is_available (is_available),
     INDEX idx_updated_at (updated_at)

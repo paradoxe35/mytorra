@@ -6,7 +6,7 @@ The Delivery Service manages TorraFood (restaurant ordering and delivery) and To
 ## Service Responsibilities
 
 ### Primary Functions
-1. **Restaurant Management** - MyTorra Food restaurant onboarding and management
+1. **Restaurant Organization Management** - Multi-location restaurant chain management
 2. **Menu Management** - Digital menu creation and management
 3. **Order Processing** - Food order lifecycle management
 4. **Delivery Agent Management** - Shared pool of delivery personnel
@@ -16,6 +16,71 @@ The Delivery Service manages TorraFood (restaurant ordering and delivery) and To
 ## Features & Functionality
 
 ### 1. MyTorra Food (Restaurant Platform)
+
+#### Restaurant Organization Types
+- **Independent Restaurants**
+  - Single location operations
+  - Owner-operated establishments
+  - Individual subscription plans
+  - Simple management structure
+
+- **Restaurant Chains/Organizations**
+  - Multi-location operations
+  - Centralized management
+  - Hierarchical staff structure
+  - Organization-level subscriptions
+  - Shared branding and menus
+
+#### Restaurant Organization Management
+- **Chain Registration**
+  - Corporate entity verification
+  - Multi-location license validation
+  - Brand management setup
+  - Operational area definition
+  - Regional management structure
+
+- **Location Management**
+  - Individual restaurant registration
+  - Location-specific settings
+  - Staff assignment per location
+  - Local menu customization
+  - Performance tracking per location
+
+#### Restaurant Organization Roles
+- **Restaurant Chain Owner**
+  - Complete chain oversight
+  - Strategic planning and expansion
+  - Brand management
+  - Financial oversight
+  - Franchise management
+
+- **Regional Manager**
+  - Multi-location management
+  - Regional performance optimization
+  - Staff coordination across locations
+  - Regional marketing campaigns
+  - Compliance oversight
+
+- **Restaurant Manager**
+  - Single location operations
+  - Local staff management
+  - Daily operations oversight
+  - Customer service management
+  - Local performance metrics
+
+- **Kitchen Manager**
+  - Kitchen operations oversight
+  - Staff scheduling and training
+  - Quality control
+  - Inventory management
+  - Food safety compliance
+
+- **Staff Members**
+  - Order processing
+  - Kitchen operations
+  - Customer service
+  - Shift-based access
+  - Location-specific permissions
 
 #### Restaurant Onboarding
 - **Business Registration**
@@ -311,11 +376,13 @@ POST /packages/{id}/confirm-delivery
 ```sql
 CREATE TABLE restaurants (
     id UUID PRIMARY KEY,
+    organization_id UUID, -- References Core Service organizations (NULL for independent)
     owner_id UUID NOT NULL,
     name VARCHAR(200) NOT NULL,
     description TEXT,
     cuisine_type VARCHAR(100),
     address JSONB NOT NULL,
+    location geometry(POINT, 4326), -- PostGIS geometry using gogis
     phone VARCHAR(20),
     email VARCHAR(255),
     business_license VARCHAR(100),
@@ -332,10 +399,11 @@ CREATE TABLE restaurants (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
 
+    INDEX idx_organization_id (organization_id),
     INDEX idx_owner_id (owner_id),
     INDEX idx_status (status),
     INDEX idx_cuisine_type (cuisine_type),
-    SPATIAL INDEX idx_location ((CAST(address->>'$.coordinates' AS POINT)))
+    SPATIAL INDEX idx_location (location)
 );
 ```
 
@@ -426,7 +494,7 @@ CREATE TABLE delivery_agents (
     insurance_details JSONB,
     service_areas JSONB,
     status ENUM('offline', 'online', 'busy', 'suspended') DEFAULT 'offline',
-    current_location POINT,
+    current_location geometry(POINT, 4326), -- PostGIS geometry using gogis
     rating DECIMAL(3,2),
     total_deliveries INTEGER DEFAULT 0,
     earnings DECIMAL(10,2) DEFAULT 0,
@@ -436,7 +504,7 @@ CREATE TABLE delivery_agents (
     INDEX idx_user_id (user_id),
     INDEX idx_status (status),
     INDEX idx_vehicle_type (vehicle_type),
-    SPATIAL INDEX idx_location (current_location)
+    SPATIAL INDEX idx_current_location (current_location)
 );
 ```
 

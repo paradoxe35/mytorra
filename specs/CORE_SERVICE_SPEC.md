@@ -7,11 +7,13 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
 
 ### Primary Functions
 1. **User Account Management** - Central user registry and profile management
-2. **Authentication & Authorization** - JWT, MFA, OAuth2, permission management
-3. **Payment Processing** - Abstracted payment gateway integration
-4. **Notification System** - Generic notification sender (email, SMS, push)
-5. **Subscription Engine** - Generic subscription management for all services
-6. **Admin Management** - Platform-wide administrative functions
+2. **Area Management System** - Dynamic geographic operational boundaries and user area detection
+3. **Organization Management** - Multi-user organization structures with hierarchical roles
+4. **Authentication & Authorization** - JWT, MFA, OAuth2, permission management
+5. **Payment Processing** - Abstracted payment gateway integration
+6. **Notification System** - Generic notification sender (email, SMS, push)
+7. **Subscription Engine** - Generic subscription management for all services
+8. **Admin Management** - Platform-wide administrative functions
 
 ## Features & Functionality
 
@@ -24,12 +26,130 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
 
 - **Account Types**
   - Consumer accounts (buyers)
-  - Seller accounts (marketplace vendors)
-  - Business accounts (restaurants, hotels, shops)
-  - Driver accounts (delivery, cab)
+  - Individual seller accounts (marketplace vendors)
+  - Organization member accounts (employees, drivers, staff)
+  - Organization owner accounts (business owners, fleet managers)
   - Admin accounts (platform administrators)
 
-### 2. Authentication & Security
+### 2. Area Management System
+
+#### Dynamic Geographic Framework
+- **Hierarchical Area Structure**
+  - Country → Province → City/Town → Sub-areas
+  - Admin-defined operational boundaries
+  - No hardcoded locations - all database-driven
+  - Flexible boundary definitions using PostGIS polygons
+  - Custom service zones per area
+
+- **Area Detection & Switching**
+  - **Automatic Mode**: Area changes based on GPS location
+  - **Manual Mode**: User explicitly selects area
+  - **Hybrid Mode**: Suggests area change with confirmation
+  - **Locked Mode**: Area fixed during active operations
+  - Background location monitoring for seamless transitions
+
+#### Area-Based User Experience
+- **User Area Assignment**
+  - Current active area tracking
+  - Area history maintenance
+  - Area-specific preferences
+  - Cross-area activity tracking
+  - Visiting mode for temporary areas
+
+- **Content Localization**
+  - Area-specific product/service visibility
+  - Localized pricing and currency
+  - Regional language preferences
+  - Local holiday and event calendars
+  - Area-specific promotional campaigns
+
+#### Area Administration
+- **Area Configuration Dashboard**
+  - Add/edit/delete geographic areas
+  - Define operational boundaries via map interface
+  - Set area relationships (nearby areas, metropolitan zones)
+  - Configure service availability per area
+  - Area-specific business rules
+
+- **Cross-Area Operations**
+  - Enable/disable cross-area trading
+  - Define shipping zones between areas
+  - Set area proximity for expanded search
+  - Configure area migration rules
+  - Manage transition zones
+
+### 3. Organization Management
+
+#### Organization Structure
+- **Organization Creation**
+  - Business registration and verification
+  - Organization type configuration (restaurant, hotel, cab fleet, delivery service)
+  - Legal entity documentation
+  - Tax ID and business license validation
+  - Owner verification and onboarding
+
+- **Hierarchical Organization Roles**
+  - **Organization Owner**: Full control over organization settings, billing, and member management
+  - **Organization Admin**: User management, operational oversight, limited billing access
+  - **Manager**: Department/location management, staff scheduling, performance monitoring
+  - **Supervisor**: Team leadership, task assignment, quality control
+  - **Employee**: Standard operational access, task execution, time tracking
+  - **Driver/Agent**: Mobile-focused role for delivery drivers and cab drivers
+
+#### Multi-User Organization Features
+- **Member Management**
+  - Invite users to join organization via email
+  - Role-based access control within organization
+  - Department/location-based user grouping
+  - Employee onboarding workflows
+  - Performance tracking and evaluation
+
+- **Subscription Management**
+  - Organization-level subscription billing
+  - User seat management (add/remove users)
+  - Feature allocation across organization members
+  - Usage tracking per user and department
+  - Cost center allocation and reporting
+
+- **Organization Settings**
+  - Branding customization (logo, colors, themes)
+  - Operational configurations (work hours, locations)
+  - Policy management (break times, overtime rules)
+  - Integration settings (third-party tools)
+  - Notification preferences by role
+
+#### Service-Specific Organization Types
+
+**Restaurant Organizations**
+- **Owner**: Complete restaurant chain management
+- **Restaurant Manager**: Single location management
+- **Kitchen Manager**: Kitchen operations and staff
+- **Server**: Order taking and customer service
+- **Delivery Coordinator**: Delivery logistics
+
+**Hotel Organizations**
+- **Hotel Owner**: Multi-property management
+- **Property Manager**: Single hotel operations
+- **Front Desk Manager**: Guest services oversight
+- **Front Desk Staff**: Check-in/check-out operations
+- **Housekeeping Manager**: Cleaning operations oversight
+- **Housekeeping Staff**: Room cleaning and maintenance
+
+**Cab Fleet Organizations**
+- **Fleet Owner**: Complete fleet management and strategy
+- **Fleet Manager**: Operations management and driver oversight
+- **Dispatch Manager**: Ride assignment and coordination
+- **Driver**: Ride execution and customer service
+- **Maintenance Coordinator**: Vehicle maintenance scheduling
+
+**Delivery Service Organizations**
+- **Service Owner**: Multi-region delivery service management
+- **Regional Manager**: Geographic area management
+- **Delivery Coordinator**: Route optimization and driver management
+- **Driver**: Package delivery and customer interaction
+- **Warehouse Manager**: Hub operations and inventory
+
+### 3. Authentication & Security
 - **Multi-Factor Authentication (MFA)**
   - SMS/Email OTP
   - TOTP (Google Authenticator)
@@ -182,11 +302,46 @@ POST /subscriptions/cancel
 GET /subscriptions/billing-history
 ```
 
+### Area Management Endpoints
+```
+GET /areas
+GET /areas/countries
+GET /areas/countries/{countryId}/provinces
+GET /areas/provinces/{provinceId}/cities
+GET /areas/{areaId}/boundaries
+POST /areas/detect-from-location
+GET /users/current-area
+PUT /users/current-area
+GET /users/area-history
+POST /admin/areas
+PUT /admin/areas/{id}
+DELETE /admin/areas/{id}
+PUT /admin/areas/{id}/boundaries
+```
+
+### Organization Endpoints
+```
+GET /organizations
+POST /organizations
+GET /organizations/{id}
+PUT /organizations/{id}
+DELETE /organizations/{id}
+GET /organizations/{id}/members
+POST /organizations/{id}/members
+PUT /organizations/{id}/members/{userId}
+DELETE /organizations/{id}/members/{userId}
+GET /organizations/{id}/roles
+POST /organizations/{id}/roles
+GET /organizations/{id}/subscription
+PUT /organizations/{id}/subscription
+```
+
 ### Admin Endpoints
 ```
 GET /admin/users
 GET /admin/payments
 GET /admin/subscriptions
+GET /admin/organizations
 GET /admin/analytics
 POST /admin/notifications/broadcast
 ```
@@ -205,10 +360,156 @@ CREATE TABLE users (
     avatar_url VARCHAR(500),
     email_verified BOOLEAN DEFAULT FALSE,
     phone_verified BOOLEAN DEFAULT FALSE,
+    current_area_id UUID REFERENCES areas(id),
     status ENUM('active', 'suspended', 'pending') DEFAULT 'pending',
     last_login_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_current_area_id (current_area_id)
+);
+```
+
+### Areas Table
+```sql
+CREATE TABLE areas (
+    id UUID PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    type ENUM('country', 'province', 'city', 'sub_area') NOT NULL,
+    parent_area_id UUID REFERENCES areas(id),
+    code VARCHAR(10), -- Country/province/city codes
+    boundaries geometry(POLYGON, 4326), -- PostGIS polygon for area boundaries
+    center_point geometry(POINT, 4326), -- Geographic center of area
+    timezone VARCHAR(50),
+    currency VARCHAR(3),
+    languages JSONB, -- Supported languages in this area
+    settings JSONB, -- Area-specific configurations
+    status ENUM('active', 'inactive', 'testing') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_parent_area_id (parent_area_id),
+    INDEX idx_type (type),
+    INDEX idx_status (status),
+    INDEX idx_code (code),
+    SPATIAL INDEX idx_boundaries (boundaries),
+    SPATIAL INDEX idx_center_point (center_point),
+    UNIQUE KEY unique_code_type (code, type)
+);
+```
+
+### User Area History Table
+```sql
+CREATE TABLE user_area_history (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id),
+    area_id UUID REFERENCES areas(id),
+    switched_at TIMESTAMP DEFAULT NOW(),
+    switch_method ENUM('automatic', 'manual', 'admin') DEFAULT 'manual',
+    location_at_switch geometry(POINT, 4326), -- User's GPS location when area switched
+    duration_minutes INTEGER, -- Time spent in this area
+
+    INDEX idx_user_id (user_id),
+    INDEX idx_area_id (area_id),
+    INDEX idx_switched_at (switched_at),
+    INDEX idx_switch_method (switch_method),
+    SPATIAL INDEX idx_location_at_switch (location_at_switch)
+);
+```
+
+### Area Relationships Table
+```sql
+CREATE TABLE area_relationships (
+    id UUID PRIMARY KEY,
+    area_id UUID REFERENCES areas(id),
+    related_area_id UUID REFERENCES areas(id),
+    relationship_type ENUM('nearby', 'metropolitan', 'sister_city', 'delivery_zone') NOT NULL,
+    distance_km DECIMAL(10,2),
+    settings JSONB, -- Relationship-specific settings
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_area_id (area_id),
+    INDEX idx_related_area_id (related_area_id),
+    INDEX idx_relationship_type (relationship_type),
+    UNIQUE KEY unique_area_relationship (area_id, related_area_id, relationship_type)
+);
+```
+
+### Organizations Table
+```sql
+CREATE TABLE organizations (
+    id UUID PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    type ENUM('restaurant', 'hotel', 'cab_fleet', 'delivery_service', 'marketplace_business') NOT NULL,
+    description TEXT,
+    business_license VARCHAR(100),
+    tax_id VARCHAR(50),
+    address JSONB,
+    contact_email VARCHAR(255),
+    contact_phone VARCHAR(20),
+    website VARCHAR(500),
+    logo_url VARCHAR(500),
+    settings JSONB,
+    status ENUM('pending', 'active', 'suspended', 'closed') DEFAULT 'pending',
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_type (type),
+    INDEX idx_status (status),
+    INDEX idx_created_by (created_by),
+    INDEX idx_created_at (created_at)
+);
+```
+
+### Organization Members Table
+```sql
+CREATE TABLE organization_members (
+    id UUID PRIMARY KEY,
+    organization_id UUID REFERENCES organizations(id),
+    user_id UUID REFERENCES users(id),
+    role ENUM('owner', 'admin', 'manager', 'supervisor', 'employee', 'driver') NOT NULL,
+    department VARCHAR(100),
+    location_id UUID,
+    permissions JSONB,
+    invited_by UUID REFERENCES users(id),
+    invited_at TIMESTAMP,
+    joined_at TIMESTAMP,
+    status ENUM('invited', 'active', 'inactive', 'suspended') DEFAULT 'invited',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_organization_id (organization_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_role (role),
+    INDEX idx_status (status),
+    UNIQUE KEY unique_org_user (organization_id, user_id)
+);
+```
+
+### Organization Subscriptions Table
+```sql
+CREATE TABLE organization_subscriptions (
+    id UUID PRIMARY KEY,
+    organization_id UUID REFERENCES organizations(id),
+    plan_id UUID REFERENCES subscription_plans(id),
+    status ENUM('trial', 'active', 'past_due', 'cancelled', 'expired', 'suspended') DEFAULT 'active',
+    user_seats INTEGER DEFAULT 1,
+    used_seats INTEGER DEFAULT 0,
+    current_period_start TIMESTAMP NOT NULL,
+    current_period_end TIMESTAMP NOT NULL,
+    trial_start TIMESTAMP,
+    trial_end TIMESTAMP,
+    cancel_at_period_end BOOLEAN DEFAULT FALSE,
+    cancelled_at TIMESTAMP,
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_organization_id (organization_id),
+    INDEX idx_plan_id (plan_id),
+    INDEX idx_status (status),
+    INDEX idx_current_period_end (current_period_end)
 );
 ```
 

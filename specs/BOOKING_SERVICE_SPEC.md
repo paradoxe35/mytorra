@@ -6,7 +6,7 @@ The Booking Service manages TorraBooking (hotels, accommodations) and TorraFligh
 ## Service Responsibilities
 
 ### Primary Functions
-1. **Accommodation Management** - Hotel, resort, and property management
+1. **Hotel Organization Management** - Multi-property hotel chain management
 2. **Room Inventory Management** - Real-time availability and pricing
 3. **Reservation Processing** - Booking lifecycle management
 4. **Flight Integration** - Flight search and booking capabilities
@@ -16,6 +16,71 @@ The Booking Service manages TorraBooking (hotels, accommodations) and TorraFligh
 ## Features & Functionality
 
 ### 1. TorraBooking (Accommodation Platform)
+
+#### Hotel Organization Types
+- **Independent Properties**
+  - Single hotel/accommodation
+  - Owner-operated establishments
+  - Individual subscription plans
+  - Simple management structure
+
+- **Hotel Chains/Organizations**
+  - Multi-property operations
+  - Centralized brand management
+  - Hierarchical staff structure
+  - Organization-level subscriptions
+  - Shared booking systems
+
+#### Hotel Organization Management
+- **Chain Registration**
+  - Corporate entity verification
+  - Multi-property license validation
+  - Brand standards setup
+  - Operational territory definition
+  - Regional management structure
+
+- **Property Portfolio Management**
+  - Individual property registration
+  - Property-specific configurations
+  - Staff assignment per property
+  - Local amenity customization
+  - Performance tracking per location
+
+#### Hotel Organization Roles
+- **Hotel Chain Owner**
+  - Complete chain oversight
+  - Strategic expansion planning
+  - Brand management and standards
+  - Financial oversight across properties
+  - Franchise development
+
+- **Regional Manager**
+  - Multi-property management within region
+  - Regional performance optimization
+  - Staff coordination across properties
+  - Regional marketing initiatives
+  - Quality assurance compliance
+
+- **Property Manager**
+  - Single property operations
+  - Local staff management
+  - Daily operations oversight
+  - Guest experience management
+  - Property-specific performance
+
+- **Department Managers**
+  - Front desk operations
+  - Housekeeping management
+  - Food & beverage operations
+  - Maintenance coordination
+  - Guest services
+
+- **Staff Members**
+  - Guest check-in/check-out
+  - Housekeeping services
+  - Concierge services
+  - Shift-based access
+  - Property-specific permissions
 
 #### Property Management
 - **Property Registration**
@@ -288,11 +353,13 @@ GET /properties/{id}/reviews
 ```sql
 CREATE TABLE properties (
     id UUID PRIMARY KEY,
+    organization_id UUID, -- References Core Service organizations (NULL for independent)
     owner_id UUID NOT NULL,
     name VARCHAR(200) NOT NULL,
     description TEXT,
     property_type ENUM('hotel', 'resort', 'apartment', 'villa', 'hostel', 'guesthouse') NOT NULL,
     address JSONB NOT NULL,
+    location geometry(POINT, 4326), -- PostGIS geometry using gogis
     phone VARCHAR(20),
     email VARCHAR(255),
     website VARCHAR(500),
@@ -309,11 +376,12 @@ CREATE TABLE properties (
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
 
+    INDEX idx_organization_id (organization_id),
     INDEX idx_owner_id (owner_id),
     INDEX idx_property_type (property_type),
     INDEX idx_status (status),
     INDEX idx_rating (rating),
-    SPATIAL INDEX idx_location ((CAST(address->>'$.coordinates' AS POINT))),
+    SPATIAL INDEX idx_location (location),
     FULLTEXT idx_search (name, description)
 );
 ```
