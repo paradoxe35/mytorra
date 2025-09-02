@@ -14,6 +14,7 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
 6. **Notification System** - Generic notification sender (email, SMS, push)
 7. **Subscription Engine** - Generic subscription management for all services
 8. **Admin Management** - Platform-wide administrative functions
+9. **Automatic Permission Assignment** - Event-driven permission management based on subscriptions
 
 ## Features & Functionality
 
@@ -178,6 +179,13 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
   - Service-specific permissions
   - Geographic/location-based permissions
 
+- **Automatic Permission Assignment**
+  - Subscription-based permission templates
+  - Event-driven permission updates
+  - Plan upgrade/downgrade permission adjustment
+  - Organization member permission distribution
+  - Trial and grace period permission management
+
 ### 4. Payment Processing
 - **Payment Gateway Abstraction**
   - Multiple payment provider support (Stripe, PayStack, Flutterwave)
@@ -209,6 +217,13 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
   - Proration for plan changes
   - Grace periods and suspension
   - Invoice generation
+
+- **Permission Integration**
+  - Automatic permission assignment on subscription
+  - Permission templates per plan
+  - Permission revocation on cancellation
+  - Grace period permission retention
+  - Organization seat-based permissions
 
 ### 6. Notification System
 - **Multi-Channel Notifications**
@@ -336,6 +351,17 @@ GET /organizations/{id}/subscription
 PUT /organizations/{id}/subscription
 ```
 
+### Permission Management Endpoints
+```
+GET /permissions/user/{userId}/effective
+POST /permissions/sync-subscription/{userId}
+GET /permissions/templates
+POST /permissions/templates
+PUT /permissions/templates/{id}
+GET /permissions/plan/{planId}/template
+POST /permissions/apply-template/{userId}/{templateId}
+```
+
 ### Admin Endpoints
 ```
 GET /admin/users
@@ -344,6 +370,8 @@ GET /admin/subscriptions
 GET /admin/organizations
 GET /admin/analytics
 POST /admin/notifications/broadcast
+GET /admin/permissions/templates
+POST /admin/permissions/bulk-sync
 ```
 
 ## Database Schema
@@ -559,12 +587,26 @@ CREATE TABLE user_subscriptions (
     id UUID PRIMARY KEY,
     user_id UUID REFERENCES users(id),
     plan_id UUID REFERENCES subscription_plans(id),
-    status ENUM('active', 'cancelled', 'expired', 'suspended') DEFAULT 'active',
+    status ENUM('active', 'cancelled', 'expired', 'suspended', 'grace_period', 'trial') DEFAULT 'active',
     current_period_start TIMESTAMP,
     current_period_end TIMESTAMP,
     cancel_at_period_end BOOLEAN DEFAULT FALSE,
+    permissions_applied BOOLEAN DEFAULT FALSE,
+    permission_template_id UUID,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE subscription_permission_templates (
+    id UUID PRIMARY KEY,
+    plan_id UUID REFERENCES subscription_plans(id),
+    service VARCHAR(50) NOT NULL,
+    permissions JSONB NOT NULL, -- Array of permission IDs
+    roles JSONB, -- Array of role IDs to assign
+    resource_limits JSONB, -- Max items, API calls, etc.
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE KEY unique_plan_service (plan_id, service)
 );
 ```
 
@@ -578,13 +620,76 @@ CREATE TABLE user_subscriptions (
 - **Media Service**: User authentication for secure uploads
 - **Realtime Service**: User authentication for WebSocket connections
 
-### Event Publishing
+### Internal Event Handling (Core Service)
+The Core Service internally handles subscription events to automatically manage permissions:
+
+#### Subscription Event Handlers
+```go
+// Internal event handlers within Core Service
+func (s *SubscriptionService) HandleSubscriptionCreated(sub *Subscription) {
+    // Automatically apply permission template for the plan
+    permissionService.ApplyPlanPermissions(sub.UserID, sub.PlanID)
+    // Publish event for other services
+    eventBus.Publish("subscription.created", sub)
+}
+
+func (s *SubscriptionService) HandleSubscriptionUpgraded(sub *Subscription, oldPlanID string) {
+    // Remove old plan permissions
+    permissionService.RevokePlanPermissions(sub.UserID, oldPlanID)
+    // Apply new plan permissions
+    permissionService.ApplyPlanPermissions(sub.UserID, sub.PlanID)
+    // Publish event for other services
+    eventBus.Publish("subscription.upgraded", sub)
+}
+
+func (s *SubscriptionService) HandleSubscriptionCancelled(sub *Subscription) {
+    // Schedule permission revocation for subscription end date
+    permissionService.SchedulePermissionRevocation(sub.UserID, sub.PlanID, sub.CurrentPeriodEnd)
+    // Publish event for other services
+    eventBus.Publish("subscription.cancelled", sub)
+}
+
+func (s *SubscriptionService) HandlePaymentFailed(sub *Subscription) {
+    // Apply grace period permissions (limited access)
+    permissionService.ApplyGracePeriodPermissions(sub.UserID, sub.PlanID)
+    // Publish event for other services
+    eventBus.Publish("subscription.payment_failed", sub)
+}
+```
+
+#### Organization Event Handlers
+```go
+func (s *OrganizationService) HandleMemberAdded(orgID, userID, role string) {
+    // Get organization's subscription
+    sub := subscriptionService.GetOrganizationSubscription(orgID)
+    // Apply role-based permissions from plan
+    permissionService.ApplyOrganizationMemberPermissions(userID, sub.PlanID, role)
+    // Publish event for other services
+    eventBus.Publish("organization.member_added", orgID, userID)
+}
+
+func (s *OrganizationService) HandleMemberRoleChanged(orgID, userID, newRole string) {
+    // Get organization's subscription
+    sub := subscriptionService.GetOrganizationSubscription(orgID)
+    // Update permissions based on new role
+    permissionService.UpdateOrganizationMemberPermissions(userID, sub.PlanID, newRole)
+    // Publish event for other services
+    eventBus.Publish("organization.member_role_changed", orgID, userID, newRole)
+}
+```
+
+### Event Publishing (To Other Services)
 - `UserRegistered`: When new user registers
 - `SubscriptionChanged`: When user subscription changes
 - `PaymentProcessed`: When payment is completed
 - `UserSuspended`: When user account is suspended
+- `PermissionsUpdated`: When user permissions change
+- `OrganizationMemberAdded`: When member joins organization
+- `OrganizationMemberRemoved`: When member leaves organization
 
-### Event Consumption
+### Event Consumption (From Other Services)
 - `OrderCompleted`: Update user transaction history
 - `ServiceUsageRecorded`: Update subscription usage metrics
 - `SecurityIncident`: Log and notify administrators
+- `BusinessVerified`: Grant verified business permissions
+- `DriverApproved`: Grant driver operation permissions

@@ -273,7 +273,83 @@ The User Permission Management system provides a comprehensive, hierarchical, an
   - Industry-specific access
   - Regulatory compliance permissions
 
-### 5. Permission Delegation & Temporary Access
+### 5. Automatic Permission Assignment
+
+#### Subscription-Based Permissions
+- **Plan-Based Auto Assignment**
+  - Permissions automatically granted on subscription activation
+  - Permissions revoked on subscription cancellation/expiration
+  - Plan upgrade/downgrade permission adjustments
+  - Grace period permission retention
+  - Trial permission management
+
+- **Service-Specific Auto Permissions**
+  - Restaurant plan permissions (menu management, analytics access)
+  - Hotel plan permissions (room management, booking tools)
+  - Marketplace seller permissions (product listing, order management)
+  - Cab service permissions (driver management, fleet tracking)
+  - Delivery service permissions (route optimization, delivery tracking)
+
+#### Permission Templates by Plan
+- **Starter/Basic Plans**
+  - Core feature permissions
+  - Limited resource creation rights
+  - Basic analytics viewing
+  - Standard support ticket creation
+  - Read-only access to advanced features
+
+- **Professional/Premium Plans**
+  - Extended feature permissions
+  - Unlimited resource creation
+  - Advanced analytics and reporting
+  - Priority support access
+  - API access permissions
+  - Bulk operations permissions
+  - Export/import data rights
+
+- **Enterprise Plans**
+  - All available permissions for service
+  - Custom permission configurations
+  - White-label permissions
+  - Multi-location management
+  - Advanced integration access
+  - Custom reporting permissions
+  - Audit log full access
+
+#### Organization Subscription Permissions
+- **Seat-Based Permissions**
+  - Automatic role assignment for new members
+  - Permission scaling with seat count
+  - Department-specific permission allocation
+  - Location-based permission distribution
+  - Temporary contractor permissions
+
+- **Feature Bundle Permissions**
+  - Marketing tool access permissions
+  - Financial management permissions
+  - Inventory management rights
+  - Customer communication permissions
+  - Analytics dashboard access
+
+#### Event-Driven Permission Updates
+- **Subscription Events**
+  - `SubscriptionCreated`: Grant initial plan permissions
+  - `SubscriptionUpgraded`: Add new tier permissions
+  - `SubscriptionDowngraded`: Revoke premium permissions
+  - `SubscriptionExpired`: Remove all plan permissions
+  - `SubscriptionRenewed`: Restore active permissions
+  - `PaymentFailed`: Enter grace period permissions
+  - `TrialStarted`: Grant trial permissions
+  - `TrialEnded`: Adjust to paid plan permissions
+
+- **Business Events**
+  - `BusinessVerified`: Grant verified seller permissions
+  - `RestaurantOnboarded`: Enable restaurant management permissions
+  - `HotelRegistered`: Activate hotel management permissions
+  - `DriverApproved`: Enable driver operation permissions
+  - `OrganizationCreated`: Setup owner permissions
+
+### 6. Permission Delegation & Temporary Access
 
 #### Delegation Mechanisms
 - **Manager Delegation**
@@ -369,6 +445,26 @@ The User Permission Management system provides a comprehensive, hierarchical, an
 
 ## API Endpoints
 
+### Automatic Permission Management
+```
+GET /permissions/subscription-templates/{planId}
+POST /permissions/apply-subscription-permissions
+PUT /permissions/update-subscription-permissions
+DELETE /permissions/revoke-subscription-permissions
+GET /permissions/plan-permissions/{planId}
+POST /permissions/sync-subscription-permissions
+```
+
+### Permission Templates
+```
+GET /permissions/templates
+POST /permissions/templates
+GET /permissions/templates/{id}
+PUT /permissions/templates/{id}
+DELETE /permissions/templates/{id}
+POST /permissions/templates/{id}/apply/{userId}
+```
+
 ### Role Management
 ```
 GET /permissions/roles
@@ -409,6 +505,99 @@ POST /permissions/delegate
 ```
 
 ## Database Schema
+
+### Subscription Permission Templates Table
+```sql
+CREATE TABLE subscription_permission_templates (
+    id UUID PRIMARY KEY,
+    plan_id UUID NOT NULL, -- References subscription_plans
+    service VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    permissions JSONB NOT NULL, -- Array of permission IDs and configurations
+    roles JSONB, -- Roles to auto-assign
+    conditions JSONB, -- Additional conditions for activation
+    priority INTEGER DEFAULT 0, -- For conflict resolution
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_plan_id (plan_id),
+    INDEX idx_service (service),
+    INDEX idx_is_active (is_active),
+    UNIQUE KEY unique_plan_service (plan_id, service)
+);
+```
+
+### Subscription Permissions Table
+```sql
+CREATE TABLE subscription_permissions (
+    id UUID PRIMARY KEY,
+    subscription_id UUID NOT NULL, -- References user_subscriptions or organization_subscriptions
+    user_id UUID NOT NULL,
+    template_id UUID REFERENCES subscription_permission_templates(id),
+    permissions JSONB NOT NULL, -- Actual permissions granted
+    roles JSONB, -- Roles granted through subscription
+    granted_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP, -- NULL for permanent, set for trials
+    status ENUM('active', 'suspended', 'expired', 'grace_period') DEFAULT 'active',
+    metadata JSONB, -- Additional tracking data
+
+    INDEX idx_subscription_id (subscription_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_template_id (template_id),
+    INDEX idx_status (status),
+    INDEX idx_expires_at (expires_at),
+    UNIQUE KEY unique_subscription_user (subscription_id, user_id)
+);
+```
+
+### Permission Auto-Assignment Log Table
+```sql
+CREATE TABLE permission_auto_assignment_log (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL,
+    subscription_id UUID,
+    plan_id UUID,
+    trigger_event VARCHAR(50) NOT NULL, -- subscription_created, plan_upgraded, etc.
+    permissions_added JSONB,
+    permissions_removed JSONB,
+    roles_added JSONB,
+    roles_removed JSONB,
+    reason TEXT,
+    success BOOLEAN NOT NULL,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_user_id (user_id),
+    INDEX idx_subscription_id (subscription_id),
+    INDEX idx_trigger_event (trigger_event),
+    INDEX idx_success (success),
+    INDEX idx_created_at (created_at)
+);
+```
+
+### Plan Permission Mappings Table
+```sql
+CREATE TABLE plan_permission_mappings (
+    id UUID PRIMARY KEY,
+    plan_id UUID NOT NULL,
+    permission_id UUID REFERENCES permissions(id),
+    role_id UUID REFERENCES roles(id),
+    feature_key VARCHAR(100), -- For feature-based permissions
+    resource_limits JSONB, -- Max items, API calls, etc.
+    is_included BOOLEAN DEFAULT TRUE,
+    conditions JSONB, -- Additional activation conditions
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_plan_id (plan_id),
+    INDEX idx_permission_id (permission_id),
+    INDEX idx_role_id (role_id),
+    INDEX idx_feature_key (feature_key),
+    UNIQUE KEY unique_plan_permission (plan_id, permission_id),
+    UNIQUE KEY unique_plan_role (plan_id, role_id)
+);
+```
 
 ### Roles Table
 ```sql
@@ -609,13 +798,44 @@ func GetEffectivePermissions(userID string, service string) ([]Permission, error
     // 3. Get direct user permissions
     directPermissions := getUserPermissions(userID, service)
 
-    // 4. Apply delegation permissions
+    // 4. Get subscription-based permissions
+    subscriptionPermissions := getSubscriptionPermissions(userID, service)
+
+    // 5. Apply delegation permissions
     delegatedPermissions := getDelegatedPermissions(userID, service)
 
-    // 5. Merge and resolve conflicts (explicit deny wins)
-    effectivePermissions := mergePermissions(rolePermissions, directPermissions, delegatedPermissions)
+    // 6. Merge and resolve conflicts (explicit deny wins)
+    effectivePermissions := mergePermissions(
+        rolePermissions,
+        directPermissions,
+        subscriptionPermissions,
+        delegatedPermissions,
+    )
 
     return effectivePermissions, nil
+}
+
+// Get permissions based on active subscriptions
+func getSubscriptionPermissions(userID string, service string) ([]Permission, error) {
+    // 1. Get user's active subscriptions
+    subscriptions := getUserSubscriptions(userID, service)
+
+    // 2. Get organization subscriptions if user is member
+    orgSubscriptions := getOrganizationSubscriptions(userID, service)
+
+    // 3. Load permission templates for each subscription
+    var permissions []Permission
+    for _, sub := range append(subscriptions, orgSubscriptions...) {
+        template := getPermissionTemplate(sub.PlanID, service)
+        if template != nil {
+            // 4. Check subscription status and apply permissions
+            if sub.Status == "active" || sub.Status == "grace_period" {
+                permissions = append(permissions, template.Permissions...)
+            }
+        }
+    }
+
+    return permissions, nil
 }
 ```
 
@@ -643,6 +863,157 @@ func CheckPermission(userID, service, resource, action string, context map[strin
 }
 ```
 
+## Automatic Permission Assignment Implementation
+
+### Subscription Permission Flow
+```go
+// When a subscription is created or updated
+func HandleSubscriptionEvent(event SubscriptionEvent) error {
+    switch event.Type {
+    case "subscription.created":
+        return applySubscriptionPermissions(event.UserID, event.PlanID)
+    case "subscription.upgraded":
+        return upgradePermissions(event.UserID, event.OldPlanID, event.NewPlanID)
+    case "subscription.downgraded":
+        return downgradePermissions(event.UserID, event.OldPlanID, event.NewPlanID)
+    case "subscription.cancelled":
+        return schedulePermissionRevocation(event.UserID, event.PlanID, event.EndDate)
+    case "subscription.expired":
+        return revokeSubscriptionPermissions(event.UserID, event.PlanID)
+    }
+    return nil
+}
+
+// Apply permissions based on subscription plan
+func applySubscriptionPermissions(userID, planID string) error {
+    // 1. Get permission template for plan
+    template, err := getPermissionTemplate(planID)
+    if err != nil {
+        return err
+    }
+
+    // 2. Create subscription permission record
+    subPermission := &SubscriptionPermission{
+        UserID:       userID,
+        TemplateID:   template.ID,
+        Permissions:  template.Permissions,
+        Roles:        template.Roles,
+        Status:       "active",
+    }
+
+    // 3. Apply permissions to user
+    for _, permID := range template.Permissions {
+        grantPermission(userID, permID, "subscription")
+    }
+
+    // 4. Assign roles
+    for _, roleID := range template.Roles {
+        assignRole(userID, roleID, "subscription")
+    }
+
+    // 5. Log the assignment
+    logAutoAssignment(userID, planID, "subscription.created", template)
+
+    return nil
+}
+```
+
+### Permission Template Examples
+```json
+// Restaurant Professional Plan Template
+{
+  "plan_id": "restaurant_professional",
+  "service": "food_delivery",
+  "permissions": [
+    "restaurant.menu.create",
+    "restaurant.menu.update",
+    "restaurant.menu.delete",
+    "restaurant.orders.view",
+    "restaurant.orders.process",
+    "restaurant.analytics.advanced",
+    "restaurant.marketing.campaigns",
+    "restaurant.staff.manage",
+    "restaurant.locations.multiple"
+  ],
+  "roles": ["restaurant_manager"],
+  "resource_limits": {
+    "max_menu_items": -1,
+    "max_staff_accounts": 10,
+    "max_locations": 3,
+    "api_calls_per_hour": 1000
+  }
+}
+
+// Hotel Premium Plan Template
+{
+  "plan_id": "hotel_premium",
+  "service": "booking",
+  "permissions": [
+    "hotel.rooms.manage",
+    "hotel.bookings.manage",
+    "hotel.pricing.dynamic",
+    "hotel.channels.integrate",
+    "hotel.analytics.revenue",
+    "hotel.reports.export",
+    "hotel.api.access"
+  ],
+  "roles": ["hotel_manager"],
+  "resource_limits": {
+    "max_room_types": -1,
+    "max_channels": 10,
+    "api_calls_per_hour": 5000
+  }
+}
+```
+
+### Organization Subscription Permission Distribution
+```go
+// Distribute permissions to organization members based on subscription
+func distributeOrganizationPermissions(orgID string, planID string) error {
+    // 1. Get organization members
+    members, err := getOrganizationMembers(orgID)
+    if err != nil {
+        return err
+    }
+
+    // 2. Get plan template
+    template, err := getPermissionTemplate(planID)
+    if err != nil {
+        return err
+    }
+
+    // 3. Apply permissions based on member role
+    for _, member := range members {
+        var permissions []string
+        var roles []string
+
+        switch member.Role {
+        case "owner":
+            // Owners get all plan permissions
+            permissions = template.Permissions
+            roles = append(template.Roles, "organization_owner")
+        case "admin":
+            // Admins get most permissions except billing
+            permissions = filterPermissions(template.Permissions, "exclude_billing")
+            roles = template.Roles
+        case "manager":
+            // Managers get operational permissions
+            permissions = filterPermissions(template.Permissions, "operational_only")
+            roles = []string{"organization_manager"}
+        case "employee":
+            // Employees get basic permissions
+            permissions = filterPermissions(template.Permissions, "basic_only")
+            roles = []string{"organization_employee"}
+        }
+
+        // Apply permissions to member
+        applyUserPermissions(member.UserID, permissions, roles, "organization_subscription")
+    }
+
+    return nil
+}
+```
+
 ## Integration Patterns
 
 ### With Core Service
@@ -650,6 +1021,8 @@ func CheckPermission(userID, service, resource, action string, context map[strin
 - Role-based dashboard rendering
 - Permission-aware API endpoints
 - Admin user management
+- Subscription status monitoring
+- Automatic permission synchronization
 
 ### With All Services
 ```go
@@ -688,11 +1061,24 @@ func ValidateRestaurantAccess(userID, restaurantID string) bool {
 - `AccessDenied`: Access attempt denied
 - `PermissionRevoked`: Permission removed
 - `DelegationCreated`: Permission delegated
+- `SubscriptionPermissionsApplied`: Permissions granted via subscription
+- `SubscriptionPermissionsRevoked`: Permissions removed due to subscription change
+- `PermissionTemplateUpdated`: Template changes requiring sync
 
 ### Event Consumption
 - `UserRegistered`: Assign default roles
 - `BusinessVerified`: Grant business permissions
-- `SubscriptionChanged`: Update feature permissions
+- `SubscriptionCreated`: Apply plan permission template
+- `SubscriptionUpgraded`: Add new tier permissions
+- `SubscriptionDowngraded`: Adjust permissions to lower tier
+- `SubscriptionCancelled`: Schedule permission removal
+- `SubscriptionExpired`: Remove subscription permissions
+- `SubscriptionRenewed`: Restore plan permissions
+- `PaymentFailed`: Apply grace period permissions
+- `TrialStarted`: Grant trial permissions with expiry
+- `TrialConverted`: Convert to full plan permissions
+- `OrganizationMemberAdded`: Apply org subscription permissions
+- `OrganizationMemberRemoved`: Revoke org permissions
 - `UserSuspended`: Revoke all permissions
 
 ## Security Considerations
