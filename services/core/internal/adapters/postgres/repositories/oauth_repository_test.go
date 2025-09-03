@@ -18,27 +18,30 @@ import (
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-func setupOAuthRepositoryTest(t *testing.T) (*oauthRepository, *database.TestDB, func()) {
-	// Setup test database with GORM
+func setupOAuthRepositoryTest(t *testing.T) (*oauthRepository, *database.DB, func()) {
+	// Setup test database with Bun
 	testDB := database.NewTestDB(t)
+	ctx := context.Background()
 
-	// Auto-migrate required models
-	err := testDB.Migrate(&models.OAuthStateModel{}, &models.OAuthProfileModel{}, &models.UserModel{}, &models.AreaModel{})
+	// Create tables for required models
+	err := testDB.CreateTables(ctx, (*models.OAuthStateModel)(nil), (*models.OAuthProfileModel)(nil), (*models.UserModel)(nil), (*models.AreaModel)(nil))
 	require.NoError(t, err)
 
 	encryptor := security.NewAESEncryptor("test-secret-key-32-chars-long!!!!!")
 	appLogger := logger.New("test", "test")
 
-	repo := NewOAuthRepository(testDB.GormDB, encryptor, appLogger)
+	repo := NewOAuthRepository(testDB.DB, encryptor, appLogger)
 
 	cleanup := func() {
 		testDB.Close()
 	}
 
-	return repo.(*oauthRepository), testDB, cleanup
+	return repo.(*oauthRepository), testDB.DB, cleanup
 }
 
-func createTestOAuthUser(t *testing.T, db *database.TestDB) uuid.UUID {
+func createTestOAuthUser(t *testing.T, db *database.DB) uuid.UUID {
+	ctx := context.Background()
+
 	// Create a test area first
 	areaID := uuid.New()
 	area := &entities.Area{
@@ -69,7 +72,7 @@ func createTestOAuthUser(t *testing.T, db *database.TestDB) uuid.UUID {
 	}
 
 	areaModel := models.AreaFromEntity(area)
-	err := db.DB.Create(areaModel).Error
+	_, err := db.NewInsert().Model(areaModel).Exec(ctx)
 	require.NoError(t, err)
 
 	// Create a test user
@@ -90,7 +93,7 @@ func createTestOAuthUser(t *testing.T, db *database.TestDB) uuid.UUID {
 	}
 
 	userModel := models.UserFromEntity(user)
-	err = db.DB.Create(userModel).Error
+	_, err = db.NewInsert().Model(userModel).Exec(ctx)
 	require.NoError(t, err)
 
 	return userID
@@ -124,10 +127,9 @@ func TestOAuthRepository_CreateOAuthProfile_Success(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify profile was created by checking count in database
-	var count int64
-	err = testDB.DB.Model(&models.OAuthProfileModel{}).Where("id = ?", profile.ID).Count(&count).Error
+	count, err := testDB.NewSelect().Model((*models.OAuthProfileModel)(nil)).Where("id = ?", profile.ID).Count(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(1), count)
+	assert.Equal(t, 1, count)
 }
 
 func TestOAuthRepository_CreateOAuthProfile_DuplicateProvider(t *testing.T) {
@@ -315,10 +317,9 @@ func TestOAuthRepository_DeleteOAuthProfile_Success(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify deletion
-	var count int64
-	err = testDB.DB.Model(&models.OAuthProfileModel{}).Where("user_id = ? AND provider = ?", userID, valueobjects.OAuthProviderGoogle.String()).Count(&count).Error
+	count, err := testDB.NewSelect().Model((*models.OAuthProfileModel)(nil)).Where("user_id = ? AND provider = ?", userID, valueobjects.OAuthProviderGoogle.String()).Count(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(0), count)
+	assert.Equal(t, 0, count)
 }
 
 func TestOAuthRepository_SaveOAuthState_Success(t *testing.T) {
@@ -342,10 +343,9 @@ func TestOAuthRepository_SaveOAuthState_Success(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify state was saved
-	var count int64
-	err = testDB.DB.Model(&models.OAuthStateModel{}).Where("state = ?", state.State).Count(&count).Error
+	count, err := testDB.NewSelect().Model((*models.OAuthStateModel)(nil)).Where("state = ?", state.State).Count(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(1), count)
+	assert.Equal(t, 1, count)
 }
 
 func TestOAuthRepository_GetOAuthState_Valid(t *testing.T) {
@@ -427,10 +427,9 @@ func TestOAuthRepository_DeleteOAuthState_Success(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify deletion
-	var count int64
-	err = testDB.DB.Model(&models.OAuthStateModel{}).Where("state = ?", "delete-me").Count(&count).Error
+	count, err := testDB.NewSelect().Model((*models.OAuthStateModel)(nil)).Where("state = ?", "delete-me").Count(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(0), count)
+	assert.Equal(t, 0, count)
 }
 
 func TestOAuthRepository_CleanupExpiredStates(t *testing.T) {
@@ -474,10 +473,9 @@ func TestOAuthRepository_CleanupExpiredStates(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify only valid state remains
-	var count int64
-	err = testDB.DB.Model(&models.OAuthStateModel{}).Count(&count).Error
+	count, err := testDB.NewSelect().Model((*models.OAuthStateModel)(nil)).Count(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, int64(1), count)
+	assert.Equal(t, 1, count)
 
 	// Verify the valid state is still there
 	state, err := repo.GetOAuthState(ctx, "valid-1")

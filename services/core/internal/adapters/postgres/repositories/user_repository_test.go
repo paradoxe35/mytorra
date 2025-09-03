@@ -16,23 +16,24 @@ import (
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-func setupUserRepo(t *testing.T) (*userRepository, *database.TestDB, func()) {
-	// Setup test database with GORM
+func setupUserRepo(t *testing.T) (*userRepository, *database.DB, func()) {
+	// Setup test database with Bun
 	testDB := database.NewTestDB(t)
+	ctx := context.Background()
 
-	// Auto-migrate required models
-	err := testDB.Migrate(&models.UserModel{}, &models.AreaModel{})
+	// Create tables for required models
+	err := testDB.CreateTables(ctx, (*models.UserModel)(nil), (*models.AreaModel)(nil))
 	if err != nil {
-		t.Fatalf("Failed to migrate test database: %v", err)
+		t.Fatalf("Failed to create test tables: %v", err)
 	}
 
-	repo := NewUserRepository(testDB.GormDB)
+	repo := NewUserRepository(testDB.DB)
 
 	cleanup := func() {
 		testDB.Close()
 	}
 
-	return repo.(*userRepository), testDB, cleanup
+	return repo.(*userRepository), testDB.DB, cleanup
 }
 
 func createTestUser(t *testing.T, areaID uuid.UUID) *entities.User {
@@ -68,10 +69,11 @@ func createTestUser(t *testing.T, areaID uuid.UUID) *entities.User {
 	}
 }
 
-func createTestAreaForUser(t *testing.T, db *database.TestDB) uuid.UUID {
+func createTestAreaForUser(t *testing.T, db *database.DB) uuid.UUID {
 	areaID := uuid.New()
+	ctx := context.Background()
 
-	// Create test area using GORM
+	// Create test area using Bun
 	area := &entities.Area{
 		ID:                   areaID,
 		Type:                 valueobjects.AreaTypeTown,
@@ -100,7 +102,7 @@ func createTestAreaForUser(t *testing.T, db *database.TestDB) uuid.UUID {
 	}
 
 	areaModel := models.AreaFromEntity(area)
-	err := db.DB.Create(areaModel).Error
+	_, err := db.NewInsert().Model(areaModel).Exec(ctx)
 	require.NoError(t, err)
 
 	return areaID

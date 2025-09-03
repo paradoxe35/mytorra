@@ -17,26 +17,29 @@ import (
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, *database.TestDB, func()) {
-	// Setup test database with GORM
+func setupRefreshTokenRepo(t *testing.T) (*refreshTokenRepository, *database.DB, func()) {
+	// Setup test database with Bun
 	testDB := database.NewTestDB(t)
+	ctx := context.Background()
 
-	// Auto-migrate required models
-	err := testDB.Migrate(&models.RefreshTokenModel{}, &models.UserModel{}, &models.AreaModel{})
+	// Create tables for required models
+	err := testDB.CreateTables(ctx, (*models.RefreshTokenModel)(nil), (*models.UserModel)(nil), (*models.AreaModel)(nil))
 	if err != nil {
-		t.Fatalf("Failed to migrate test database: %v", err)
+		t.Fatalf("Failed to create test tables: %v", err)
 	}
 
-	repo := NewRefreshTokenRepository(testDB.GormDB)
+	repo := NewRefreshTokenRepository(testDB.DB)
 
 	cleanup := func() {
 		testDB.Close()
 	}
 
-	return repo.(*refreshTokenRepository), testDB, cleanup
+	return repo.(*refreshTokenRepository), testDB.DB, cleanup
 }
 
-func createTestUserForRefreshToken(t *testing.T, db *database.TestDB) uuid.UUID {
+func createTestUserForRefreshToken(t *testing.T, db *database.DB) uuid.UUID {
+	ctx := context.Background()
+
 	// Create a test area first
 	areaID := uuid.New()
 	area := &entities.Area{
@@ -67,7 +70,7 @@ func createTestUserForRefreshToken(t *testing.T, db *database.TestDB) uuid.UUID 
 	}
 
 	areaModel := models.AreaFromEntity(area)
-	err := db.DB.Create(areaModel).Error
+	_, err := db.NewInsert().Model(areaModel).Exec(ctx)
 	require.NoError(t, err)
 
 	// Create a test user
@@ -88,7 +91,7 @@ func createTestUserForRefreshToken(t *testing.T, db *database.TestDB) uuid.UUID 
 	}
 
 	userModel := models.UserFromEntity(user)
-	err = db.DB.Create(userModel).Error
+	_, err = db.NewInsert().Model(userModel).Exec(ctx)
 	require.NoError(t, err)
 
 	return userID

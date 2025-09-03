@@ -16,16 +16,17 @@ import (
 )
 
 func setupAreaRepo(t *testing.T) (*areaRepository, func()) {
-	// Setup test database with GORM
+	// Setup test database with Bun
 	testDB := database.NewTestDB(t)
+	ctx := context.Background()
 
-	// Auto-migrate required models
-	err := testDB.Migrate(&models.AreaModel{})
+	// Create tables for required models
+	err := testDB.CreateTables(ctx, (*models.AreaModel)(nil))
 	if err != nil {
-		t.Fatalf("Failed to migrate test database: %v", err)
+		t.Fatalf("Failed to create test tables: %v", err)
 	}
 
-	repo := NewAreaRepository(testDB.GormDB)
+	repo := NewAreaRepository(testDB.DB)
 
 	cleanup := func() {
 		testDB.Close()
