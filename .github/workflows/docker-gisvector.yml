@@ -22,7 +22,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: paradoxe35/gisvector
 
 jobs:
   build-and-push:
@@ -76,11 +75,19 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/gisvector
           tags: |
             type=raw,value=${{ steps.version.outputs.postgres_version }}${{ matrix.suffix }}
             type=raw,value=latest${{ matrix.suffix }},enable={{is_default_branch}}
             type=sha,prefix=${{ steps.version.outputs.postgres_version }}${{ matrix.suffix }}-
+
+      - name: Display image destination
+        run: |
+          echo "Images will be pushed to:"
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | while read tag; do
+            echo "  - $tag"
+          done
+          echo "Push enabled: ${{ github.event_name != 'pull_request' }}"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
