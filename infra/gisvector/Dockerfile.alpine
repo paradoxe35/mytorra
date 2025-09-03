@@ -1,5 +1,9 @@
+# Build argument for PostgreSQL version
+ARG POSTGRES_VERSION=17-3.4
+ARG PGVECTOR_VERSION=v0.8.0
+
 # Use the Alpine-based PostGIS image as the base
-FROM postgis/postgis:17-3.4-alpine
+FROM postgis/postgis:${POSTGRES_VERSION}-alpine
 
 # Install necessary packages including clang
 RUN apk add --no-cache --virtual .build-deps \
@@ -12,7 +16,7 @@ RUN apk add --no-cache --virtual .build-deps \
     # Create symlinks if needed (in case clang15 binary has different name)
     && (which clang-15 || ln -s /usr/bin/clang15 /usr/bin/clang-15 2>/dev/null || true) \
     # Clone and build pgvector
-    && git clone --branch v0.8.0 https://github.com/pgvector/pgvector.git /tmp/pgvector \
+    && git clone --branch ${PGVECTOR_VERSION} https://github.com/pgvector/pgvector.git /tmp/pgvector \
     && cd /tmp/pgvector \
     && make \
     && make install \

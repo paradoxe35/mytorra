@@ -1,5 +1,9 @@
+# Build argument for PostgreSQL version
+ARG POSTGRES_VERSION=17-3.4
+ARG PGVECTOR_VERSION=v0.8.0
+
 # Use the PostGIS image as the base
-FROM postgis/postgis:17-3.4
+FROM postgis/postgis:${POSTGRES_VERSION}
 
 # Install necessary packages including clang-13
 RUN apt-get update \
@@ -13,7 +17,7 @@ RUN apt-get update \
        llvm-13-dev \
     # Clean up to reduce layer size
     && rm -rf /var/lib/apt/lists/* \
-    && git clone --branch v0.8.0 https://github.com/pgvector/pgvector.git /tmp/pgvector \
+    && git clone --branch ${PGVECTOR_VERSION} https://github.com/pgvector/pgvector.git /tmp/pgvector \
     && cd /tmp/pgvector \
     && make \
     && make install \

@@ -1,0 +1,94 @@
+name: Build and Push GISVector Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      postgres_version:
+        description: "PostgreSQL version tag (e.g., 17-3.4)"
+        required: false
+        default: "17-3.4"
+        type: string
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "infra/gisvector/**"
+      - ".github/workflows/docker-gisvector.yml"
+  pull_request:
+    paths:
+      - "infra/gisvector/**"
+      - ".github/workflows/docker-gisvector.yml"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: paradoxe35/gisvector
+
+jobs:
+  build-and-push:
+    runs-on: arc-runner-set
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - dockerfile: infra/gisvector/Dockerfile
+            suffix: ""
+          - dockerfile: infra/gisvector/Dockerfile.alpine
+            suffix: "-alpine"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract PostgreSQL version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.postgres_version }}" ]; then
+            VERSION="${{ github.event.inputs.postgres_version }}"
+          else
+            VERSION=$(grep -oP 'FROM postgis/postgis:\K[0-9]+-[0-9.]+' ${{ matrix.dockerfile }} | head -1)
+            if [ -z "$VERSION" ]; then
+              VERSION="17-3.4"
+            fi
+          fi
+          echo "postgres_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using PostgreSQL version: $VERSION"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.postgres_version }}${{ matrix.suffix }}
+            type=raw,value=latest${{ matrix.suffix }},enable={{is_default_branch}}
+            type=sha,prefix=${{ steps.version.outputs.postgres_version }}${{ matrix.suffix }}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./infra/gisvector
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            POSTGRES_VERSION=${{ steps.version.outputs.postgres_version }}

@@ -31,7 +31,7 @@ setup: ## Initial project setup
 	$(GO) work sync
 	@echo "$(GREEN)Installing tools...$(NC)"
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	$(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	curl -sSf https:\/\/atlasgo.sh | sh
 	$(GO) install github.com/vektra/mockery/v2@latest
 	$(GO) install github.com/swaggo/swag/cmd/swag@latest
 	@echo "$(GREEN)Building custom tools...$(NC)"
