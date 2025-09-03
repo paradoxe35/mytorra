@@ -1,0 +1,25 @@
+# Use the Alpine-based PostGIS image as the base
+FROM postgis/postgis:17-3.4-alpine
+
+# Install necessary packages including clang
+RUN apk add --no-cache --virtual .build-deps \
+        alpine-sdk \
+        postgresql-dev \
+        wget \
+        git \
+        clang15 \
+        llvm15-dev \
+    # Create symlinks if needed (in case clang15 binary has different name)
+    && (which clang-15 || ln -s /usr/bin/clang15 /usr/bin/clang-15 2>/dev/null || true) \
+    # Clone and build pgvector
+    && git clone --branch v0.8.0 https://github.com/pgvector/pgvector.git /tmp/pgvector \
+    && cd /tmp/pgvector \
+    && make \
+    && make install \
+    # Clean up unnecessary files and packages
+    && cd - \
+    && rm -rf /tmp/pgvector \
+    && apk del .build-deps
+
+# Copy initialization scripts
+COPY ./docker-entrypoint-initdb.d/ /docker-entrypoint-initdb.d/
