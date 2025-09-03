@@ -1,21 +1,21 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/config"
 )
 
 // TestDB provides a test database instance
 type TestDB struct {
-	*GormDB
+	*DB
 	testSchema string
 	cleanup    func()
 }
@@ -24,21 +24,23 @@ type TestDB struct {
 // It creates an isolated schema for each test to ensure test isolation
 func NewTestDB(t *testing.T) *TestDB {
 	t.Helper()
+	ctx := context.Background()
 
 	// Get test database configuration from environment or use defaults
-	dsn := getEnvOrDefault("TEST_DATABASE_URL",
-		fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-			getEnvOrDefault("TEST_DB_HOST", "localhost"),
-			getEnvAsIntOrDefault("TEST_DB_PORT", 5432),
-			getEnvOrDefault("TEST_DB_USER", "postgres"),
-			getEnvOrDefault("TEST_DB_PASSWORD", "postgres"),
-			getEnvOrDefault("TEST_DB_NAME", "torra_test"),
-		))
+	cfg := &config.DatabaseConfig{
+		Host:            getEnvOrDefault("TEST_DB_HOST", "localhost"),
+		Port:            getEnvAsIntOrDefault("TEST_DB_PORT", 5432),
+		Database:        getEnvOrDefault("TEST_DB_NAME", "mytorra_test"),
+		User:            getEnvOrDefault("TEST_DB_USER", "postgres"),
+		Password:        getEnvOrDefault("TEST_DB_PASSWORD", "postgres"),
+		SSLMode:         "disable",
+		MaxOpenConns:    10,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 30 * time.Minute,
+	}
 
-	// Connect to PostgreSQL
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
+	// Connect to PostgreSQL using Bun
+	db, err := NewDB(cfg)
 	if err != nil {
 		t.Fatalf("failed to connect to test database: %v", err)
 	}
@@ -49,41 +51,38 @@ func NewTestDB(t *testing.T) *TestDB {
 	testSchema = sanitizeSchemaName(testSchema)
 
 	// Create the test schema
-	if err := db.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", testSchema)).Error; err != nil {
+	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", testSchema)); err != nil {
 		t.Fatalf("failed to create test schema %s: %v", testSchema, err)
 	}
 
 	// Set search path to use test schema
-	if err := db.Exec(fmt.Sprintf("SET search_path TO %s, public", testSchema)).Error; err != nil {
+	if _, err := db.DB.ExecContext(ctx, fmt.Sprintf("SET search_path TO %s, public", testSchema)); err != nil {
 		t.Fatalf("failed to set search path: %v", err)
 	}
 
 	// Enable PostGIS extension (install in public schema if not exists, then use from test schema)
-	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS postgis SCHEMA public").Error; err != nil {
+	if _, err := db.DB.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS postgis SCHEMA public"); err != nil {
 		// Try without specifying schema
-		if err := db.Exec("CREATE EXTENSION IF NOT EXISTS postgis").Error; err != nil {
+		if _, err := db.DB.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS postgis"); err != nil {
 			t.Logf("warning: could not enable PostGIS extension: %v", err)
 		}
 	}
 
 	// Enable UUID extension
-	if err := db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" SCHEMA public").Error; err != nil {
-		if err := db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"").Error; err != nil {
+	if _, err := db.DB.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" SCHEMA public"); err != nil {
+		if _, err := db.DB.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""); err != nil {
 			t.Logf("warning: could not enable uuid-ossp extension: %v", err)
 		}
 	}
 
 	testDB := &TestDB{
-		GormDB:     &GormDB{DB: db},
+		DB:         db,
 		testSchema: testSchema,
 		cleanup: func() {
 			// Drop the test schema and all its contents
-			db.Exec(fmt.Sprintf("DROP SCHEMA IF EXISTS %s CASCADE", testSchema))
-
+			db.DB.ExecContext(context.Background(), fmt.Sprintf("DROP SCHEMA IF NOT EXISTS %s CASCADE", testSchema))
 			// Close the connection
-			if sqlDB, err := db.DB(); err == nil {
-				sqlDB.Close()
-			}
+			db.Close()
 		},
 	}
 
@@ -95,22 +94,32 @@ func NewTestDB(t *testing.T) *TestDB {
 	return testDB
 }
 
-// Migrate runs auto-migration for the given models
-func (tdb *TestDB) Migrate(models ...interface{}) error {
-	return tdb.DB.AutoMigrate(models...)
+// CreateTables creates tables for the given models
+func (tdb *TestDB) CreateTables(ctx context.Context, models ...interface{}) error {
+	for _, model := range models {
+		if _, err := tdb.DB.DB.NewCreateTable().
+			Model(model).
+			IfNotExists().
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // TruncateAll truncates all tables (useful for cleaning between tests)
-func (tdb *TestDB) TruncateAll(models ...interface{}) error {
+func (tdb *TestDB) TruncateAll(ctx context.Context, models ...interface{}) error {
 	// Disable foreign key checks temporarily
-	tdb.DB.Exec("SET session_replication_role = 'replica'")
-	defer tdb.DB.Exec("SET session_replication_role = 'origin'")
+	if _, err := tdb.DB.DB.ExecContext(ctx, "SET session_replication_role = 'replica'"); err != nil {
+		return err
+	}
+	defer tdb.DB.DB.ExecContext(ctx, "SET session_replication_role = 'origin'")
 
 	for _, model := range models {
-		tableName := tdb.DB.Model(model).Statement.Table
-		if err := tdb.DB.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", tableName)).Error; err != nil {
+		tableName := tdb.DB.DB.NewSelect().Model(model).GetTableName()
+		if _, err := tdb.DB.DB.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE %s CASCADE", tableName)); err != nil {
 			// Fallback to DELETE if TRUNCATE fails
-			if err := tdb.DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(model).Error; err != nil {
+			if _, err := tdb.DB.DB.NewDelete().Model(model).Where("1=1").Exec(ctx); err != nil {
 				return fmt.Errorf("failed to truncate table %s: %w", tableName, err)
 			}
 		}
@@ -126,16 +135,17 @@ func (tdb *TestDB) Close() {
 }
 
 // SeedData is a helper to seed test data
-func (tdb *TestDB) SeedData(data interface{}) error {
-	return tdb.DB.Create(data).Error
+func (tdb *TestDB) SeedData(ctx context.Context, data interface{}) error {
+	_, err := tdb.DB.DB.NewInsert().Model(data).Exec(ctx)
+	return err
 }
 
 // AssertCount asserts the count of records in a table
-func (tdb *TestDB) AssertCount(t *testing.T, model interface{}, expected int64, message string) {
+func (tdb *TestDB) AssertCount(t *testing.T, ctx context.Context, model interface{}, expected int, message string) {
 	t.Helper()
 
-	var count int64
-	if err := tdb.DB.Model(model).Count(&count).Error; err != nil {
+	count, err := tdb.DB.DB.NewSelect().Model(model).Count(ctx)
+	if err != nil {
 		t.Fatalf("failed to count records: %v", err)
 	}
 
@@ -145,76 +155,102 @@ func (tdb *TestDB) AssertCount(t *testing.T, model interface{}, expected int64, 
 }
 
 // AssertExists asserts that a record exists
-func (tdb *TestDB) AssertExists(t *testing.T, model interface{}, conditions ...interface{}) {
+func (tdb *TestDB) AssertExists(t *testing.T, ctx context.Context, model interface{}, conditions ...interface{}) {
 	t.Helper()
 
-	err := tdb.DB.First(model, conditions...).Error
+	query := tdb.DB.DB.NewSelect().Model(model)
+	for i := 0; i < len(conditions); i += 2 {
+		if i+1 < len(conditions) {
+			query = query.Where(fmt.Sprintf("%s = ?", conditions[i]), conditions[i+1])
+		}
+	}
+
+	err := query.Scan(ctx)
 	if err != nil {
 		t.Errorf("record does not exist: %v", err)
 	}
 }
 
 // AssertNotExists asserts that a record does not exist
-func (tdb *TestDB) AssertNotExists(t *testing.T, model interface{}, conditions ...interface{}) {
+func (tdb *TestDB) AssertNotExists(t *testing.T, ctx context.Context, model interface{}, conditions ...interface{}) {
 	t.Helper()
 
-	err := tdb.DB.First(model, conditions...).Error
+	query := tdb.DB.DB.NewSelect().Model(model)
+	for i := 0; i < len(conditions); i += 2 {
+		if i+1 < len(conditions) {
+			query = query.Where(fmt.Sprintf("%s = ?", conditions[i]), conditions[i+1])
+		}
+	}
+
+	err := query.Scan(ctx)
 	if err == nil {
 		t.Error("record exists but should not")
 	}
 }
 
 // AssertSoftDeleted asserts that a record is soft deleted
-func (tdb *TestDB) AssertSoftDeleted(t *testing.T, model interface{}, id uuid.UUID) {
+func (tdb *TestDB) AssertSoftDeleted(t *testing.T, ctx context.Context, model interface{}, id uuid.UUID) {
 	t.Helper()
 
-	// Check with unscoped to see if record exists
-	err := tdb.DB.Unscoped().First(model, "id = ?", id).Error
+	// Check with deleted records to see if record exists
+	err := tdb.DB.DB.NewSelect().
+		Model(model).
+		Where("id = ?", id).
+		WhereDeleted().
+		Scan(ctx)
 	if err != nil {
 		t.Errorf("record does not exist at all: %v", err)
 		return
 	}
 
-	// Check that it's not found without unscoped (soft deleted)
-	err = tdb.DB.First(model, "id = ?", id).Error
+	// Check that it's not found without WhereDeleted (soft deleted)
+	err = tdb.DB.DB.NewSelect().
+		Model(model).
+		Where("id = ?", id).
+		Scan(ctx)
+
 	if err == nil {
 		t.Error("record is not soft deleted")
 	}
 }
 
 // ExecSQL executes raw SQL (useful for complex test setup)
-func (tdb *TestDB) ExecSQL(sql string, values ...interface{}) error {
-	return tdb.DB.Exec(sql, values...).Error
+func (tdb *TestDB) ExecSQL(ctx context.Context, sql string, values ...interface{}) error {
+	_, err := tdb.DB.DB.ExecContext(ctx, sql, values...)
+	return err
 }
 
 // InTransaction runs a function in a transaction and rolls it back after
 // Useful for testing transaction behavior
-func (tdb *TestDB) InTransaction(t *testing.T, fn func(*gorm.DB)) {
+func (tdb *TestDB) InTransaction(t *testing.T, ctx context.Context, fn func(ctx context.Context, tx bun.Tx)) {
 	t.Helper()
 
-	tx := tdb.DB.Begin()
+	tx, err := tdb.DB.DB.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
 	defer tx.Rollback()
 
-	fn(tx)
+	fn(ctx, tx)
 }
 
-// NewTestGormDB creates a test GORM database from config (for integration tests)
-func NewTestGormDB(t *testing.T) *GormDB {
+// NewTestBunDB creates a test Bun database from config (for integration tests)
+func NewTestBunDB(t *testing.T) *DB {
 	t.Helper()
 
 	cfg := &config.DatabaseConfig{
 		Host:            getEnvOrDefault("TEST_DB_HOST", "localhost"),
 		Port:            getEnvAsIntOrDefault("TEST_DB_PORT", 5432),
-		Database:        getEnvOrDefault("TEST_DB_NAME", "torra_test"),
+		Database:        getEnvOrDefault("TEST_DB_NAME", "mytorra_test"),
 		User:            getEnvOrDefault("TEST_DB_USER", "postgres"),
 		Password:        getEnvOrDefault("TEST_DB_PASSWORD", "postgres"),
 		SSLMode:         "disable",
 		MaxOpenConns:    10,
 		MaxIdleConns:    5,
-		ConnMaxLifetime: 30 * 60, // 30 minutes
+		ConnMaxLifetime: 30 * time.Minute,
 	}
 
-	db, err := NewGormDB(cfg)
+	db, err := NewDB(cfg)
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}

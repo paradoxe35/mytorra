@@ -455,7 +455,7 @@ CREATE TABLE processing_jobs (
 - Virtual tour content
 - Guest-generated content
 
-### With TorraCab Service
+### With MyTorraCab Service
 - Driver profile photos
 - Vehicle images
 - Trip documentation

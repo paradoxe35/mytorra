@@ -2,12 +2,13 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/packages/logger"
@@ -19,13 +20,13 @@ import (
 )
 
 type oauthRepository struct {
-	db        *database.GormDB
+	db        *database.DB
 	encryptor security.Encryptor
 	logger    logger.Interface
 }
 
 // NewOAuthRepository creates a new OAuth repository instance
-func NewOAuthRepository(db *database.GormDB, encryptor security.Encryptor, logger logger.Interface) ports.OAuthRepository {
+func NewOAuthRepository(db *database.DB, encryptor security.Encryptor, logger logger.Interface) ports.OAuthRepository {
 	return &oauthRepository{
 		db:        db,
 		encryptor: encryptor,
@@ -56,7 +57,9 @@ func (r *oauthRepository) CreateOAuthProfile(ctx context.Context, profile *entit
 
 	model := models.OAuthProfileFromEntity(&encryptedProfile)
 
-	err = r.db.WithContext(ctx).Create(model).Error
+	_, err = r.db.NewInsert().
+		Model(model).
+		Exec(ctx)
 	if err != nil {
 		if database.IsUniqueViolation(err) {
 			return fmt.Errorf("oauth profile already exists for this provider: %w", err)
@@ -71,9 +74,12 @@ func (r *oauthRepository) CreateOAuthProfile(ctx context.Context, profile *entit
 func (r *oauthRepository) GetOAuthProfile(ctx context.Context, provider valueobjects.OAuthProvider, providerID string) (*entities.OAuthProfile, error) {
 	var model models.OAuthProfileModel
 
-	err := r.db.WithContext(ctx).Where("provider = ? AND provider_id = ?", provider.String(), providerID).First(&model).Error
+	err := r.db.NewSelect().
+		Model(&model).
+		Where("provider = ? AND provider_id = ?", provider.String(), providerID).
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("oauth profile not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to get oauth profile: %w", err)
@@ -86,9 +92,12 @@ func (r *oauthRepository) GetOAuthProfile(ctx context.Context, provider valueobj
 func (r *oauthRepository) GetOAuthProfileByUserAndProvider(ctx context.Context, userID uuid.UUID, provider valueobjects.OAuthProvider) (*entities.OAuthProfile, error) {
 	var model models.OAuthProfileModel
 
-	err := r.db.WithContext(ctx).Where("user_id = ? AND provider = ?", userID, provider.String()).First(&model).Error
+	err := r.db.NewSelect().
+		Model(&model).
+		Where("user_id = ? AND provider = ?", userID, provider.String()).
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("oauth profile not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to get oauth profile: %w", err)
@@ -101,7 +110,11 @@ func (r *oauthRepository) GetOAuthProfileByUserAndProvider(ctx context.Context, 
 func (r *oauthRepository) GetUserOAuthProfiles(ctx context.Context, userID uuid.UUID) ([]*entities.OAuthProfile, error) {
 	var models []models.OAuthProfileModel
 
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Find(&models).Error
+	err := r.db.NewSelect().
+		Model(&models).
+		Where("user_id = ?", userID).
+		Order("created_at DESC").
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user oauth profiles: %w", err)
 	}
@@ -143,7 +156,15 @@ func (r *oauthRepository) UpdateOAuthTokens(ctx context.Context, profileID uuid.
 		updates["refresh_token"] = ""
 	}
 
-	err = r.db.WithContext(ctx).Model(&models.OAuthProfileModel{}).Where("id = ?", profileID).Updates(updates).Error
+	query := r.db.NewUpdate().
+		Model(&models.OAuthProfileModel{}).
+		Where("id = ?", profileID)
+
+	for key, value := range updates {
+		query = query.Set("? = ?", bun.Ident(key), value)
+	}
+
+	_, err = query.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update oauth tokens: %w", err)
 	}
@@ -184,7 +205,15 @@ func (r *oauthRepository) UpdateOAuthProfile(ctx context.Context, profile *entit
 		"updated_at":    time.Now(),
 	}
 
-	err := r.db.WithContext(ctx).Model(&models.OAuthProfileModel{}).Where("id = ?", profile.ID).Updates(updates).Error
+	query := r.db.NewUpdate().
+		Model(&models.OAuthProfileModel{}).
+		Where("id = ?", profile.ID)
+
+	for key, value := range updates {
+		query = query.Set("? = ?", bun.Ident(key), value)
+	}
+
+	_, err := query.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update oauth profile: %w", err)
 	}
@@ -194,12 +223,20 @@ func (r *oauthRepository) UpdateOAuthProfile(ctx context.Context, profile *entit
 
 // DeleteOAuthProfile deletes an OAuth profile
 func (r *oauthRepository) DeleteOAuthProfile(ctx context.Context, userID uuid.UUID, provider valueobjects.OAuthProvider) error {
-	result := r.db.WithContext(ctx).Where("user_id = ? AND provider = ?", userID, provider.String()).Delete(&models.OAuthProfileModel{})
-	if result.Error != nil {
-		return fmt.Errorf("failed to delete oauth profile: %w", result.Error)
+	result, err := r.db.NewDelete().
+		Model(&models.OAuthProfileModel{}).
+		Where("user_id = ? AND provider = ?", userID, provider.String()).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete oauth profile: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return fmt.Errorf("oauth profile not found")
 	}
 
@@ -235,7 +272,9 @@ func (r *oauthRepository) SaveOAuthState(ctx context.Context, state *valueobject
 		}
 	}
 
-	err := r.db.WithContext(ctx).Create(model).Error
+	_, err := r.db.NewInsert().
+		Model(model).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to save oauth state: %w", err)
 	}
@@ -247,9 +286,12 @@ func (r *oauthRepository) SaveOAuthState(ctx context.Context, state *valueobject
 func (r *oauthRepository) GetOAuthState(ctx context.Context, state string) (*valueobjects.OAuthState, error) {
 	var model models.OAuthStateModel
 
-	err := r.db.WithContext(ctx).Where("state = ?", state).First(&model).Error
+	err := r.db.NewSelect().
+		Model(&model).
+		Where("state = ?", state).
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("oauth state not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to get oauth state: %w", err)
@@ -296,7 +338,10 @@ func (r *oauthRepository) GetOAuthState(ctx context.Context, state string) (*val
 
 // DeleteOAuthState deletes an OAuth state
 func (r *oauthRepository) DeleteOAuthState(ctx context.Context, state string) error {
-	err := r.db.WithContext(ctx).Where("state = ?", state).Delete(&models.OAuthStateModel{}).Error
+	_, err := r.db.NewDelete().
+		Model(&models.OAuthStateModel{}).
+		Where("state = ?", state).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete oauth state: %w", err)
 	}
@@ -306,13 +351,21 @@ func (r *oauthRepository) DeleteOAuthState(ctx context.Context, state string) er
 
 // CleanupExpiredStates removes expired OAuth states
 func (r *oauthRepository) CleanupExpiredStates(ctx context.Context) error {
-	result := r.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.OAuthStateModel{})
-	if result.Error != nil {
-		return fmt.Errorf("failed to cleanup expired oauth states: %w", result.Error)
+	result, err := r.db.NewDelete().
+		Model(&models.OAuthStateModel{}).
+		Where("expires_at < ?", time.Now()).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup expired oauth states: %w", err)
 	}
 
-	if result.RowsAffected > 0 {
-		r.logger.WithField("count", result.RowsAffected).Info("Cleaned up expired OAuth states")
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected > 0 {
+		r.logger.WithField("count", rowsAffected).Info("Cleaned up expired OAuth states")
 	}
 
 	return nil
@@ -351,7 +404,7 @@ func (r *oauthRepository) modelToEntity(model *models.OAuthProfileModel) (*entit
 
 	scopes := []string{}
 	if model.Scopes != nil {
-		scopes = model.Scopes
+		scopes = []string(model.Scopes)
 	}
 
 	rawProfile := json.RawMessage(nil)

@@ -7,8 +7,8 @@ services:
     container_name: mytorra-postgres
     environment:
       POSTGRES_USER: mytorra
-      POSTGRES_PASSWORD: torra_dev_password
-      POSTGRES_DB: torra_dev
+      POSTGRES_PASSWORD: mytorra_dev_password
+      POSTGRES_DB: mytorra_dev
     ports:
       - "5432:5432"
     volumes:
@@ -44,7 +44,7 @@ services:
     container_name: mytorra-rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: mytorra
-      RABBITMQ_DEFAULT_PASS: torra_dev_password
+      RABBITMQ_DEFAULT_PASS: mytorra_dev_password
     ports:
       - "5672:5672" # AMQP port
       - "15672:15672" # Management UI
@@ -63,7 +63,7 @@ services:
     image: getmeili/meilisearch:v1.5
     container_name: mytorra-meilisearch
     environment:
-      MEILI_MASTER_KEY: torra_dev_master_key
+      MEILI_MASTER_KEY: mytorra_dev_master_key
       MEILI_ENV: development
     ports:
       - "7700:7700"
@@ -122,8 +122,8 @@ services:
     container_name: mytorra-minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: torra_minio
-      MINIO_ROOT_PASSWORD: torra_dev_password
+      MINIO_ROOT_USER: mytorra_minio
+      MINIO_ROOT_PASSWORD: mytorra_dev_password
     ports:
       - "9000:9000" # API
       - "9001:9001" # Console

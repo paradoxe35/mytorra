@@ -1,12 +1,13 @@
 package models
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-	"gorm.io/gorm"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/types"
@@ -14,26 +15,22 @@ import (
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-// OAuthProfileModel represents the GORM model for oauth_profiles table
+// OAuthProfileModel represents the Bun model for oauth_profiles table
 type OAuthProfileModel struct {
-	database.BaseModel
-	UserID       uuid.UUID  `gorm:"type:uuid;not null;index"`
-	User         *UserModel `gorm:"foreignKey:UserID"`
-	Provider     string     `gorm:"type:varchar(50);not null;index"`
-	ProviderID   string     `gorm:"type:varchar(255);not null;uniqueIndex:idx_provider_provider_id"`
-	Email        string     `gorm:"type:varchar(255)"`
-	Name         string     `gorm:"type:varchar(255)"`
-	Picture      string     `gorm:"type:text"`
-	AccessToken  string     `gorm:"type:text;not null"`
-	RefreshToken string     `gorm:"type:text"`
-	TokenExpiry  *time.Time
-	Scopes       pq.StringArray   `gorm:"type:text[]"`
-	RawProfile   types.JSONBValue `gorm:"type:jsonb"`
-}
+	database.BaseModel `bun:"table:oauth_profiles,alias:op"`
 
-// TableName specifies the table name for the OAuthProfileModel
-func (OAuthProfileModel) TableName() string {
-	return "oauth_profiles"
+	UserID       uuid.UUID        `bun:"user_id,type:uuid,notnull"`
+	User         *UserModel       `bun:"rel:belongs-to,join:user_id=id"`
+	Provider     string           `bun:"provider,notnull"`
+	ProviderID   string           `bun:"provider_id,notnull,unique:idx_provider_provider_id"`
+	Email        string           `bun:"email"`
+	Name         string           `bun:"name"`
+	Picture      string           `bun:"picture"`
+	AccessToken  string           `bun:"access_token,notnull"`
+	RefreshToken string           `bun:"refresh_token"`
+	TokenExpiry  *time.Time       `bun:"token_expiry"`
+	Scopes       pq.StringArray   `bun:"scopes,type:text[],array"`
+	RawProfile   types.JSONBValue `bun:"raw_profile,type:jsonb"`
 }
 
 // ToEntity converts the GORM model to domain entity
@@ -90,32 +87,32 @@ func OAuthProfileFromEntity(entity *entities.OAuthProfile) *OAuthProfileModel {
 	return model
 }
 
-// OAuthStateModel represents the GORM model for oauth_states table
+// OAuthStateModel represents the Bun model for oauth_states table
 type OAuthStateModel struct {
-	State        string     `gorm:"type:varchar(255);primaryKey"`
-	CodeVerifier *string    `gorm:"type:varchar(255)"`
-	RedirectURI  string     `gorm:"type:text;not null"`
-	Provider     string     `gorm:"type:varchar(50);not null"`
-	IPAddress    *string    `gorm:"type:varchar(45)"`
-	UserAgent    *string    `gorm:"type:text"`
-	UserID       *uuid.UUID `gorm:"type:uuid"`
-	User         *UserModel `gorm:"foreignKey:UserID"`
-	CreatedAt    time.Time  `gorm:"not null;default:now()"`
-	ExpiresAt    time.Time  `gorm:"not null"`
+	bun.BaseModel `bun:"table:oauth_states,alias:os"`
+
+	State        string     `bun:"state,pk"`
+	CodeVerifier *string    `bun:"code_verifier"`
+	RedirectURI  string     `bun:"redirect_uri,notnull"`
+	Provider     string     `bun:"provider,notnull"`
+	IPAddress    *string    `bun:"ip_address"`
+	UserAgent    *string    `bun:"user_agent"`
+	UserID       *uuid.UUID `bun:"user_id,type:uuid"`
+	User         *UserModel `bun:"rel:belongs-to,join:user_id=id"`
+	CreatedAt    time.Time  `bun:"created_at,notnull,default:current_timestamp"`
+	ExpiresAt    time.Time  `bun:"expires_at,notnull"`
 }
 
-// TableName specifies the table name for the OAuthStateModel
-func (OAuthStateModel) TableName() string {
-	return "oauth_states"
-}
-
-// BeforeCreate hook to set default values
-func (o *OAuthStateModel) BeforeCreate(tx *gorm.DB) error {
-	if o.CreatedAt.IsZero() {
-		o.CreatedAt = time.Now()
-	}
-	if o.ExpiresAt.IsZero() {
-		o.ExpiresAt = time.Now().Add(10 * time.Minute)
+// BeforeAppendModel is called before inserting or updating the model
+func (o *OAuthStateModel) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	switch query.(type) {
+	case *bun.InsertQuery:
+		if o.CreatedAt.IsZero() {
+			o.CreatedAt = time.Now()
+		}
+		if o.ExpiresAt.IsZero() {
+			o.ExpiresAt = time.Now().Add(10 * time.Minute)
+		}
 	}
 	return nil
 }

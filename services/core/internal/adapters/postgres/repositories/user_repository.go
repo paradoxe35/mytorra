@@ -2,11 +2,11 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/packages/errors"
@@ -17,22 +17,23 @@ import (
 )
 
 type userRepository struct {
-	db *database.GormDB
+	db *database.DB
 }
 
-// NewUserRepository creates a new GORM-based user repository
-func NewUserRepository(db *database.GormDB) ports.UserRepository {
+// NewUserRepository creates a new Bun-based user repository
+func NewUserRepository(db *database.DB) ports.UserRepository {
 	return &userRepository{db: db}
 }
 
 func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.User, error) {
 	var userModel models.UserModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&userModel).
 		Where("id = ?", id).
-		First(&userModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by id: %w", err)
@@ -44,11 +45,12 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 func (r *userRepository) FindByEmail(ctx context.Context, email valueobjects.Email) (*entities.User, error) {
 	var userModel models.UserModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&userModel).
 		Where("email = ?", email.String()).
-		First(&userModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by email: %w", err)
@@ -60,11 +62,12 @@ func (r *userRepository) FindByEmail(ctx context.Context, email valueobjects.Ema
 func (r *userRepository) FindByPhone(ctx context.Context, phone valueobjects.Phone) (*entities.User, error) {
 	var userModel models.UserModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&userModel).
 		Where("phone = ?", phone.String()).
-		First(&userModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by phone: %w", err)
@@ -76,7 +79,9 @@ func (r *userRepository) FindByPhone(ctx context.Context, phone valueobjects.Pho
 func (r *userRepository) Save(ctx context.Context, user *entities.User) error {
 	model := models.UserFromEntity(user)
 
-	err := r.db.WithContext(ctx).Create(model).Error
+	_, err := r.db.NewInsert().
+		Model(model).
+		Exec(ctx)
 	if err != nil {
 		if r.isDuplicateError(err) {
 			return fmt.Errorf("user already exists")
@@ -97,19 +102,24 @@ func (r *userRepository) Save(ctx context.Context, user *entities.User) error {
 func (r *userRepository) Update(ctx context.Context, user *entities.User) error {
 	model := models.UserFromEntity(user)
 
-	result := r.db.WithContext(ctx).
-		Model(&models.UserModel{}).
+	result, err := r.db.NewUpdate().
+		Model(model).
 		Where("id = ?", user.ID).
-		Updates(model)
-
-	if result.Error != nil {
-		if r.isDuplicateError(result.Error) {
+		OmitZero().
+		Exec(ctx)
+	if err != nil {
+		if r.isDuplicateError(err) {
 			return fmt.Errorf("duplicate key error")
 		}
-		return fmt.Errorf("failed to update user: %w", result.Error)
+		return fmt.Errorf("failed to update user: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -117,15 +127,20 @@ func (r *userRepository) Update(ctx context.Context, user *entities.User) error 
 }
 
 func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewDelete().
+		Model(&models.UserModel{}).
 		Where("id = ?", id).
-		Delete(&models.UserModel{})
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to delete user: %w", result.Error)
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -135,11 +150,12 @@ func (r *userRepository) Delete(ctx context.Context, id uuid.UUID) error {
 func (r *userRepository) FindByGoogleID(ctx context.Context, googleID string) (*entities.User, error) {
 	var userModel models.UserModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&userModel).
 		Where("google_id = ?", googleID).
-		First(&userModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by google id: %w", err)
@@ -151,11 +167,12 @@ func (r *userRepository) FindByGoogleID(ctx context.Context, googleID string) (*
 func (r *userRepository) FindByFacebookID(ctx context.Context, facebookID string) (*entities.User, error) {
 	var userModel models.UserModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&userModel).
 		Where("facebook_id = ?", facebookID).
-		First(&userModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find user by facebook id: %w", err)
@@ -167,16 +184,21 @@ func (r *userRepository) FindByFacebookID(ctx context.Context, facebookID string
 func (r *userRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewUpdate().
 		Model(&models.UserModel{}).
 		Where("id = ?", userID).
-		Update("last_login_at", now)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to update last login: %w", result.Error)
+		Set("last_login_at = ?", now).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update last login: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -184,22 +206,23 @@ func (r *userRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) 
 }
 
 func (r *userRepository) UpdateLocation(ctx context.Context, userID uuid.UUID, lat, lng float64) error {
-	updates := map[string]interface{}{
-		"last_known_lat": lat,
-		"last_known_lng": lng,
-		"last_location":  gorm.Expr("ST_SetSRID(ST_MakePoint(?, ?), 4326)", lng, lat),
-	}
-
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewUpdate().
 		Model(&models.UserModel{}).
 		Where("id = ?", userID).
-		Updates(updates)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to update location: %w", result.Error)
+		Set("last_known_lat = ?", lat).
+		Set("last_known_lng = ?", lng).
+		Set("last_location = ST_SetSRID(ST_MakePoint(?, ?), 4326)", lng, lat).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update location: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -209,14 +232,16 @@ func (r *userRepository) UpdateLocation(ctx context.Context, userID uuid.UUID, l
 func (r *userRepository) FindByAreaID(ctx context.Context, areaID uuid.UUID, pagination *database.Pagination) ([]*entities.User, error) {
 	var userModels []models.UserModel
 
-	query := r.db.WithContext(ctx).
+	query := r.db.NewSelect().
+		Model(&userModels).
 		Where("area_id = ?", areaID)
 
 	if pagination != nil {
-		query = query.Scopes(database.Paginate(pagination.Page, pagination.PerPage))
+		paginate := database.NewPaginate(pagination.Page, pagination.PerPage)
+		query = paginate.Apply(query)
 	}
 
-	err := query.Find(&userModels).Error
+	err := query.Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find users by area: %w", err)
 	}
@@ -234,45 +259,39 @@ func (r *userRepository) FindByAreaID(ctx context.Context, areaID uuid.UUID, pag
 }
 
 func (r *userRepository) CountByAreaID(ctx context.Context, areaID uuid.UUID) (int64, error) {
-	var count int64
-
-	err := r.db.WithContext(ctx).
+	count, err := r.db.NewSelect().
 		Model(&models.UserModel{}).
 		Where("area_id = ?", areaID).
-		Count(&count).Error
+		Count(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count users by area: %w", err)
 	}
 
-	return count, nil
+	return int64(count), nil
 }
 
 func (r *userRepository) ExistsByEmail(ctx context.Context, email valueobjects.Email) (bool, error) {
-	var count int64
-
-	err := r.db.WithContext(ctx).
+	exists, err := r.db.NewSelect().
 		Model(&models.UserModel{}).
 		Where("email = ?", email.String()).
-		Count(&count).Error
+		Exists(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to check email existence: %w", err)
 	}
 
-	return count > 0, nil
+	return exists, nil
 }
 
 func (r *userRepository) ExistsByPhone(ctx context.Context, phone valueobjects.Phone) (bool, error) {
-	var count int64
-
-	err := r.db.WithContext(ctx).
+	exists, err := r.db.NewSelect().
 		Model(&models.UserModel{}).
 		Where("phone = ?", phone.String()).
-		Count(&count).Error
+		Exists(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to check phone existence: %w", err)
 	}
 
-	return count > 0, nil
+	return exists, nil
 }
 
 // isDuplicateError checks if the error is a unique constraint violation
@@ -297,18 +316,18 @@ func contains(s, substr string) bool {
 func (r *userRepository) ListByArea(ctx context.Context, area string, limit, offset int) ([]*entities.User, error) {
 	var userModels []models.UserModel
 
-	query := r.db.WithContext(ctx)
-
-	// Assuming area is an area code or name
-	areaSubQuery := r.db.Table("areas").
-		Select("id").
+	// Create subquery for area
+	areaSubQuery := r.db.NewSelect().
+		TableExpr("areas").
+		Column("id").
 		Where("code = ? OR name = ?", area, area)
 
-	err := query.
+	err := r.db.NewSelect().
+		Model(&userModels).
 		Where("area_id IN (?)", areaSubQuery).
 		Limit(limit).
 		Offset(offset).
-		Find(&userModels).Error
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users by area: %w", err)
 	}
@@ -326,14 +345,12 @@ func (r *userRepository) ListByArea(ctx context.Context, area string, limit, off
 }
 
 func (r *userRepository) Count(ctx context.Context) (int64, error) {
-	var count int64
-
-	err := r.db.WithContext(ctx).
+	count, err := r.db.NewSelect().
 		Model(&models.UserModel{}).
-		Count(&count).Error
+		Count(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count users: %w", err)
 	}
 
-	return count, nil
+	return int64(count), nil
 }

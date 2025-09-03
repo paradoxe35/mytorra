@@ -1,7 +1,3 @@
-Of course. Here is the final, definitive `PLAN2.md`, which incorporates all previous suggestions and seamlessly integrates the robust background job processing strategy using `Asynq`.
-
----
-
 # MyTorra Platform: Definitive Production Architecture Plan (v5.0)
 
 ## 1. Guiding Principles
@@ -48,6 +44,7 @@ mytorra-platform/
 │   ├── auth/
 │   ├── cache/
 │   ├── config/
+│   ├── database/            # Shared database package
 │   ├── dtos/
 │   ├── events/
 │   ├── features/
@@ -79,9 +76,9 @@ mytorra-platform/
 | Service Bundle    | Description & Core Responsibilities                                                                                                                                                                                                                                              |
 | :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`core`**        | **Foundational.** The central nervous system. Manages User Accounts, Authentication (JWT, MFA, OAuth2), Payments (via an abstracted gateway), Notifications (as a generic sender), and the generic Subscription engine. It is the source of truth for user identity and billing. |
-| **`marketplace`** | **E-Commerce.** The heart of buying and selling. Manages MyTorra (used items), TorraShop (new items), the Universal Want/Request System, and interfaces with the search engine. It defines and enforces the business logic for seller subscriptions.                             |
-| **`delivery`**    | **Logistics.** Manages TorraFood (restaurants, menus) and TorraDelivery (packages). It is responsible for a shared pool of delivery agents, route optimization, and order fulfillment. It defines and enforces restaurant subscription rules.                                    |
-| **`booking`**     | **Reservations.** Manages TorraBooking (hotels, etc.) and TorraFlight. Responsible for availability, scheduling, and reservation lifecycle.                                                                                                                                      |
+| **`marketplace`** | **E-Commerce.** The heart of buying and selling. Manages MyTorra (used items), MyTorraShop (new items), the Universal Want/Request System, and interfaces with the search engine. It defines and enforces the business logic for seller subscriptions.                             |
+| **`delivery`**    | **Logistics.** Manages MyTorraFood (restaurants, menus) and MyTorraDelivery (packages). It is responsible for a shared pool of delivery agents, route optimization, and order fulfillment. It defines and enforces restaurant subscription rules.                                    |
+| **`booking`**     | **Reservations.** Manages MyTorraBooking (hotels, etc.) and MyTorraFlight. Responsible for availability, scheduling, and reservation lifecycle.                                                                                                                                      |
 | **`torracab`**    | **Ride-Hailing.** A standalone service optimized for high-frequency, real-time operations. Manages drivers, vehicles, ride requests, fare calculation, and pushes live location data to the `realtime` service.                                                                  |
 | **`media`**       | **Media Pipeline.** A dedicated utility service that handles the full lifecycle of user-generated content: secure uploads, processing (resizing, watermarking), moderation (NSFW checks), and delivery via a CDN.                                                                |
 | **`realtime`**    | **Real-Time Layer.** A specialized service running Centrifugo. Its sole job is to manage persistent WebSocket connections and broadcast messages in real-time. It receives commands to publish messages from other backend services.                                             |
@@ -99,7 +96,7 @@ This architecture is **mandatory for every service** (especially the multi-domai
 
 This structure is the key to building a professional, maintainable system that can evolve safely.
 
-## 5. Technology Stack, Tools, & Go Best Practices (Expanded & Detailed)
+## 5. Technology Stack, Tools, & Go Best Practices (Updated with Bun ORM)
 
 This section prescribes the specific tools, libraries, and enforceable best practices that will ensure the MyTorra platform is built to a consistent, high-quality, and professional standard.
 
@@ -107,8 +104,8 @@ This section prescribes the specific tools, libraries, and enforceable best prac
 | :------------------------ | :--------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Web Framework**         | **Chi**                                        | **Why:** Robust, idiomatic, and fully compatible with the Go `net/http` ecosystem. Recommended over Fiber for its standard library compliance and broader middleware support, which is critical for observability and security integrations.                                                                                                                   |
 | **Database**              | **Managed PostgreSQL** + **PostGIS**           | **Why:** Reliable primary data store with powerful geospatial capabilities. Using a managed service (Cloud SQL / RDS) offloads complex operational tasks like backups, patching, and replication.                                                                                                                                                              |
-| **Database ORM/Lib**      | **GORM** (`gorm.io/gorm`) + **gogis** (`github.com/restayway/gogis`) | **Why:** GORM provides a robust, feature-rich ORM with excellent Go idioms and performance. **gogis** adds seamless PostGIS geometry type support for spatial operations. **Implementation:** GORM models will be defined in `internal/domain/` with gogis geometry types for location-based data across all services requiring geospatial functionality. **Example:** `Location gogis.Point` for PostGIS POINT columns. |
-| **DB Migrations**         | **Atlas** (`atlasgo.io`) | **Why:** Atlas provides advanced schema migration capabilities that work excellently with GORM, especially when GORM's auto-migration falls short for complex schema changes. **Implementation:** Atlas will manage schema migrations through declarative HCL files, with automatic migration generation from GORM models when needed. |
+| **Database ORM/Lib**      | **Bun** (`github.com/uptrace/bun`) + **pgx/v5** | **Why:** Bun provides a robust, feature-rich ORM with excellent Go idioms and performance. **pgx/v5** adds seamless PostgreSQL driver support for database operations. **Implementation:** Bun models will be defined in `internal/domain/` with custom geometry types for location-based data across all services requiring geospatial functionality. **Example:** `Location Point` for PostGIS POINT columns. |
+| **DB Migrations**         | **Atlas** (`atlasgo.io`) | **Why:** Atlas provides advanced schema migration capabilities that work excellently with Bun, especially when Bun's auto-migration falls short for complex schema changes. **Implementation:** Atlas will manage schema migrations through declarative HCL files, with automatic migration generation from Bun models when needed. |
 | **Advanced Search**       | **Meilisearch**                                | **Why:** Modern, fast, and easy-to-operate search engine, ideal for a startup. Its simplicity significantly reduces operational overhead compared to Elasticsearch.                                                                                                                                                                                            |
 | **Real-Time Layer**       | **Centrifugo** + **Redis Pub/Sub**             | **Why:** A dedicated, high-performance, open-source real-time messaging server. Using a specialized tool is more scalable and robust than implementing complex WebSocket logic in each business service.                                                                                                                                                       |
 | **Message Bus (Events)**  | **RabbitMQ** (Managed)                         | **Why:** A flexible and mature message broker for asynchronous, fire-and-forget, inter-service communication. Supports dead-letter queues and other reliability patterns out of the box.                                                                                                                                                                       |

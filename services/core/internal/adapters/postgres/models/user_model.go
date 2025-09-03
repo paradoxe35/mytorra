@@ -1,75 +1,66 @@
 package models
 
 import (
+	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/restayway/gogis"
-	"gorm.io/gorm"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-// UserModel represents the GORM model for the users table
+// UserModel represents the Bun model for the users table
 type UserModel struct {
-	database.BaseModel
-	Email             string  `gorm:"type:varchar(255);uniqueIndex;not null"`
-	Phone             string  `gorm:"type:varchar(20);uniqueIndex"`
-	Name              string  `gorm:"type:varchar(255);not null"`
-	PasswordHash      string  `gorm:"type:varchar(255);not null"`
-	ProfileImageURL   string  `gorm:"type:text"`
-	EmailVerified     bool    `gorm:"type:boolean;default:false"`
-	PhoneVerified     bool    `gorm:"type:boolean;default:false"`
-	IDVerified        bool    `gorm:"type:boolean;default:false"`
-	VerificationLevel int     `gorm:"type:int;default:0"`
-	GoogleID          *string `gorm:"type:varchar(255);uniqueIndex"`
-	FacebookID        *string `gorm:"type:varchar(255);uniqueIndex"`
-	MFAEnabled        bool    `gorm:"type:boolean;default:false"`
-	MFASecret         *string `gorm:"type:varchar(255)"`
+	database.BaseModel `bun:"table:users,alias:u"`
+
+	Email             string  `bun:"email,notnull,unique"`
+	Phone             string  `bun:"phone,unique"`
+	Name              string  `bun:"name,notnull"`
+	PasswordHash      string  `bun:"password_hash,notnull"`
+	ProfileImageURL   string  `bun:"profile_image_url"`
+	EmailVerified     bool    `bun:"email_verified,default:false"`
+	PhoneVerified     bool    `bun:"phone_verified,default:false"`
+	IDVerified        bool    `bun:"id_verified,default:false"`
+	VerificationLevel int     `bun:"verification_level,default:0"`
+	GoogleID          *string `bun:"google_id,unique"`
+	FacebookID        *string `bun:"facebook_id,unique"`
+	MFAEnabled        bool    `bun:"mfa_enabled,default:false"`
+	MFASecret         *string `bun:"mfa_secret"`
 
 	// Location data
-	AreaID       uuid.UUID    `gorm:"type:uuid;index"`
-	Area         *AreaModel   `gorm:"foreignKey:AreaID"`
-	LastKnownLat *float64     `gorm:"type:decimal(10,8)"`
-	LastKnownLng *float64     `gorm:"type:decimal(11,8)"`
-	LastLocation *gogis.Point `gorm:"type:geometry(Point,4326)"`
+	AreaID       uuid.UUID       `bun:"area_id,type:uuid"`
+	Area         *AreaModel      `bun:"rel:belongs-to,join:area_id=id"`
+	LastKnownLat *float64        `bun:"last_known_lat,type:decimal(10,8)"`
+	LastKnownLng *float64        `bun:"last_known_lng,type:decimal(11,8)"`
+	LastLocation *database.Point `bun:"last_location,type:geometry(Point,4326)"`
 
 	// Status and timestamps
-	Status      string     `gorm:"type:varchar(20);default:'active'"`
-	LastLoginAt *time.Time `gorm:"type:timestamp"`
+	Status      string     `bun:"status,default:'active'"`
+	LastLoginAt *time.Time `bun:"last_login_at"`
 }
 
-// TableName specifies the table name for the UserModel
-func (UserModel) TableName() string {
-	return "users"
-}
-
-// BeforeCreate hook to set default values
-func (u *UserModel) BeforeCreate(tx *gorm.DB) error {
-	// Call parent BeforeCreate
-	if err := u.BaseModel.BeforeCreate(tx); err != nil {
-		return err
-	}
-
-	// Sync location fields if lat/lng provided
-	if u.LastKnownLat != nil && u.LastKnownLng != nil {
-		u.LastLocation = &gogis.Point{
-			Lng: *u.LastKnownLng,
-			Lat: *u.LastKnownLat,
+// BeforeAppendModel is called before inserting or updating the model
+func (u *UserModel) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	switch query.(type) {
+	case *bun.InsertQuery:
+		// Sync location fields if lat/lng provided
+		if u.LastKnownLat != nil && u.LastKnownLng != nil {
+			u.LastLocation = &database.Point{
+				Lng: *u.LastKnownLng,
+				Lat: *u.LastKnownLat,
+			}
 		}
-	}
-	return nil
-}
-
-// BeforeUpdate hook to update timestamps
-func (u *UserModel) BeforeUpdate(tx *gorm.DB) error {
-	// Sync location fields if lat/lng changed
-	if u.LastKnownLat != nil && u.LastKnownLng != nil {
-		u.LastLocation = &gogis.Point{
-			Lng: *u.LastKnownLng,
-			Lat: *u.LastKnownLat,
+	case *bun.UpdateQuery:
+		// Sync location fields if lat/lng changed
+		if u.LastKnownLat != nil && u.LastKnownLng != nil {
+			u.LastLocation = &database.Point{
+				Lng: *u.LastKnownLng,
+				Lat: *u.LastKnownLat,
+			}
 		}
 	}
 	return nil
@@ -151,7 +142,7 @@ func UserFromEntity(user *entities.User) *UserModel {
 
 	// Handle deleted timestamp
 	if user.DeletedAt != nil {
-		model.DeletedAt = gorm.DeletedAt{
+		model.DeletedAt = sql.NullTime{
 			Time:  *user.DeletedAt,
 			Valid: true,
 		}
@@ -159,7 +150,7 @@ func UserFromEntity(user *entities.User) *UserModel {
 
 	// Create PostGIS point from lat/lng
 	if user.LastKnownLat != nil && user.LastKnownLng != nil {
-		model.LastLocation = &gogis.Point{
+		model.LastLocation = &database.Point{
 			Lng: *user.LastKnownLng,
 			Lat: *user.LastKnownLat,
 		}

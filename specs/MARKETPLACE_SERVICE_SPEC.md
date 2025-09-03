@@ -1,7 +1,7 @@
 # Marketplace Service Specification
 
 ## Overview
-The Marketplace Service manages all e-commerce activities including MyTorra (used items), TorraShop (new items), TorraBoutique (fashion), and the Universal Want/Request System. It serves as the heart of buying and selling on the platform.
+The Marketplace Service manages all e-commerce activities including MyTorra (used items), MyTorraShop (new items), MyTorraBoutique (fashion), and the Universal Want/Request System. It serves as the heart of buying and selling on the platform.
 
 ## Service Responsibilities
 
@@ -33,7 +33,7 @@ The Marketplace Service manages all e-commerce activities including MyTorra (use
   - Books & Media
   - Sports & Recreation
 
-#### TorraShop (New Items Business)
+#### MyTorraShop (New Items Business)
 - **Business Account Support**
   - Bulk product management
   - Inventory tracking
@@ -46,7 +46,7 @@ The Marketplace Service manages all e-commerce activities including MyTorra (use
   - Inventory alerts
   - Sales reporting
 
-#### TorraBoutique (Fashion & Lifestyle)
+#### MyTorraBoutique (Fashion & Lifestyle)
 - **Specialized Fashion Features**
   - Size guide integration
   - Color/pattern matching
@@ -271,7 +271,7 @@ POST /admin/orders/{id}/resolve
 CREATE TABLE products (
     id UUID PRIMARY KEY,
     seller_id UUID NOT NULL,
-    marketplace_type ENUM('mytorra', 'torrashop', 'torraboutique') NOT NULL,
+    marketplace_type ENUM('mytorra', 'mytorrashop', 'mytorraboutique') NOT NULL,
     title VARCHAR(200) NOT NULL,
     description TEXT,
     category_id UUID REFERENCES categories(id),

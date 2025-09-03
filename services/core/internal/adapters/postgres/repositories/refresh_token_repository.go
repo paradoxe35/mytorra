@@ -2,11 +2,11 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/packages/errors"
@@ -16,18 +16,20 @@ import (
 )
 
 type refreshTokenRepository struct {
-	db *database.GormDB
+	db *database.DB
 }
 
-// NewRefreshTokenRepository creates a new GORM-based refresh token repository
-func NewRefreshTokenRepository(db *database.GormDB) ports.RefreshTokenRepository {
+// NewRefreshTokenRepository creates a new Bun-based refresh token repository
+func NewRefreshTokenRepository(db *database.DB) ports.RefreshTokenRepository {
 	return &refreshTokenRepository{db: db}
 }
 
 func (r *refreshTokenRepository) Create(ctx context.Context, token *entities.RefreshToken) error {
 	model := models.RefreshTokenFromEntity(token)
 
-	err := r.db.WithContext(ctx).Create(model).Error
+	_, err := r.db.NewInsert().
+		Model(model).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create refresh token: %w", err)
 	}
@@ -40,11 +42,12 @@ func (r *refreshTokenRepository) Create(ctx context.Context, token *entities.Ref
 func (r *refreshTokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*entities.RefreshToken, error) {
 	var tokenModel models.RefreshTokenModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&tokenModel).
 		Where("token_hash = ?", tokenHash).
-		First(&tokenModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find refresh token: %w", err)
@@ -56,11 +59,12 @@ func (r *refreshTokenRepository) FindByTokenHash(ctx context.Context, tokenHash 
 func (r *refreshTokenRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.RefreshToken, error) {
 	var tokenModel models.RefreshTokenModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&tokenModel).
 		Where("id = ?", id).
-		First(&tokenModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, errors.ErrNotFound
 		}
 		return nil, fmt.Errorf("failed to find refresh token by ID: %w", err)
@@ -72,10 +76,11 @@ func (r *refreshTokenRepository) FindByID(ctx context.Context, id uuid.UUID) (*e
 func (r *refreshTokenRepository) FindByUserID(ctx context.Context, userID uuid.UUID) ([]*entities.RefreshToken, error) {
 	var tokenModels []models.RefreshTokenModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&tokenModels).
 		Where("user_id = ?", userID).
 		Order("created_at DESC").
-		Find(&tokenModels).Error
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find refresh tokens by user: %w", err)
 	}
@@ -91,16 +96,21 @@ func (r *refreshTokenRepository) FindByUserID(ctx context.Context, userID uuid.U
 func (r *refreshTokenRepository) Update(ctx context.Context, token *entities.RefreshToken) error {
 	model := models.RefreshTokenFromEntity(token)
 
-	result := r.db.WithContext(ctx).
-		Model(&models.RefreshTokenModel{}).
+	result, err := r.db.NewUpdate().
+		Model(model).
 		Where("id = ?", token.ID).
-		Updates(model)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to update refresh token: %w", result.Error)
+		OmitZero().
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update refresh token: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -110,16 +120,21 @@ func (r *refreshTokenRepository) Update(ctx context.Context, token *entities.Ref
 func (r *refreshTokenRepository) UpdateLastUsed(ctx context.Context, tokenID uuid.UUID) error {
 	now := time.Now()
 
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewUpdate().
 		Model(&models.RefreshTokenModel{}).
 		Where("id = ?", tokenID).
-		Update("last_used_at", now)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to update last used: %w", result.Error)
+		Set("last_used_at = ?", now).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update last used: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -129,16 +144,21 @@ func (r *refreshTokenRepository) UpdateLastUsed(ctx context.Context, tokenID uui
 func (r *refreshTokenRepository) RevokeByID(ctx context.Context, id uuid.UUID) error {
 	now := time.Now()
 
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewUpdate().
 		Model(&models.RefreshTokenModel{}).
 		Where("id = ?", id).
-		Update("revoked_at", now)
-
-	if result.Error != nil {
-		return fmt.Errorf("failed to revoke token: %w", result.Error)
+		Set("revoked_at = ?", now).
+		Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to revoke token: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return errors.ErrNotFound
 	}
 
@@ -152,10 +172,11 @@ func (r *refreshTokenRepository) Revoke(ctx context.Context, tokenID uuid.UUID) 
 func (r *refreshTokenRepository) RevokeAllForUser(ctx context.Context, userID uuid.UUID) error {
 	now := time.Now()
 
-	err := r.db.WithContext(ctx).
+	_, err := r.db.NewUpdate().
 		Model(&models.RefreshTokenModel{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
-		Update("revoked_at", now).Error
+		Set("revoked_at = ?", now).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to revoke all user tokens: %w", err)
 	}
@@ -170,10 +191,11 @@ func (r *refreshTokenRepository) RevokeByUserID(ctx context.Context, userID uuid
 func (r *refreshTokenRepository) RevokeByDeviceID(ctx context.Context, userID uuid.UUID, deviceID string) error {
 	now := time.Now()
 
-	err := r.db.WithContext(ctx).
+	_, err := r.db.NewUpdate().
 		Model(&models.RefreshTokenModel{}).
 		Where("user_id = ? AND device_id = ? AND revoked_at IS NULL", userID, deviceID).
-		Update("revoked_at", now).Error
+		Set("revoked_at = ?", now).
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to revoke device tokens: %w", err)
 	}
@@ -184,40 +206,45 @@ func (r *refreshTokenRepository) RevokeByDeviceID(ctx context.Context, userID uu
 func (r *refreshTokenRepository) DeleteExpired(ctx context.Context) (int64, error) {
 	now := time.Now()
 
-	result := r.db.WithContext(ctx).
+	result, err := r.db.NewDelete().
+		Model(&models.RefreshTokenModel{}).
 		Where("expires_at < ? OR revoked_at IS NOT NULL", now).
-		Delete(&models.RefreshTokenModel{})
-
-	if result.Error != nil {
-		return 0, fmt.Errorf("failed to delete expired tokens: %w", result.Error)
+		Exec(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete expired tokens: %w", err)
 	}
 
-	return result.RowsAffected, nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	return rowsAffected, nil
 }
 
 func (r *refreshTokenRepository) CountActiveByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
-	var count int64
 	now := time.Now()
 
-	err := r.db.WithContext(ctx).
+	count, err := r.db.NewSelect().
 		Model(&models.RefreshTokenModel{}).
 		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
-		Count(&count).Error
+		Count(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count active tokens: %w", err)
 	}
 
-	return count, nil
+	return int64(count), nil
 }
 
 func (r *refreshTokenRepository) FindActiveByUserID(ctx context.Context, userID uuid.UUID) ([]*entities.RefreshToken, error) {
 	var tokenModels []models.RefreshTokenModel
 
 	now := time.Now()
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&tokenModels).
 		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
 		Order("created_at DESC").
-		Find(&tokenModels).Error
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find active refresh tokens: %w", err)
 	}

@@ -2,10 +2,10 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/models"
@@ -15,22 +15,23 @@ import (
 )
 
 type areaRepository struct {
-	db *database.GormDB
+	db *database.DB
 }
 
-// NewAreaRepository creates a new GORM-based area repository
-func NewAreaRepository(db *database.GormDB) ports.AreaRepository {
+// NewAreaRepository creates a new Bun-based area repository
+func NewAreaRepository(db *database.DB) ports.AreaRepository {
 	return &areaRepository{db: db}
 }
 
 func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.Area, error) {
 	var areaModel models.AreaModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&areaModel).
 		Where("id = ?", id).
-		First(&areaModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("area not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to find area by id: %w", err)
@@ -42,11 +43,12 @@ func (r *areaRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities.Area, error) {
 	var areaModel models.AreaModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&areaModel).
 		Where("code = ?", code).
-		First(&areaModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("area not found: %w", err)
 		}
 		return nil, fmt.Errorf("failed to find area by code: %w", err)
@@ -58,7 +60,8 @@ func (r *areaRepository) FindByCode(ctx context.Context, code string) (*entities
 func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID) ([]*entities.Area, error) {
 	var areaModels []models.AreaModel
 
-	query := r.db.WithContext(ctx)
+	query := r.db.NewSelect().
+		Model(&areaModels)
 
 	if parentID == nil {
 		query = query.Where("parent_id IS NULL")
@@ -66,7 +69,7 @@ func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID
 		query = query.Where("parent_id = ?", *parentID)
 	}
 
-	err := query.Order("name ASC").Find(&areaModels).Error
+	err := query.Order("name ASC").Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find areas by parent id: %w", err)
 	}
@@ -86,10 +89,11 @@ func (r *areaRepository) FindByParentID(ctx context.Context, parentID *uuid.UUID
 func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.AreaType) ([]*entities.Area, error) {
 	var areaModels []models.AreaModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&areaModels).
 		Where("type = ?", string(areaType)).
 		Order("name ASC").
-		Find(&areaModels).Error
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find areas by type: %w", err)
 	}
@@ -109,10 +113,11 @@ func (r *areaRepository) FindByType(ctx context.Context, areaType valueobjects.A
 func (r *areaRepository) FindActive(ctx context.Context) ([]*entities.Area, error) {
 	var areaModels []models.AreaModel
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&areaModels).
 		Where("status = ? AND activated_at IS NOT NULL", valueobjects.AreaStatusActive).
 		Order("name ASC").
-		Find(&areaModels).Error
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find active areas: %w", err)
 	}
@@ -133,13 +138,14 @@ func (r *areaRepository) FindByCoordinate(ctx context.Context, lat, lng float64)
 	var areaModel models.AreaModel
 
 	// Using PostGIS ST_Contains to find area containing the point
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&areaModel).
 		Where("ST_Contains(boundary, ST_SetSRID(ST_MakePoint(?, ?), 4326))", lng, lat).
-		Or("ST_DWithin(center_point, ST_SetSRID(ST_MakePoint(?, ?), 4326), operational_radius * 1000)", lng, lat).
+		WhereOr("ST_DWithin(center_point, ST_SetSRID(ST_MakePoint(?, ?), 4326), operational_radius * 1000)", lng, lat).
 		Where("status = ?", valueobjects.AreaStatusActive).
-		First(&areaModel).Error
+		Scan(ctx)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if err == sql.ErrNoRows {
 			return []*entities.Area{}, nil
 		}
 		return nil, fmt.Errorf("failed to find area by location: %w", err)
@@ -156,16 +162,18 @@ func (r *areaRepository) FindNearbyAreas(ctx context.Context, areaID uuid.UUID, 
 	var areaModels []models.AreaModel
 
 	// Find nearby areas using PostGIS ST_DWithin
-	subQuery := r.db.Table("areas").
-		Select("center_point").
+	subQuery := r.db.NewSelect().
+		TableExpr("areas").
+		Column("center_point").
 		Where("id = ?", areaID)
 
-	err := r.db.WithContext(ctx).
+	err := r.db.NewSelect().
+		Model(&areaModels).
 		Where("id != ?", areaID).
 		Where("status = ?", valueobjects.AreaStatusActive).
 		Where("ST_DWithin(center_point, (?), ?)", subQuery, maxDistanceKm*1000).
-		Order("ST_Distance(center_point, (?)) ASC").
-		Find(&areaModels).Error
+		OrderExpr("ST_Distance(center_point, (SELECT center_point FROM areas WHERE id = ?)) ASC", areaID).
+		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find nearby areas: %w", err)
 	}
@@ -185,7 +193,11 @@ func (r *areaRepository) FindNearbyAreas(ctx context.Context, areaID uuid.UUID, 
 func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 	model := models.AreaFromEntity(area)
 
-	err := r.db.WithContext(ctx).Save(model).Error
+	// Use Upsert to handle both insert and update
+	_, err := r.db.NewInsert().
+		Model(model).
+		On("CONFLICT (id) DO UPDATE").
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to save area: %w", err)
 	}
@@ -203,10 +215,11 @@ func (r *areaRepository) Save(ctx context.Context, area *entities.Area) error {
 func (r *areaRepository) Update(ctx context.Context, area *entities.Area) error {
 	model := models.AreaFromEntity(area)
 
-	err := r.db.WithContext(ctx).
-		Model(&models.AreaModel{}).
+	_, err := r.db.NewUpdate().
+		Model(model).
 		Where("id = ?", area.ID).
-		Updates(model).Error
+		OmitZero().
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to update area: %w", err)
 	}
@@ -215,9 +228,10 @@ func (r *areaRepository) Update(ctx context.Context, area *entities.Area) error 
 }
 
 func (r *areaRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	err := r.db.WithContext(ctx).
+	_, err := r.db.NewDelete().
+		Model(&models.AreaModel{}).
 		Where("id = ?", id).
-		Delete(&models.AreaModel{}).Error
+		Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to delete area: %w", err)
 	}
@@ -226,34 +240,31 @@ func (r *areaRepository) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (r *areaRepository) ExistsByCode(ctx context.Context, code string) (bool, error) {
-	var count int64
-
-	err := r.db.WithContext(ctx).
+	exists, err := r.db.NewSelect().
 		Model(&models.AreaModel{}).
 		Where("code = ?", code).
-		Count(&count).Error
+		Exists(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to check area existence: %w", err)
 	}
 
-	return count > 0, nil
+	return exists, nil
 }
 
 func (r *areaRepository) GetHierarchy(ctx context.Context, areaID uuid.UUID) ([]*entities.Area, error) {
 	var areaModels []models.AreaModel
 
 	// Recursive CTE to get all parent areas
-	err := r.db.WithContext(ctx).
-		Raw(`
-			WITH RECURSIVE area_hierarchy AS (
-				SELECT * FROM areas WHERE id = ?
-				UNION ALL
-				SELECT a.* FROM areas a
-				INNER JOIN area_hierarchy ah ON a.id = ah.parent_id
-			)
-			SELECT * FROM area_hierarchy ORDER BY type ASC
-		`, areaID).
-		Scan(&areaModels).Error
+	err := r.db.NewRaw(`
+		WITH RECURSIVE area_hierarchy AS (
+			SELECT * FROM areas WHERE id = ?
+			UNION ALL
+			SELECT a.* FROM areas a
+			INNER JOIN area_hierarchy ah ON a.id = ah.parent_id
+		)
+		SELECT * FROM area_hierarchy ORDER BY type ASC
+	`, areaID).
+		Scan(ctx, &areaModels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get area hierarchy: %w", err)
 	}

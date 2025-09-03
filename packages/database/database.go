@@ -2,109 +2,156 @@ package database
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"runtime"
 	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+	"github.com/uptrace/bun/driver/pgdriver"
+	"github.com/uptrace/bun/extra/bundebug"
 
 	"github.com/paradoxe35/mytorra/packages/config"
 	pkgLogger "github.com/paradoxe35/mytorra/packages/logger"
 )
 
-// GormDB wraps the GORM database connection
-type GormDB struct {
-	*gorm.DB
+// DB wraps the Bun database connection
+type DB struct {
+	*bun.DB
+	pool *pgxpool.Pool
 }
 
-// New creates a new GORM database connection (migrated from NewGormDB)
-func New(cfg *config.DatabaseConfig) (*GormDB, error) {
-	return NewGormDB(cfg)
+// New creates a new Bun database connection with pgx
+func New(cfg *config.DatabaseConfig) (*DB, error) {
+	return NewDB(cfg)
 }
 
-// NewGormDB creates a new GORM database connection
-func NewGormDB(cfg *config.DatabaseConfig) (*GormDB, error) {
-	// Configure GORM
-	gormConfig := &gorm.Config{
-		NowFunc: func() time.Time {
-			return time.Now().UTC()
-		},
-		QueryFields: true,
-		Logger:      logger.Default.LogMode(logger.Info),
+// NewDB creates a new Bun database connection with pgx pool
+func NewDB(cfg *config.DatabaseConfig) (*DB, error) {
+	ctx := context.Background()
+
+	// Parse PostgreSQL configuration
+	pgxConfig, err := pgxpool.ParseConfig(cfg.DSN())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	// Open database connection
-	db, err := gorm.Open(postgres.Open(cfg.DSN()), gormConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
-
-	// Get underlying SQL database to configure connection pool
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get database instance: %w", err)
-	}
+	// Configure pgx for better performance
+	pgxConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	// Configure connection pool
-	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	maxOpenConns := cfg.MaxOpenConns
+	if maxOpenConns == 0 {
+		maxOpenConns = 4 * runtime.GOMAXPROCS(0)
+	}
+
+	pgxConfig.MaxConns = int32(maxOpenConns)
+	pgxConfig.MinConns = int32(cfg.MaxIdleConns)
+	if cfg.ConnMaxLifetime > 0 {
+		pgxConfig.MaxConnLifetime = cfg.ConnMaxLifetime
+	}
+	pgxConfig.MaxConnIdleTime = 30 * time.Minute
+
+	// Create connection pool
+	pool, err := pgxpool.NewWithConfig(ctx, pgxConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection pool: %w", err)
+	}
 
 	// Test connection
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := sqlDB.PingContext(ctx); err != nil {
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	extensions := []string{"postgis", "uuid-ossp", "pg_trgm"}
+	// Create sql.DB from pgx pool
+	sqldb := stdlib.OpenDBFromPool(pool)
+
+	// Create Bun DB
+	bunDB := bun.NewDB(sqldb, pgdialect.New())
+
+	// Add debug logging in development
+	if cfg.Database == "development" || cfg.Database == "test" {
+		bunDB.AddQueryHook(bundebug.NewQueryHook(
+			bundebug.WithVerbose(true),
+			bundebug.FromEnv("BUNDEBUG"),
+		))
+	}
+
+	db := &DB{
+		DB:   bunDB,
+		pool: pool,
+	}
+
+	// Enable required extensions
+	extensions := []string{"uuid-ossp", "pg_trgm", "postgis"}
 	log := pkgLogger.New("database", "production")
 	for _, ext := range extensions {
-		if err := db.Exec(fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS %s", ext)).Error; err != nil {
-			log.WithError(err).Error("Failed to enable %s extension", ext)
+		if _, err := bunDB.ExecContext(ctx, fmt.Sprintf("CREATE EXTENSION IF NOT EXISTS \"%s\"", ext)); err != nil {
+			log.WithError(err).Warn("Failed to enable %s extension", ext)
 		}
 	}
 
-	return &GormDB{db}, nil
+	return db, nil
 }
 
 // Transaction executes a function within a database transaction
-func (db *GormDB) Transaction(fn func(*gorm.DB) error, opts ...*sql.TxOptions) error {
-	return db.DB.Transaction(fn, opts...)
+func (db *DB) Transaction(ctx context.Context, fn func(ctx context.Context, tx bun.Tx) error) error {
+	return db.DB.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		return fn(ctx, tx)
+	})
 }
 
 // WithContext returns a new DB instance with the provided context
-func (db *GormDB) WithContext(ctx context.Context) *gorm.DB {
-	return db.DB.WithContext(ctx)
+func (db *DB) WithContext(ctx context.Context) *bun.DB {
+	return db.DB
 }
 
 // Close closes the database connection
-func (db *GormDB) Close() error {
-	sqlDB, err := db.DB.DB()
-	if err != nil {
+func (db *DB) Close() error {
+	if err := db.DB.Close(); err != nil {
 		return err
 	}
-	return sqlDB.Close()
+
+	if db.pool != nil {
+		db.pool.Close()
+	}
+
+	return nil
 }
 
-// Paginate creates a paginated scope for GORM queries
-func Paginate(page, perPage int) func(db *gorm.DB) *gorm.DB {
-	return func(db *gorm.DB) *gorm.DB {
-		if page <= 0 {
-			page = 1
-		}
-		if perPage <= 0 {
-			perPage = 20
-		}
-		if perPage > 100 {
-			perPage = 100
-		}
+// Paginate creates pagination for Bun queries
+type Paginate struct {
+	Page    int
+	PerPage int
+}
 
-		offset := (page - 1) * perPage
-		return db.Offset(offset).Limit(perPage)
+func (p *Paginate) Apply(q *bun.SelectQuery) *bun.SelectQuery {
+	if p.Page <= 0 {
+		p.Page = 1
+	}
+	if p.PerPage <= 0 {
+		p.PerPage = 20
+	}
+	if p.PerPage > 100 {
+		p.PerPage = 100
+	}
+
+	offset := (p.Page - 1) * p.PerPage
+	return q.Offset(offset).Limit(p.PerPage)
+}
+
+func NewPaginate(page, perPage int) *Paginate {
+	return &Paginate{
+		Page:    page,
+		PerPage: perPage,
 	}
 }
 
@@ -149,8 +196,15 @@ func IsUniqueViolation(err error) bool {
 	if err == nil {
 		return false
 	}
+
+	if pgErr, ok := err.(pgdriver.Error); ok {
+		return pgErr.IntegrityViolation()
+	}
+
 	errStr := err.Error()
-	return contains(errStr, "23505") || contains(errStr, "duplicate key") || contains(errStr, "unique constraint")
+	return contains(errStr, pgerrcode.UniqueViolation) ||
+		contains(errStr, "duplicate key") ||
+		contains(errStr, "unique constraint")
 }
 
 // contains checks if a string contains a substring

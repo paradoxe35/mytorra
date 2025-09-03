@@ -1,7 +1,7 @@
 # Booking Service Specification
 
 ## Overview
-The Booking Service manages TorraBooking (hotels, accommodations) and TorraFlight (flight bookings). It handles availability management, reservation lifecycle, and booking confirmations across various accommodation and travel providers.
+The Booking Service manages MyTorraBooking (hotels, accommodations) and MyTorraFlight (flight bookings). It handles availability management, reservation lifecycle, and booking confirmations across various accommodation and travel providers.
 
 ## Service Responsibilities
 
@@ -15,7 +15,7 @@ The Booking Service manages TorraBooking (hotels, accommodations) and TorraFligh
 
 ## Features & Functionality
 
-### 1. TorraBooking (Accommodation Platform)
+### 1. MyTorraBooking (Accommodation Platform)
 
 #### Hotel Organization Types
 - **Independent Properties**
@@ -148,7 +148,7 @@ inquiry -> quote -> booked -> confirmed -> checked_in -> checked_out -> complete
   - Payment processing integration
   - Booking modification handling
 
-### 3. TorraFlight (Flight Booking)
+### 3. MyTorraFlight (Flight Booking)
 
 #### Flight Search Integration
 - **GDS Integration**

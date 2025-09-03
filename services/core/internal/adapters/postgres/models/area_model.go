@@ -1,11 +1,12 @@
 package models
 
 import (
+	"context"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
-	"github.com/restayway/gogis"
+	"github.com/uptrace/bun"
 
 	"github.com/paradoxe35/mytorra/packages/database"
 	"github.com/paradoxe35/mytorra/services/core/internal/adapters/postgres/types"
@@ -13,58 +14,69 @@ import (
 	"github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
 )
 
-// AreaModel represents the GORM model for the areas table
+// AreaModel represents the Bun model for the areas table
 type AreaModel struct {
-	database.BaseModel
-	ParentID *uuid.UUID `gorm:"type:uuid"`
-	Parent   *AreaModel `gorm:"foreignKey:ParentID"`
+	database.BaseModel `bun:"table:areas,alias:a"`
+
+	ParentID *uuid.UUID `bun:"parent_id,type:uuid"`
+	Parent   *AreaModel `bun:"rel:belongs-to,join:parent_id=id"`
 
 	// Hierarchy
-	Type string `gorm:"type:varchar(20);not null"`
-	Name string `gorm:"type:varchar(255);not null"`
-	Code string `gorm:"type:varchar(50);uniqueIndex"`
+	Type string `bun:"type,notnull"`
+	Name string `bun:"name,notnull"`
+	Code string `bun:"code,unique"`
 
-	// Geographic data using gogis types for PostGIS
-	Boundary          gogis.Polygon `gorm:"type:geometry(Polygon,4326)"`
-	CenterPoint       gogis.Point   `gorm:"type:geometry(Point,4326)"`
-	OperationalRadius int           `gorm:"type:int"`
+	// Geographic data using PostGIS types
+	Boundary          *database.Polygon `bun:"boundary,type:geometry(Polygon,4326)"`
+	CenterPoint       *database.Point   `bun:"center_point,type:geometry(Point,4326)"`
+	OperationalRadius int               `bun:"operational_radius"`
 
 	// Legacy columns for backward compatibility
-	BoundaryPolygon types.CoordinatesSlice `gorm:"type:jsonb"`
-	CenterLat       float64                `gorm:"type:decimal(10,8)"`
-	CenterLng       float64                `gorm:"type:decimal(11,8)"`
+	BoundaryPolygon types.CoordinatesSlice `bun:"boundary_polygon,type:jsonb"`
+	CenterLat       float64                `bun:"center_lat,type:decimal(10,8)"`
+	CenterLng       float64                `bun:"center_lng,type:decimal(11,8)"`
 
 	// Configuration
-	Status              string            `gorm:"type:varchar(20);not null;default:'active'"`
-	ServiceAvailability types.JSONBoolMap `gorm:"type:jsonb"`
-	Settings            types.JSONMap     `gorm:"type:jsonb"`
+	Status              string            `bun:"status,notnull,default:'active'"`
+	ServiceAvailability types.JSONBoolMap `bun:"service_availability,type:jsonb"`
+	Settings            types.JSONMap     `bun:"settings,type:jsonb"`
 
 	// Area Behavior Settings
-	SwitchingMode   string                    `gorm:"type:varchar(20);not null;default:'manual'"`
-	AllowCrossTrade bool                      `gorm:"type:boolean;default:false"`
-	NearbyAreaIDs   pq.StringArray            `gorm:"type:uuid[]"`
-	TransitionZones types.TransitionZoneSlice `gorm:"type:jsonb"`
+	SwitchingMode   string                    `bun:"switching_mode,notnull,default:'manual'"`
+	AllowCrossTrade bool                      `bun:"allow_cross_trade,default:false"`
+	NearbyAreaIDs   pq.StringArray            `bun:"nearby_area_ids,type:uuid[],array"`
+	TransitionZones types.TransitionZoneSlice `bun:"transition_zones,type:jsonb"`
 
 	// Operational data
-	Timezone  string         `gorm:"type:varchar(50)"`
-	Languages pq.StringArray `gorm:"type:text[]"`
-	Currency  string         `gorm:"type:varchar(3);default:'USD'"`
-	TaxRate   float64        `gorm:"type:decimal(5,4)"`
+	Timezone  string         `bun:"timezone"`
+	Languages pq.StringArray `bun:"languages,type:text[],array"`
+	Currency  string         `bun:"currency,default:'USD'"`
+	TaxRate   float64        `bun:"tax_rate,type:decimal(5,4)"`
 
 	// Service limits
-	MinOrderValue        float64            `gorm:"type:decimal(10,2)"`
-	DeliveryFeeStructure types.JSONMap      `gorm:"type:jsonb"`
-	CrossAreaFees        types.JSONFloatMap `gorm:"type:jsonb"`
-	OperationalHours     types.JSONMap      `gorm:"type:jsonb"`
+	MinOrderValue        float64            `bun:"min_order_value,type:decimal(10,2)"`
+	DeliveryFeeStructure types.JSONMap      `bun:"delivery_fee_structure,type:jsonb"`
+	CrossAreaFees        types.JSONFloatMap `bun:"cross_area_fees,type:jsonb"`
+	OperationalHours     types.JSONMap      `bun:"operational_hours,type:jsonb"`
 
 	// Metadata
-	ActivatedAt   *time.Time `gorm:"type:timestamp"`
-	DeactivatedAt *time.Time `gorm:"type:timestamp"`
+	ActivatedAt   *time.Time `bun:"activated_at"`
+	DeactivatedAt *time.Time `bun:"deactivated_at"`
 }
 
-// TableName specifies the table name for the Area model
-func (AreaModel) TableName() string {
-	return "areas"
+// BeforeAppendModel is called before inserting or updating the model
+func (a *AreaModel) BeforeAppendModel(ctx context.Context, query bun.Query) error {
+	switch query.(type) {
+	case *bun.InsertQuery, *bun.UpdateQuery:
+		// Sync PostGIS point from lat/lng if provided
+		if a.CenterLat != 0 && a.CenterLng != 0 && a.CenterPoint == nil {
+			a.CenterPoint = &database.Point{
+				Lng: a.CenterLng,
+				Lat: a.CenterLat,
+			}
+		}
+	}
+	return nil
 }
 
 // ToEntity converts the GORM model to domain entity
@@ -186,16 +198,16 @@ func AreaFromEntity(area *entities.Area) *AreaModel {
 		}
 	}
 
-	// Create PostGIS point and polygon from coordinates
+	// Create PostGIS point from coordinates
 	if area.CenterLat != 0 && area.CenterLng != 0 {
-		model.CenterPoint = gogis.Point{
+		model.CenterPoint = &database.Point{
 			Lng: area.CenterLng,
 			Lat: area.CenterLat,
 		}
 	}
 
-	// Convert BoundaryPolygon to gogis.Polygon if needed
-	// This requires mapping from valueobjects.Coordinates to gogis format
+	// Convert BoundaryPolygon to PostGIS Polygon if needed
+	// This requires mapping from valueobjects.Coordinates to database.Polygon format
 
 	return model
 }

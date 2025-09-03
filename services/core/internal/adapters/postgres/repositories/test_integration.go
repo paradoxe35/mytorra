@@ -25,7 +25,7 @@ func TestGORMWithPostGIS(t *testing.T) {
 	cfg := &config.DatabaseConfig{
 		Host:     "localhost",
 		Port:     5432,
-		Database: "torra_test",
+		Database: "mytorra_test",
 		Username: "postgres",
 		Password: "postgres",
 	}

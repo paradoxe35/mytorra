@@ -29,7 +29,6 @@
     [x] Setup Chi router with middleware stack
     [x] Implement clean architecture layers (domain, application, adapters)
     [x] Configure PostgreSQL connection with sqlx
-    [x] Setup database migration system with golang-migrate
     [x] Implement Area Management (Foundation for all services)
     [x] Implement structured logging with slog
     [] Setup OpenTelemetry for distributed tracing
