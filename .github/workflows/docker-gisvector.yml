@@ -18,6 +18,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAME: paradoxe35/gisvector
 
 jobs:
   build-and-push:
@@ -73,7 +74,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/gisvector
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.version.outputs.postgres_version }}${{ matrix.suffix }}
             type=raw,value=latest${{ matrix.suffix }},enable={{is_default_branch}}
