@@ -26,7 +26,10 @@ env:
 
 jobs:
   build-and-push:
-    runs-on: arc-runner-set
+    # IMPORTANT: Must use GitHub-hosted runners for multi-arch builds
+    # ARC runners lack kernel binfmt_misc support required for QEMU cross-platform builds
+    # GitHub's ubuntu-latest runners have QEMU pre-configured
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -43,15 +46,9 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-flags: --debug
-          driver-opts: |
-            image=moby/buildkit:latest
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
