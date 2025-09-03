@@ -477,14 +477,20 @@ func (s *OAuthService) loginWithOAuth(ctx context.Context, profile *entities.OAu
 }
 
 func (s *OAuthService) createUserWithOAuth(ctx context.Context, provider valueobjects.OAuthProvider, profile *ports.OAuthUserProfile, tokens *ports.OAuthTokens) (*dtos.OAuthCallbackResponse, error) {
-	// Create user request
+	// Create user request with placeholder location coordinates
+	// This allows the location service to detect an appropriate area
+	lat := 0.0
+	lng := 0.0
 	createUserReq := dtos.RegisterRequest{
 		Email:           profile.Email,
 		Name:            profile.Name,
-		Phone:           "+1234567890", // Placeholder phone number for OAuth users
-		Password:        "OAuth2User",  // Placeholder password for OAuth users
-		ConfirmPassword: "OAuth2User",
+		Phone:           "+1234567890",     // Placeholder phone number for OAuth users
+		Password:        "OAuth2User@2024", // Placeholder password for OAuth users (meets 12 char requirement)
+		ConfirmPassword: "OAuth2User@2024",
 		AcceptTerms:     true,
+		// Provide default coordinates for OAuth users (e.g., default city center)
+		Latitude:  &lat,
+		Longitude: &lng,
 	}
 
 	// Create user
