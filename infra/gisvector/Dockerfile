@@ -1,9 +1,11 @@
 # Build argument for PostgreSQL version
 ARG POSTGRES_VERSION=17-3.4
-ARG PGVECTOR_VERSION=v0.8.0
 
 # Use the PostGIS image as the base
 FROM postgis/postgis:${POSTGRES_VERSION}
+
+# Re-declare PGVECTOR_VERSION after FROM to make it available in the build
+ARG PGVECTOR_VERSION=v0.8.0
 
 # Install necessary packages including clang-13
 RUN apt-get update \
