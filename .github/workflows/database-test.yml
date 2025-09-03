@@ -436,8 +436,6 @@ jobs:
           TEST_DB_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           TEST_DB_NAME: "${{ env.POSTGRES_DB }}_${{ matrix.service }}_integration"
           TEST_DB_SSL_MODE: "disable"
-          TEST_DB_ISOLATE: "false" # Use shared database since we set it up with migrations
-          TEST_DB_MIGRATE: "false" # Migrations already applied
           # Force unbuffered output for real-time streaming
           GOMAXPROCS: "2"
           GOTRACEBACK: "all"
