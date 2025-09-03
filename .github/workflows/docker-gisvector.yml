@@ -18,7 +18,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: paradoxe35/gisvector
+  IMAGE_NAME: ${{ github.repository_owner }}/gisvector
 
 jobs:
   build-and-push:
@@ -78,7 +78,6 @@ jobs:
           tags: |
             type=raw,value=${{ steps.version.outputs.postgres_version }}${{ matrix.suffix }}
             type=raw,value=latest${{ matrix.suffix }},enable={{is_default_branch}}
-            type=sha,prefix=${{ steps.version.outputs.postgres_version }}${{ matrix.suffix }}-
 
       - name: Display image destination
         run: |
