@@ -15,6 +15,7 @@ Every service MUST follow this structure:
 ```
 services/<service-name>/
 ├── cmd/api/main.go          # HTTP API server entry point
+├── cmd/worker/main.go       # Background worker entry point (using asynq)
 ├── internal/
 │   ├── domain/              # Pure business logic
 │   │   ├── entities/        # Core business entities
@@ -650,26 +651,10 @@ touch internal/domain/user.go
 
 ### 8.3 Before Every Commit
 
-```bash
-# 1. Format code
-make fmt
-
-# 2. Run linters
-make lint
-
-# 3. Run ALL tests (MANDATORY - NO EXCEPTIONS)
-make test
-
-# 4. Check test coverage (minimum 80%)
-make test-coverage
-
-# 5. Verify build
-make build
-
-# If ALL pass, then commit
-git add .
-git commit -m "feat: your feature description"
-```
+- Run linters
+- Run ALL tests (MANDATORY - NO EXCEPTIONS)
+- Check test coverage (minimum 80%)
+- Verify build
 
 ### 8.4 Core Service Study Checklist
 
@@ -685,52 +670,12 @@ git commit -m "feat: your feature description"
 - [ ] Examined test patterns
 - [ ] Verified shared package usage
 
-### 8.3 Location Detection Pattern
-
-**MANDATORY for services requiring user location:**
-
-```go
-// Location detection priority order:
-// 1. GPS coordinates (primary)
-// 2. IP-based location (fallback)
-// 3. Default area (last resort)
-
-type RegisterRequest struct {
-    Email     string   `json:"email" validate:"required,email"`
-    Name      string   `json:"name" validate:"required"`
-    AreaID    *uuid.UUID `json:"area_id,omitempty"` // Optional - auto-detected
-    Latitude  *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
-    Longitude *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
-}
-
-func (s *Service) detectUserArea(ctx context.Context, req RegisterRequest) (*entities.Area, error) {
-    // 1. Try GPS coordinates first
-    if req.Latitude != nil && req.Longitude != nil {
-        if area, err := s.areaService.FindAreaByCoordinate(ctx, *req.Latitude, *req.Longitude); err == nil {
-            return area, nil
-        }
-    }
-
-    // 2. Fallback to IP-based detection
-    if clientIP := s.getClientIPFromContext(ctx); clientIP != "" {
-        if lat, lng, err := s.getLocationFromIP(ctx, clientIP); err == nil {
-            if area, err := s.areaService.FindAreaByCoordinate(ctx, lat, lng); err == nil {
-                return area, nil
-            }
-        }
-    }
-
-    return nil, fmt.Errorf("no location data available for area detection")
-}
-```
-
----
-
 ## 9. Compliance Checklist
 
 Before deploying any service to production, ensure:
 
 **📋 Pre-Implementation Checklist:**
+
 - [ ] Core service analyzed for similar functionality
 - [ ] Related existing files studied
 - [ ] Shared packages verified and used
@@ -738,6 +683,7 @@ Before deploying any service to production, ensure:
 - [ ] Test plan created before coding
 
 **🏗️ Implementation Checklist:**
+
 - [ ] Clean architecture implemented
 - [ ] All tests written and passing (>80% coverage)
 - [ ] Handler tests with i18n mocking
@@ -750,6 +696,7 @@ Before deploying any service to production, ensure:
 - [ ] Error handling with translations
 
 **🔒 Security Checklist:**
+
 - [ ] Security headers configured
 - [ ] Input validation implemented
 - [ ] SQL injection prevention verified
@@ -757,6 +704,7 @@ Before deploying any service to production, ensure:
 - [ ] Service-to-service auth configured (if needed)
 
 **🚀 Deployment Checklist:**
+
 - [ ] Health checks working
 - [ ] Graceful shutdown implemented
 - [ ] Monitoring and metrics configured
@@ -770,6 +718,7 @@ Before deploying any service to production, ensure:
 These guidelines are based on patterns proven in the core service implementation. Every developer must follow these standards consistently.
 
 **🎯 Key Principles:**
+
 1. **Study First**: Always analyze core service before implementing
 2. **Test Everything**: Write tests before code, maintain >80% coverage
 3. **Reuse First**: Check existing packages and implementations
@@ -778,11 +727,13 @@ These guidelines are based on patterns proven in the core service implementation
 6. **Security First**: Never compromise on security practices
 
 **📚 Reference Sources:**
+
 - **Core Service**: `services/core/` - Reference implementation for all patterns
 - **Service Auth**: `docs/SERVICE_TO_SERVICE_AUTH.md` - Complete authentication guide
 - **Shared Packages**: `packages/` - Reusable components
 
 **❓ When in doubt:**
+
 1. Check how core service implements it
 2. Look for existing packages
 3. Study related files in other services
