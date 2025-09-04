@@ -21,6 +21,9 @@ services/<service-name>/
 │   ├── adapters/     # External world interfaces
 │   ├── application/  # Application business logic
 │   └── domain/       # Core domain entities
+│       ├── entities/     # Business entities
+│       ├── events/       # Domain events (IMPORTANT)
+│       └── valueobjects/ # Value objects
 ├── migrations/       # Database migrations (Atlas)
 ├── tests/           # Integration tests
 ├── Dockerfile.api
@@ -28,6 +31,147 @@ services/<service-name>/
 ├── atlas.hcl        # Atlas DB schema config
 ├── go.mod
 └── README.md
+```
+
+### API Server main.go Pattern
+
+**MANDATORY**: Follow this initialization pattern for all services:
+
+```go
+// cmd/api/main.go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "net/http"
+    "os"
+    "os/signal"
+    "syscall"
+    "time"
+
+    // Shared packages (REQUIRED)
+    "github.com/paradoxe35/mytorra/packages/cache"
+    "github.com/paradoxe35/mytorra/packages/config"
+    "github.com/paradoxe35/mytorra/packages/database"
+    "github.com/paradoxe35/mytorra/packages/events"
+    "github.com/paradoxe35/mytorra/packages/i18n"
+    "github.com/paradoxe35/mytorra/packages/logger"
+    "github.com/paradoxe35/mytorra/packages/security"
+
+    // Internal packages
+    adaptersHTTP "github.com/paradoxe35/mytorra/services/[service-name]/internal/adapters/http"
+    "github.com/paradoxe35/mytorra/services/[service-name]/internal/adapters/http/handlers"
+    "github.com/paradoxe35/mytorra/services/[service-name]/internal/adapters/http/middleware"
+    "github.com/paradoxe35/mytorra/services/[service-name]/internal/adapters/postgres/repositories"
+    "github.com/paradoxe35/mytorra/services/[service-name]/internal/application/services"
+)
+
+func main() {
+    // 1. Load configuration
+    cfg, err := config.NewServiceConfig()
+    if err != nil {
+        log.Fatal("Failed to load configuration:", err)
+    }
+
+    // 2. Initialize logger
+    appLogger := logger.New(cfg.Service.Name, cfg.Service.Environment)
+
+    // 3. Initialize translator
+    translator, err := i18n.New(cfg.I18n.DefaultLanguage, cfg.I18n.SupportedLanguages...)
+    if err != nil {
+        appLogger.Fatal("Failed to initialize translator")
+    }
+
+    // 4. Initialize database
+    db, err := database.New(&cfg.Database)
+    if err != nil {
+        appLogger.Fatal("Failed to connect to database")
+    }
+    defer db.Close()
+
+    // 5. Initialize cache
+    cacheClient, err := cache.NewRedisCacheAdapter(&cfg.Redis, cfg.Service.Name)
+    if err != nil {
+        appLogger.Fatal("Failed to connect to cache")
+    }
+    defer func() {
+        if closer, ok := cacheClient.(interface{ Close() error }); ok {
+            closer.Close()
+        }
+    }()
+
+    // 6. Initialize event publisher
+    eventPublisher, err := events.NewRabbitMQEventPublisher(&cfg.RabbitMQ, appLogger)
+    if err != nil {
+        appLogger.Warn(fmt.Sprintf("Failed to connect to RabbitMQ: %v. Using simple publisher", err))
+        eventPublisher = &events.SimpleEventPublisher{Logger: appLogger}
+    }
+    defer eventPublisher.Close()
+
+    // 7. Initialize repositories
+    userRepo := repositories.NewUserRepository(db)
+    // ... other repositories
+
+    // 8. Initialize application services
+    userService := services.NewUserService(
+        userRepo,
+        eventPublisher,
+        cacheClient,
+        appLogger,
+        translator,
+    )
+    // ... other services
+
+    // 9. Initialize handlers
+    userHandler := handlers.NewUserHandler(userService, appLogger, translator)
+    // ... other handlers
+
+    // 10. Initialize middleware
+    authMiddleware := middleware.NewAuthMiddleware(/* dependencies */)
+
+    // 11. Setup router
+    router := adaptersHTTP.NewRouter(
+        userHandler,
+        authMiddleware,
+        translator,
+        cfg.I18n.DefaultLanguage,
+    )
+
+    // 12. Create HTTP server
+    srv := &http.Server{
+        Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+        Handler:      router.Setup(),
+        ReadTimeout:  cfg.Server.ReadTimeout,
+        WriteTimeout: cfg.Server.WriteTimeout,
+        IdleTimeout:  cfg.Server.IdleTimeout,
+    }
+
+    // 13. Start server with graceful shutdown
+    go func() {
+        appLogger.Info(fmt.Sprintf("Server starting on port %d", cfg.Server.Port))
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            appLogger.Fatal("Failed to start server", err)
+        }
+    }()
+
+    // 14. Wait for interrupt signal
+    quit := make(chan os.Signal, 1)
+    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+    <-quit
+
+    // 15. Graceful shutdown
+    appLogger.Info("Shutting down server...")
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
+
+    if err := srv.Shutdown(ctx); err != nil {
+        appLogger.Fatal("Server forced to shutdown:", err)
+    }
+
+    appLogger.Info("Server exited")
+}
 ```
 
 ## Architecture Layers
@@ -176,31 +320,60 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*entities.
 
 ## Shared Packages (`packages/`)
 
-Reusable packages across all services:
+**CRITICAL**: All services MUST use these shared packages - DO NOT reinvent the wheel!
 
 ```
 packages/
-├── cache/          # Redis cache adapter
+├── cache/          # Redis cache adapter (includes MockCache)
 ├── config/         # Configuration loader
-├── database/       # Database connection (Bun + pgx)
+├── database/       # Database connection (Bun + pgx, includes TestDB helpers)
 ├── errors/         # Common error types
-├── events/         # Event publishing (RabbitMQ)
+├── events/         # Event publishing (includes MockEventPublisher)
 ├── http/           # HTTP utilities
 ├── i18n/           # Internationalization
 ├── logger/         # Structured logging
 └── security/       # Security utilities
 ```
 
-### Package Usage Example
+### Required Package Imports
+
+**MANDATORY**: All services MUST use these packages:
 
 ```go
 import (
-    "github.com/paradoxe35/mytorra/packages/cache"
-    "github.com/paradoxe35/mytorra/packages/config"
-    "github.com/paradoxe35/mytorra/packages/database"
-    "github.com/paradoxe35/mytorra/packages/logger"
+    "github.com/paradoxe35/mytorra/packages/config"     // Configuration management
+    "github.com/paradoxe35/mytorra/packages/database"   // Database connections
+    "github.com/paradoxe35/mytorra/packages/logger"     // Structured logging
+    "github.com/paradoxe35/mytorra/packages/errors"     // Error handling
+    "github.com/paradoxe35/mytorra/packages/http"       // HTTP responses
+    "github.com/paradoxe35/mytorra/packages/i18n"       // Internationalization
+    "github.com/paradoxe35/mytorra/packages/cache"      // Caching layer
+    "github.com/paradoxe35/mytorra/packages/security"   // Security utilities
+    "github.com/paradoxe35/mytorra/packages/events"     // Event publishing
 )
+```
 
+### Built-in Mocks
+
+**IMPORTANT**: Most packages provide their own mocks - USE THEM:
+
+```go
+// cache package provides MockCache
+mockCache := cache.NewMockCache()
+
+// events package provides MockEventPublisher
+mockEventPublisher := events.NewMockEventPublisher()
+
+// database package provides TestDB for testing
+testDB := database.NewTestDB(t)
+
+// logger package for tests
+testLogger := logger.New("test", "test")
+```
+
+### Package Usage Example
+
+```go
 // Load configuration
 cfg, err := config.Load("configs/config.yaml")
 
@@ -526,31 +699,122 @@ func Login(authService *services.AuthService) http.HandlerFunc {
 
 ## Event-Driven Communication
 
-### Event Publishing
+### Domain Events Pattern (MANDATORY)
+
+**CRITICAL**: All events MUST be defined in `internal/domain/events/` directory
+
+#### 1. Define Domain Events
 
 ```go
-// internal/application/services/user_service.go
-func (s *UserService) CreateUser(ctx context.Context, req dtos.CreateUserRequest) (*entities.User, error) {
-    user := &entities.User{...}
+// internal/domain/events/billing_events.go
+package events
 
-    if err := s.userRepo.Save(ctx, user); err != nil {
-        return nil, err
-    }
+import (
+    "time"
+    "github.com/google/uuid"
+    "github.com/shopspring/decimal"
+)
 
-    // Publish event
-    event := events.UserCreated{
-        UserID:    user.ID,
-        Email:     user.Email.String(),
-        CreatedAt: user.CreatedAt,
-    }
+// BillingPaymentFailed event is published when a payment fails
+type BillingPaymentFailed struct {
+    SubscriptionID uuid.UUID       `json:"subscription_id"`
+    BillingCycleID uuid.UUID       `json:"billing_cycle_id"`
+    TransactionID  uuid.UUID       `json:"transaction_id"`
+    Amount         decimal.Decimal `json:"amount"`
+    Currency       string          `json:"currency"`
+    FailureReason  string          `json:"failure_reason"`
+    FailedAt       time.Time       `json:"failed_at"`
+}
 
-    if err := s.eventPublisher.Publish(ctx, "user.created", event); err != nil {
-        s.logger.Error("Failed to publish event", err)
-    }
+// REQUIRED: Implement event interface methods
+func (e BillingPaymentFailed) EventType() string {
+    return "billing.payment_failed"
+}
 
-    return user, nil
+func (e BillingPaymentFailed) EventData() interface{} {
+    return e
+}
+
+// BillingPaymentSuccessful event
+type BillingPaymentSuccessful struct {
+    SubscriptionID uuid.UUID       `json:"subscription_id"`
+    BillingCycleID uuid.UUID       `json:"billing_cycle_id"`
+    TransactionID  uuid.UUID       `json:"transaction_id"`
+    Amount         decimal.Decimal `json:"amount"`
+    Currency       string          `json:"currency"`
+    ProcessedAt    time.Time       `json:"processed_at"`
+}
+
+func (e BillingPaymentSuccessful) EventType() string {
+    return "billing.payment_successful"
+}
+
+func (e BillingPaymentSuccessful) EventData() interface{} {
+    return e
 }
 ```
+
+#### 2. Publish Events from Services
+
+**ALWAYS** use the events package from `packages/events/` for publishing:
+
+```go
+// internal/application/services/billing_service.go
+package services
+
+import (
+    "github.com/paradoxe35/mytorra/packages/events"  // REQUIRED: Use package events
+    domainEvents "github.com/paradoxe35/mytorra/services/core/internal/domain/events"
+)
+
+type BillingService struct {
+    eventBus events.EventPublisher  // From packages/events
+    // ... other dependencies
+}
+
+func (b *BillingService) handlePaymentFailure(ctx context.Context, ...) {
+    // Business logic...
+
+    // Publish domain event using packages/events publisher
+    b.eventBus.Publish(ctx, domainEvents.BillingPaymentFailed{
+        SubscriptionID: subscription.ID,
+        BillingCycleID: cycle.ID,
+        TransactionID:  transaction.ID,
+        Amount:         cycle.Amount,
+        Currency:       cycle.Currency,
+        FailureReason:  reason,
+        FailedAt:       time.Now(),
+    })
+}
+
+func (b *BillingService) processBillingSuccess(ctx context.Context, ...) {
+    // Business logic...
+
+    // Publish success event
+    b.eventBus.Publish(ctx, domainEvents.BillingPaymentSuccessful{
+        SubscriptionID: subscription.ID,
+        BillingCycleID: cycle.ID,
+        TransactionID:  transaction.ID,
+        Amount:         cycle.Amount,
+        Currency:       cycle.Currency,
+        ProcessedAt:    time.Now(),
+    })
+}
+```
+
+#### 3. Event Naming Conventions
+
+- **Event Types**: Use dot notation (e.g., `billing.payment_failed`, `user.created`)
+- **Event Structs**: Use descriptive names (e.g., `BillingPaymentFailed`, `UserCreated`)
+- **Event Files**: Group by domain context (e.g., `billing_events.go`, `user_events.go`)
+
+### Event Publishing Best Practices
+
+1. **Define events in domain layer** - Not in application or adapter layers
+2. **Use packages/events publisher** - Never create your own publisher
+3. **Include all relevant data** - Events should be self-contained
+4. **Use proper timestamps** - Always include when the event occurred
+5. **Don't block on publishing** - Log errors but continue processing
 
 ## Testing Strategy
 
@@ -758,9 +1022,52 @@ Testing is mandatory in the MyTorra platform. Every service MUST have comprehens
 
 ### Testing Patterns (Based on Core Service)
 
-#### 1. Mock Creation Pattern
+#### Mock Strategy
 
-Create mocks inline using `stretchr/testify/mock` - NO external mock generation tools:
+**IMPORTANT**: Follow this hierarchy for mocks:
+
+1. **USE PACKAGE MOCKS FIRST** - Most shared packages provide mocks
+2. **Generate with Mockery** - For your service's interfaces
+3. **Create inline** - Only when needed for simple test-specific mocks
+
+```bash
+# Install mockery globally
+go install github.com/vektra/mockery/v2@latest
+
+# Generate mocks ONLY for YOUR service interfaces (not for packages!)
+mockery --all --dir internal/application/ports --output internal/application/ports/mocks
+
+# Or use go:generate directive in your interface files
+//go:generate mockery --name=UserRepository --output=./mocks --filename=user_repository.go
+```
+
+#### 1. Using Package-Provided Mocks (PREFERRED)
+
+Most shared packages already include mocks - USE THEM:
+
+```go
+import (
+    "github.com/paradoxe35/mytorra/packages/cache"
+    "github.com/paradoxe35/mytorra/packages/events"
+    "github.com/paradoxe35/mytorra/packages/logger"
+)
+
+func TestServiceWithDependencies(t *testing.T) {
+    // Use package-provided mocks - DON'T generate new ones!
+    mockCache := cache.NewMockCache()
+    mockEventPublisher := events.NewMockEventPublisher()
+    testLogger := logger.New("test", "test")
+
+    // Setup expectations
+    mockCache.On("Get", mock.Anything, "key").Return([]byte("value"), nil)
+
+    service := NewMyService(mockRepo, mockCache, mockEventPublisher, testLogger)
+}
+```
+
+#### 2. Mock Creation Pattern for Service Interfaces
+
+For YOUR service's interfaces, use mockery or create inline mocks:
 
 ```go
 // internal/adapters/postgres/repositories/mocks.go
@@ -786,31 +1093,6 @@ func (m *mockUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*entit
 func (m *mockUserRepository) Save(ctx context.Context, user *entities.User) error {
     args := m.Called(ctx, user)
     return args.Error(0)
-}
-```
-
-#### 2. Use Shared Package Mocks
-
-Packages provide their own mocks - use them:
-
-```go
-import (
-    "github.com/paradoxe35/mytorra/packages/cache"
-    "github.com/paradoxe35/mytorra/packages/events"
-    "github.com/paradoxe35/mytorra/packages/logger"
-)
-
-func TestServiceWithDependencies(t *testing.T) {
-    // Use package-provided mocks
-    mockCache := cache.NewMockCache()
-    mockEventPublisher := events.NewMockEventPublisher()
-    testLogger := logger.New("test", "test")
-
-    // Setup expectations
-    mockCache.On("Get", mock.Anything, "key").Return([]byte("value"), nil)
-
-    service := NewMyService(mockRepo, mockCache, mockEventPublisher, testLogger)
-    // Test service...
 }
 ```
 
@@ -1056,8 +1338,14 @@ go test -short ./...
 ### 2. Code Generation
 
 ```bash
-# Generate Atlas migrations
+# Generate mocks for testing
+mockery --all --dir internal/application/ports --output internal/application/ports/mocks
+
+# Generate Atlas migrations from Bun models
 atlas migrate diff --env bun
+
+# Run all go:generate directives
+go generate ./...
 ```
 
 ## Service Registry

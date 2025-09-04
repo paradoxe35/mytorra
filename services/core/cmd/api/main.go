@@ -31,7 +31,7 @@ import (
 
 func main() {
 	// Load configuration
-	cfg, err := config.Load("configs/config.yaml")
+	cfg, err := config.NewServiceConfig()
 	if err != nil {
 		log.Fatal("Failed to load configuration:", err)
 	}
