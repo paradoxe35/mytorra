@@ -117,15 +117,18 @@ adapters/
 ├── http/
 │   ├── handlers/    # HTTP handlers
 │   ├── middleware/  # HTTP middleware
+│   ├── router.go    # Main router configuration (REQUIRED)
 │   └── validators/  # Request validators
 ├── postgres/
-│   ├── models/      # Database models
+│   ├── models/      # Bun ORM models (*_model.go files)
 │   ├── repositories/# Repository implementations
 │   └── types/       # Custom DB types
 ├── payment/         # Payment gateway adapters
 ├── oauth/          # OAuth providers
 └── grpc/           # gRPC clients/servers
 ```
+
+**IMPORTANT**: All adapters go in `internal/adapters/` directory
 
 #### Repository Implementation
 
@@ -209,11 +212,15 @@ defer db.Close()
 cacheClient, err := cache.NewRedisCacheAdapter(&cfg.Redis, "service-name")
 ```
 
-## Database Management
+## Database Management with Bun ORM
+
+### CRITICAL: Model-Driven Migrations with Atlas
+
+**DO NOT create migrations manually!** Atlas automatically generates migrations by detecting Bun ORM models.
 
 ### Atlas Schema Management
 
-Uses Atlas for declarative schema management with Bun models.
+Atlas reads your Bun models and generates migrations automatically:
 
 ```hcl
 # atlas.hcl
@@ -222,7 +229,7 @@ data "external_schema" "bun" {
     "go", "run", "-mod=mod",
     "ariga.io/atlas-provider-bun",
     "load",
-    "--path", "./internal/adapters/postgres/models",
+    "--path", "./internal/adapters/postgres/models",  # Atlas scans this directory
     "--dialect", "postgres"
   ]
 }
@@ -231,35 +238,90 @@ env "bun" {
   src = data.external_schema.bun.url
   dev = "docker://postgis/17-3.5-alpine/dev"
   migration {
-    dir = "file://migrations"
+    dir = "file://migrations"  # Auto-generated migrations go here
   }
 }
 ```
 
-### Model Definition
+### Model Definition Requirements
+
+**MANDATORY**: All database models MUST:
+
+1. Be placed in `internal/adapters/postgres/models/`
+2. Use `*_model.go` suffix (e.g., `user_model.go`, `area_model.go`)
+3. Extend `database.BaseModel` from shared package
+4. Include conversion methods (`ToEntity()` and `FromEntity()`)
 
 ```go
 // internal/adapters/postgres/models/user_model.go
 package models
 
+import (
+    "github.com/uptrace/bun"
+    "github.com/paradoxe35/mytorra/packages/database"
+    "github.com/paradoxe35/mytorra/services/core/internal/domain/entities"
+)
+
+// REQUIRED: Extend database.BaseModel which includes ID, CreatedAt, UpdatedAt, DeletedAt
 type UserModel struct {
-    bun.BaseModel `bun:"table:users,alias:u"`
+    database.BaseModel `bun:"table:users,alias:u"`
 
-    ID              uuid.UUID  `bun:"id,pk,type:uuid"`
-    Email           string     `bun:"email,unique,notnull"`
-    Phone           string     `bun:"phone,unique"`
-    PasswordHash    string     `bun:"password_hash,notnull"`
-    CreatedAt       time.Time  `bun:"created_at,nullzero,notnull,default:current_timestamp"`
-    UpdatedAt       time.Time  `bun:"updated_at,nullzero,notnull,default:current_timestamp"`
+    // Define all fields with Bun tags
+    Email           string  `bun:"email,notnull,unique"`
+    Phone           string  `bun:"phone,unique"`
+    Name            string  `bun:"name,notnull"`
+    PasswordHash    string  `bun:"password_hash,notnull"`
+    ProfileImageURL string  `bun:"profile_image_url"`
+
+    // Foreign keys
+    AreaID  uuid.UUID  `bun:"area_id,type:uuid"`
+    Area    *AreaModel `bun:"rel:belongs-to,join:area_id=id"`
+
+    // Status fields
+    Status      string     `bun:"status,default:'active'"`
+    LastLoginAt *time.Time `bun:"last_login_at"`
 }
 
+// REQUIRED: Convert database model to domain entity
 func (m *UserModel) ToEntity() (*entities.User, error) {
-    // Convert to domain entity
+    email, err := valueobjects.NewEmail(m.Email)
+    if err != nil {
+        return nil, err
+    }
+
+    return &entities.User{
+        ID:    m.ID,
+        Email: email,
+        // ... map all fields
+    }, nil
 }
 
+// REQUIRED: Convert domain entity to database model
 func UserFromEntity(u *entities.User) *UserModel {
-    // Convert from domain entity
+    return &UserModel{
+        BaseModel: database.BaseModel{
+            ID:        u.ID,
+            CreatedAt: u.CreatedAt,
+            UpdatedAt: u.UpdatedAt,
+        },
+        Email: u.Email.String(),
+        // ... map all fields
+    }
 }
+```
+
+### Migration Workflow
+
+```bash
+# 1. Create/modify your Bun models in internal/adapters/postgres/models/
+
+# 2. Atlas automatically detects changes and generates migration
+atlas migrate diff --env bun
+
+# 3. Apply migrations
+atlas migrate apply --env bun
+
+# NEVER manually write SQL migrations - let Atlas handle it!
 ```
 
 ## Background Workers
@@ -345,43 +407,95 @@ func HandleEmailDelivery(ctx context.Context, t *asynq.Task) error {
 
 ## API Handler Pattern
 
-### Chi Router Setup
+### Router Configuration (REQUIRED)
+
+**MANDATORY**: Every service MUST have a router at `internal/adapters/http/router.go`
 
 ```go
 // internal/adapters/http/router.go
 package http
 
-func NewRouter(services *ServiceContainer) *chi.Mux {
+import (
+    "github.com/go-chi/chi/v5"
+    "github.com/go-chi/chi/v5/middleware"
+    httpPkg "github.com/paradoxe35/mytorra/packages/http"
+    "github.com/paradoxe35/mytorra/packages/i18n"
+    "github.com/paradoxe35/mytorra/services/core/internal/adapters/http/handlers"
+    httpMiddleware "github.com/paradoxe35/mytorra/services/core/internal/adapters/http/middleware"
+)
+
+type Router struct {
+    authHandler    *handlers.AuthHandler
+    userHandler    *handlers.UserHandler
+    authMiddleware *httpMiddleware.AuthMiddleware
+    translator     *i18n.Translator
+    defaultLanguage string
+}
+
+func (rt *Router) Setup() *chi.Mux {
     r := chi.NewRouter()
 
-    // Middleware
+    // Global middleware (ORDER MATTERS!)
+    r.Use(middleware.Recoverer)
     r.Use(middleware.RequestID)
     r.Use(middleware.RealIP)
     r.Use(middleware.Logger)
-    r.Use(middleware.Recoverer)
-    r.Use(middleware.Timeout(60 * time.Second))
+    r.Use(middleware.Timeout(30 * time.Second))
+    r.Use(httpPkg.SecurityHeaders)
+    r.Use(httpPkg.CORS)
+    r.Use(httpPkg.Language(rt.translator, rt.defaultLanguage))
 
-    // Routes
+    // Health checks (public)
+    r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+        httpPkg.RespondJSON(w, http.StatusOK, map[string]string{
+            "status": "healthy",
+        })
+    })
+
+    // API routes
     r.Route("/api/v1", func(r chi.Router) {
-        // Auth routes
+        // Public routes
         r.Route("/auth", func(r chi.Router) {
-            r.Post("/login", handlers.Login(services.AuthService))
-            r.Post("/register", handlers.Register(services.UserService))
-            r.Post("/refresh", handlers.Refresh(services.AuthService))
+            r.Post("/register", rt.authHandler.Register)
+            r.Post("/login", rt.authHandler.Login)
         })
 
         // Protected routes
         r.Group(func(r chi.Router) {
-            r.Use(middleware.Authenticate(services.JWTService))
+            r.Use(rt.authMiddleware.Authenticate)
 
             r.Route("/users", func(r chi.Router) {
-                r.Get("/profile", handlers.GetProfile(services.UserService))
-                r.Put("/profile", handlers.UpdateProfile(services.UserService))
+                r.Get("/me", rt.userHandler.GetCurrentUser)
+                r.Put("/me", rt.userHandler.UpdateCurrentUser)
             })
         })
     })
 
     return r
+}
+```
+
+### Middleware Organization
+
+**MANDATORY**: Custom middleware goes in `internal/adapters/http/middleware/`
+
+```go
+// internal/adapters/http/middleware/auth.go
+package middleware
+
+type AuthMiddleware struct {
+    jwtService     *services.JWTService
+    userService    *services.UserService
+    logger         logger.Interface
+}
+
+func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // Extract token
+        // Validate token
+        // Add user context
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
 }
 ```
 
@@ -443,11 +557,22 @@ func (s *UserService) CreateUser(ctx context.Context, req dtos.CreateUserRequest
 ### Unit Tests
 
 ```go
+require (
+    "testing"
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/mock"
+    "github.com/stretchr/testify/require"
+    "github.com/paradoxe35/mytorra/packages/cache"
+    "github.com/paradoxe35/mytorra/packages/logger"
+    "github.com/paradoxe35/mytorra/services/core/internal/application/services"
+    "github.com/paradoxe35/mytorra/services/core/internal/application/ports/mocks"
+    "github.com/paradoxe35/mytorra/services/core/internal/domain/valueobjects"
+)
 // internal/application/services/auth_service_test.go
 func TestAuthService_Login(t *testing.T) {
     // Setup
     userRepo := mocks.NewMockUserRepository(t)
-    cacheRepo := mocks.NewMockCache(t)
+    cacheRepo := cache.NewMockCache(t)
 
     service := services.NewAuthService(userRepo, cacheRepo, ...)
 
@@ -464,31 +589,6 @@ func TestAuthService_Login(t *testing.T) {
 }
 ```
 
-### Integration Tests
-
-```go
-// tests/integration/auth_test.go
-func TestAuthFlow(t *testing.T) {
-    // Setup test database
-    db := testutil.SetupTestDB(t)
-    defer db.Close()
-
-    // Setup services
-    app := setupTestApp(db)
-
-    // Test registration
-    regReq := dtos.RegisterRequest{...}
-    user, err := app.UserService.Register(context.Background(), regReq)
-    require.NoError(t, err)
-
-    // Test login
-    loginReq := dtos.LoginRequest{...}
-    auth, err := app.AuthService.Login(context.Background(), loginReq)
-    require.NoError(t, err)
-    require.NotEmpty(t, auth.AccessToken)
-}
-```
-
 ## Service Configuration
 
 ### Config Structure
@@ -496,7 +596,7 @@ func TestAuthFlow(t *testing.T) {
 ```yaml
 # configs/config.yaml
 service:
-  name: core-service
+  name: service-name
   version: 1.0.0
   environment: development
   port: 8080
@@ -663,7 +763,7 @@ Testing is mandatory in the MyTorra platform. Every service MUST have comprehens
 Create mocks inline using `stretchr/testify/mock` - NO external mock generation tools:
 
 ```go
-// internal/adapters/postgres/repositories/user_repository_test.go
+// internal/adapters/postgres/repositories/mocks.go
 package repositories
 
 import (
@@ -951,27 +1051,6 @@ go test -v ./...
 
 # Run only unit tests (skip integration)
 go test -short ./...
-```
-
-## Development Workflow
-
-### 1. Local Development
-
-```bash
-# Run database
-docker-compose up -d postgres redis rabbitmq
-
-# Run migrations
-atlas migrate apply --env bun
-
-# Run tests first
-go test ./...
-
-# Run service
-go run cmd/api/main.go
-
-# Run worker
-go run cmd/worker/main.go
 ```
 
 ### 2. Code Generation
