@@ -272,7 +272,7 @@ created -> pending -> processing -> succeeded -> settled
   - Property payout
 
 ### 4. Ride Payments
-- **TorraCab Payments**
+- **MyTorraCab Payments**
   - Automatic fare calculation
   - Dynamic pricing handling
   - Tip processing

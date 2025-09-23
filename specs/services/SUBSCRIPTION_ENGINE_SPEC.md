@@ -1,42 +1,45 @@
-# Generic Subscription Engine Specification
+# Monetization Engine Specification (Subscription & Transaction Fees)
 
 ## Overview
-The Generic Subscription Engine is a comprehensive, service-agnostic subscription management system that handles plan creation, subscription lifecycle management, billing automation, and usage tracking across all MyTorra platform services.
+The Monetization Engine is a comprehensive, centralized revenue management system that handles both subscription plans and transaction-based fees across all MyTorra platform services. This hybrid system serves as the single source of truth for all revenue streams, providing dynamic plan creation, commission management, subscription lifecycle handling, billing automation, and usage tracking. The engine supports multi-tenant architecture where each business entity (restaurant, boutique, hotel, driver) is treated as a tenant with their own financial management capabilities.
 
 ## Core Responsibilities
 
 ### Primary Functions
-1. **Plan Management** - Create and manage subscription plans for all services
-2. **Subscription Lifecycle** - Handle subscription creation, changes, and cancellation
-3. **Billing Automation** - Automated recurring billing and invoice generation
-4. **Usage Tracking** - Monitor and track feature usage and limits
-5. **Proration Handling** - Calculate prorated charges for plan changes
-6. **Grace Period Management** - Handle payment failures and account suspension
+1. **Dynamic Plan Management** - Admin-created and managed subscription plans without code changes
+2. **Commission & Fee Management** - Configure transaction fees, commissions, and listing fees per service
+3. **Multi-Tenant Revenue Management** - Isolated financial management for each business entity
+4. **Subscription Lifecycle** - Handle subscription creation, changes, and cancellation
+5. **Split Payment Processing** - Automatic distribution of payments between sellers and platform
+6. **Billing Automation** - Automated recurring billing and invoice generation
+7. **Usage Tracking** - Monitor and track feature usage and limits
+8. **Proration Handling** - Calculate prorated charges for plan changes
+9. **Grace Period Management** - Handle payment failures and account suspension
 
 ## Features & Functionality
 
-### 1. Subscription Plan Management
+### 1. Dynamic Monetization Management
 
-#### Plan Types
-- **Feature-Based Plans**
-  - Boolean feature flags (enabled/disabled)
-  - Feature limits (max products, max orders, etc.)
-  - Service access permissions
-  - API rate limits
-  - Storage quotas
+#### Revenue Models
+- **Subscription-Based Revenue**
+  - Admin-defined recurring payment plans
+  - Customizable billing cycles (daily, weekly, monthly, yearly)
+  - Feature-based access control
+  - Service-specific plan templates
+  - Dynamic pricing adjustments
 
-- **Usage-Based Plans**
-  - Pay-per-use billing
-  - Tiered usage pricing
-  - Overage charges
-  - Usage thresholds
-  - Volume discounts
+- **Transaction-Based Revenue**
+  - Commission rates per service/category
+  - Fixed transaction fees
+  - Listing fees for marketplaces
+  - Volume-based commission tiers
+  - Promotional period adjustments
 
-- **Hybrid Plans**
-  - Base subscription + usage charges
-  - Feature bundles + overages
-  - Freemium with premium features
-  - Credit-based systems
+- **Hybrid Revenue Models**
+  - Subscription + reduced commission rates
+  - Base plans with transaction overages
+  - Freemium with transaction fees
+  - Credit-based systems with top-ups
 
 #### Plan Configuration
 - **Billing Cycles**
@@ -53,70 +56,57 @@ The Generic Subscription Engine is a comprehensive, service-agnostic subscriptio
   - Volume-based pricing
   - Custom pricing tiers
 
-### 2. Service-Specific Plans
+### 2. Admin-Managed Plan Configuration
 
-#### Restaurant Plans (MyTorra Food)
-- **Starter Plan**
-  - Up to 50 menu items
-  - Basic analytics
-  - Standard commission rate
-  - Email support
+#### Dynamic Plan Builder
+- **Plan Creation Interface**
+  - Visual plan designer with drag-drop features
+  - Feature catalog with searchable components
+  - Pricing calculator with revenue projections
+  - A/B testing configuration for plans
+  - Plan template library for quick setup
 
-- **Professional Plan**
-  - Unlimited menu items
-  - Advanced analytics
-  - Reduced commission rate
-  - Priority support
-  - Marketing tools
+- **Feature Registry System**
+  - Centralized catalog of all available features
+  - Feature dependencies and relationships
+  - Feature categories (Core, Premium, Add-on)
+  - Custom feature creation for specific services
+  - Feature usage metrics and analytics
 
-- **Enterprise Plan**
-  - All Professional features
-  - Custom branding
-  - API access
-  - Dedicated account manager
-  - White-label options
+- **Commission Configuration**
+  - Service-specific commission rates
+  - Category-based fee structures
+  - Volume discount tiers
+  - Promotional rate scheduling
+  - Geographic region-based rates
 
-#### Hotel Plans (MyTorra Booking)
-- **Basic Plan**
-  - Up to 10 room types
-  - Basic availability management
-  - Standard commission rate
-  - Email support
+#### Service Plan Templates (Admin Customizable)
 
-- **Premium Plan**
-  - Unlimited room types
-  - Dynamic pricing tools
-  - Channel management
-  - Reduced commission rate
-  - Phone support
+**Restaurant Service (MyTorra Food)**
+- Admin can create unlimited plan variations
+- Mix of subscription fees and commission rates
+- Example configurations:
+  - Free listing with 15% commission
+  - Monthly fee with 8% commission
+  - Premium tier with 5% commission + features
 
-- **Enterprise Plan**
-  - All Premium features
-  - Revenue management tools
-  - Custom integrations
-  - Dedicated support
-  - Analytics dashboard
+**Hotel Service (MyTorra Booking)**
+- Flexible room listing limits
+- Dynamic commission structures
+- Seasonal rate adjustments
+- Channel management features
 
-#### Marketplace Seller Plans
-- **Individual Plan**
-  - Up to 20 listings
-  - Basic seller tools
-  - Standard transaction fees
-  - Community support
+**Marketplace Service**
+- Listing fee options
+- Transaction percentage configuration
+- Category-specific rates
+- Seller tier systems
 
-- **Business Plan**
-  - Unlimited listings
-  - Advanced seller tools
-  - Reduced transaction fees
-  - Priority listing placement
-  - Business analytics
-
-- **Enterprise Plan**
-  - All Business features
-  - API access
-  - Bulk listing tools
-  - Custom branding
-  - Dedicated support
+**Delivery & Cab Services**
+- Pure commission models
+- Distance-based fee calculations
+- Peak hour rate adjustments
+- Driver incentive programs
 
 ### 3. Subscription Lifecycle Management
 
@@ -165,37 +155,63 @@ The Generic Subscription Engine is a comprehensive, service-agnostic subscriptio
   - Final billing
   - Account deactivation
 
-### 4. Billing & Payment Management
+### 4. Dual-Mode Payment Processing
 
-#### Automated Billing
-- **Billing Cycles**
-  - Recurring charge scheduling
-  - Billing date management
-  - Timezone handling
-  - Holiday scheduling
-  - Grace period configuration
+#### Collection Phase (Both Modes)
+- **Payment Collection Methods**
+  - Mobile money (M-Pesa, MTN, Airtel, Orange)
+  - Credit/debit cards (Visa, Mastercard)
+  - Bank transfers
+  - Digital wallets
+  - USSD payments
+  - QR code payments
 
-- **Invoice Generation**
-  - Automated invoice creation
-  - Tax calculation
-  - Discount application
-  - Proration handling
-  - Multi-currency support
+- **Transaction Recording**
+  - Full amount collection to platform
+  - Commission calculation
+  - Fee breakdown storage
+  - Transaction reference tracking
+  - Multi-currency handling
 
-#### Payment Processing
-- **Payment Collection**
-  - Multiple payment methods
-  - Automatic retry logic
-  - Failed payment handling
-  - Payment method updates
-  - PCI compliance
+#### Disbursement Phase
 
-- **Dunning Management**
-  - Payment failure notifications
-  - Retry schedules
-  - Account suspension rules
-  - Collection procedures
-  - Recovery workflows
+##### Mode 1: Instant Split (Card Markets)
+- **Real-time Processing**
+  - Immediate vendor credit
+  - Instant commission deduction
+  - Same-day settlement
+  - Automated reconciliation
+  - Direct account deposits
+
+##### Mode 2: Collect-and-Disburse (Mobile Money Markets)
+- **Scheduled Disbursements**
+  - Daily/weekly batch processing
+  - Minimum threshold enforcement (e.g., $10)
+  - Bulk transfer optimization
+  - Provider-specific routing
+  - Failed disbursement retry
+
+- **Settlement Management**
+  - Holding account reconciliation
+  - Float balance management
+  - Reserve requirements (10-20%)
+  - Regulatory compliance
+  - Audit trail maintenance
+
+#### Reconciliation & Reporting
+- **Daily Reconciliation**
+  - Collection vs disbursement matching
+  - Fee verification
+  - Discrepancy detection
+  - Automatic adjustment entries
+  - Exception handling
+
+- **Financial Reporting**
+  - Platform float tracking
+  - Vendor balance sheets
+  - Commission reports
+  - Settlement status
+  - Regulatory compliance reports
 
 ### 5. Usage Tracking & Limits
 
@@ -231,35 +247,61 @@ The Generic Subscription Engine is a comprehensive, service-agnostic subscriptio
 
 ## Admin Dashboard Features
 
-### 1. Plan Management
-- **Plan Creation**
-  - Visual plan builder
-  - Feature configuration
-  - Pricing setup
-  - Billing cycle definition
-  - A/B testing support
+### 1. Dynamic Plan Management
+- **Plan Builder Interface**
+  - Drag-and-drop feature composer
+  - Real-time pricing preview
+  - Plan comparison matrix generator
+  - Version control for plan changes
+  - Sandbox testing environment
+  - Bulk plan operations
+
+- **Feature Management**
+  - Feature catalog administration
+  - Feature dependency mapping
+  - Usage limit configuration
+  - Feature flag management
+  - Cross-service feature bundles
+
+- **Commission & Fee Management**
+  - Commission rate configurator
+  - Transaction fee calculator
+  - Listing fee management
+  - Promotional rate scheduler
+  - Revenue split configuration
+  - Payment gateway fee settings
 
 - **Plan Analytics**
-  - Plan popularity metrics
-  - Revenue per plan
-  - Conversion rates
-  - Churn rates
-  - Upgrade/downgrade patterns
+  - Real-time revenue dashboards
+  - Plan performance metrics
+  - Conversion funnel analysis
+  - Churn prediction models
+  - Revenue optimization suggestions
+  - A/B test results
 
-### 2. Subscription Management
-- **Subscription Overview**
-  - Active subscriptions list
-  - Revenue dashboard
-  - Subscription status monitoring
-  - Billing schedule view
-  - Usage analytics
+### 2. Tenant & Subscription Management
+- **Multi-Tenant Dashboard**
+  - Tenant onboarding workflow
+  - Business verification status
+  - Tenant categorization (restaurant, boutique, driver)
+  - Revenue per tenant analytics
+  - Tenant health scoring
 
-- **Customer Management**
-  - Customer subscription history
-  - Payment history
-  - Support ticket integration
-  - Account status management
-  - Custom plan assignments
+- **Subscription Management**
+  - Real-time subscription monitoring
+  - Bulk subscription operations
+  - Migration tools for plan changes
+  - Grandfathering rules configuration
+  - Trial period management
+  - Custom deal creation
+
+- **Tenant Self-Service Portal**
+  - Subscription upgrade/downgrade
+  - Payment method management
+  - Earnings and commission tracking
+  - Transaction history
+  - Payout schedule viewing
+  - Financial reports download
 
 ### 3. Billing Administration
 - **Payment Monitoring**
@@ -286,108 +328,371 @@ The Generic Subscription Engine is a comprehensive, service-agnostic subscriptio
 
 ## API Endpoints
 
-### Plan Management
+### Admin Plan Management (Dynamic Creation/Modification)
 ```
-GET /subscription/plans
-POST /subscription/plans
-GET /subscription/plans/{id}
-PUT /subscription/plans/{id}
-DELETE /subscription/plans/{id}
-GET /subscription/plans/service/{service}
+# Plan Builder
+POST /admin/monetization/plans/create        # Create new plan from scratch
+POST /admin/monetization/plans/from-template # Create from template
+GET /admin/monetization/plans/templates      # List available templates
+PUT /admin/monetization/plans/{id}          # Modify existing plan
+POST /admin/monetization/plans/{id}/version # Create new version of plan
+POST /admin/monetization/plans/{id}/publish # Publish draft plan
+POST /admin/monetization/plans/{id}/archive # Archive active plan
+DELETE /admin/monetization/plans/{id}       # Delete draft plan only
+
+# Feature Registry Management
+GET /admin/monetization/features            # List all available features
+POST /admin/monetization/features           # Add new feature to registry
+PUT /admin/monetization/features/{id}       # Update feature definition
+GET /admin/monetization/features/categories # Get feature categories
+
+# Commission Rules Management
+GET /admin/monetization/commission-rules    # List all commission rules
+POST /admin/monetization/commission-rules   # Create new rule
+PUT /admin/monetization/commission-rules/{id} # Update rule
+DELETE /admin/monetization/commission-rules/{id} # Delete rule
+POST /admin/monetization/commission-rules/simulate # Simulate rule impact
+
+# Plan Migration Management
+GET /admin/monetization/migrations/pending  # List pending migrations
+POST /admin/monetization/migrations/schedule # Schedule bulk migration
+POST /admin/monetization/migrations/{id}/execute # Execute migration
+GET /admin/monetization/migrations/history  # Migration history
 ```
 
-### Subscription Operations
+### Tenant-Facing Plan Operations
 ```
-POST /subscription/subscribe
-GET /subscription/current
-PUT /subscription/change-plan
-POST /subscription/cancel
-POST /subscription/reactivate
-GET /subscription/billing-history
+# Browse and Subscribe
+GET /monetization/plans/available           # List plans for tenant type
+GET /monetization/plans/{id}/details       # Get plan details with features
+POST /monetization/plans/{id}/preview      # Preview plan change (pricing/features)
+POST /monetization/subscribe               # Subscribe to a plan
+POST /monetization/trial/start            # Start trial period
+
+# Manage Subscription
+GET /monetization/subscription/current     # Get current subscription
+PUT /monetization/subscription/upgrade     # Upgrade to higher plan
+PUT /monetization/subscription/downgrade   # Downgrade to lower plan
+POST /monetization/subscription/cancel     # Cancel subscription
+POST /monetization/subscription/reactivate # Reactivate cancelled subscription
 ```
 
-### Usage Management
+### Transaction & Commission Management
 ```
-POST /subscription/usage/record
-GET /subscription/usage/current
-GET /subscription/usage/limits
-GET /subscription/usage/history
-POST /subscription/usage/reset
+# Transaction Fee Recording
+POST /monetization/transactions/record     # Record transaction and calculate fees
+GET /monetization/transactions/{id}        # Get transaction fee details
+GET /monetization/transactions/history     # Transaction history for tenant
+
+# Earnings & Payouts
+GET /monetization/earnings/current-period  # Current period earnings
+GET /monetization/earnings/history         # Historical earnings
+GET /monetization/payouts/schedule         # Upcoming payouts
+GET /monetization/payouts/history          # Payout history
+PUT /monetization/payouts/account          # Update payout account details
 ```
 
-### Billing Operations
+### Billing & Payment Operations
 ```
-GET /subscription/billing/invoices
-GET /subscription/billing/next-bill
-POST /subscription/billing/charge
-POST /subscription/billing/refund
-PUT /subscription/billing/payment-method
+# Invoices
+GET /monetization/billing/invoices         # List all invoices
+GET /monetization/billing/invoices/{id}    # Get specific invoice
+GET /monetization/billing/next-charge      # Next charge details
+
+# Payment Methods
+GET /monetization/payment-methods          # List payment methods
+POST /monetization/payment-methods         # Add payment method
+PUT /monetization/payment-methods/{id}/default # Set default
+DELETE /monetization/payment-methods/{id}  # Remove payment method
+
+# Payment Processing
+POST /monetization/payments/process        # Process payment
+POST /monetization/payments/{id}/refund    # Process refund
+POST /monetization/payments/{id}/dispute   # Handle dispute
 ```
 
-### Admin Operations
+### Analytics & Reporting
 ```
-GET /admin/subscriptions
-GET /admin/subscriptions/{id}
-PUT /admin/subscriptions/{id}/status
-GET /admin/billing/failed-payments
-POST /admin/billing/retry-payment
-GET /admin/analytics/mrr
-GET /admin/analytics/churn
+# Admin Analytics
+GET /admin/monetization/analytics/revenue  # Platform revenue metrics
+GET /admin/monetization/analytics/plans    # Plan performance metrics
+GET /admin/monetization/analytics/tenants  # Tenant revenue analysis
+GET /admin/monetization/analytics/forecasting # Revenue forecasting
+
+# Tenant Analytics
+GET /monetization/analytics/revenue        # Tenant's revenue metrics
+GET /monetization/analytics/transactions   # Transaction analytics
+GET /monetization/analytics/performance    # Performance metrics
 ```
 
 ## Database Schema
 
-### Subscription Plans Table
+### Dynamic Plans Table
 ```sql
-CREATE TABLE subscription_plans (
+CREATE TABLE monetization_plans (
     id UUID PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     display_name VARCHAR(200) NOT NULL,
     description TEXT,
     service VARCHAR(50) NOT NULL,
-    plan_type ENUM('feature_based', 'usage_based', 'hybrid') DEFAULT 'feature_based',
-    billing_cycle ENUM('monthly', 'yearly', 'weekly', 'daily', 'one_time') DEFAULT 'monthly',
-    price DECIMAL(10,2) NOT NULL,
+    tenant_type ENUM('restaurant', 'hotel', 'marketplace_seller', 'driver', 'delivery') NOT NULL,
+    plan_type ENUM('subscription', 'commission', 'hybrid') DEFAULT 'hybrid',
+    billing_cycle ENUM('monthly', 'yearly', 'weekly', 'daily', 'one_time', 'transaction') DEFAULT 'monthly',
+
+    -- Subscription pricing
+    subscription_price DECIMAL(10,2) DEFAULT 0.00,
     currency VARCHAR(3) DEFAULT 'USD',
     trial_days INTEGER DEFAULT 0,
     setup_fee DECIMAL(10,2) DEFAULT 0.00,
-    features JSONB NOT NULL,
+
+    -- Commission/transaction fees
+    commission_rate DECIMAL(5,2) DEFAULT 0.00, -- Percentage
+    fixed_transaction_fee DECIMAL(10,2) DEFAULT 0.00,
+    listing_fee DECIMAL(10,2) DEFAULT 0.00,
+
+    -- Dynamic configuration
+    features JSONB NOT NULL, -- Array of feature IDs from feature_registry
     limits JSONB,
+    commission_rules JSONB, -- Complex commission configurations
+
+    -- Versioning
+    version INTEGER DEFAULT 1,
+    parent_plan_id UUID REFERENCES monetization_plans(id),
+
+    -- Status
+    status ENUM('draft', 'active', 'archived', 'testing') DEFAULT 'draft',
+    published_at TIMESTAMP,
+    archived_at TIMESTAMP,
+
+    -- Admin tracking
+    created_by UUID REFERENCES users(id),
+    approved_by UUID REFERENCES users(id),
+
     metadata JSONB,
-    active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
 
     INDEX idx_service (service),
-    INDEX idx_active (active),
-    INDEX idx_billing_cycle (billing_cycle),
-    INDEX idx_price (price)
+    INDEX idx_tenant_type (tenant_type),
+    INDEX idx_status (status),
+    INDEX idx_plan_type (plan_type),
+    INDEX idx_version (version)
 );
 ```
 
-### User Subscriptions Table
+### Feature Registry Table
 ```sql
-CREATE TABLE user_subscriptions (
+CREATE TABLE feature_registry (
     id UUID PRIMARY KEY,
-    user_id UUID NOT NULL,
-    plan_id UUID REFERENCES subscription_plans(id),
-    status ENUM('trial', 'active', 'past_due', 'cancelled', 'expired', 'suspended') DEFAULT 'active',
+    feature_key VARCHAR(100) UNIQUE NOT NULL,
+    display_name VARCHAR(200) NOT NULL,
+    description TEXT,
+    category ENUM('core', 'premium', 'addon', 'limit', 'permission') NOT NULL,
+    service VARCHAR(50),
+    data_type ENUM('boolean', 'integer', 'string', 'json') DEFAULT 'boolean',
+    default_value TEXT,
+    validation_rules JSONB,
+    dependencies JSONB, -- Array of feature IDs this depends on
+    metadata JSONB,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_service (service),
+    INDEX idx_category (category),
+    INDEX idx_active (active)
+);
+```
+
+### Commission Rules Table
+```sql
+CREATE TABLE commission_rules (
+    id UUID PRIMARY KEY,
+    plan_id UUID REFERENCES monetization_plans(id),
+    rule_type ENUM('category', 'volume', 'geographic', 'promotional', 'time_based') NOT NULL,
+    priority INTEGER DEFAULT 0, -- Higher priority rules apply first
+
+    -- Rule conditions
+    conditions JSONB NOT NULL, -- Complex condition definitions
+
+    -- Rule actions
+    commission_rate DECIMAL(5,2),
+    fixed_fee DECIMAL(10,2),
+
+    -- Validity
+    valid_from TIMESTAMP,
+    valid_until TIMESTAMP,
+
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_plan_id (plan_id),
+    INDEX idx_rule_type (rule_type),
+    INDEX idx_priority (priority),
+    INDEX idx_active (active)
+);
+```
+
+### Tenant Subscriptions Table
+```sql
+CREATE TABLE tenant_subscriptions (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL, -- Can be user_id or organization_id
+    tenant_type ENUM('user', 'organization') NOT NULL,
+    plan_id UUID REFERENCES monetization_plans(id),
+    plan_version INTEGER NOT NULL, -- Track which version of plan they're on
+
+    -- Subscription status
+    status ENUM('trial', 'active', 'past_due', 'cancelled', 'expired', 'suspended', 'grandfathered') DEFAULT 'active',
+
+    -- Billing periods
     current_period_start TIMESTAMP NOT NULL,
     current_period_end TIMESTAMP NOT NULL,
     trial_start TIMESTAMP,
     trial_end TIMESTAMP,
+
+    -- Customizations
+    custom_commission_rate DECIMAL(5,2), -- Override plan's commission
+    custom_features JSONB, -- Additional features granted
+    negotiated_price DECIMAL(10,2), -- Custom pricing for this tenant
+
+    -- Cancellation
     cancel_at_period_end BOOLEAN DEFAULT FALSE,
     cancelled_at TIMESTAMP,
+    cancellation_reason TEXT,
     ended_at TIMESTAMP,
+
+    -- Grandfathering
+    is_grandfathered BOOLEAN DEFAULT FALSE,
+    grandfathered_from_plan_id UUID,
+
     metadata JSONB,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
 
-    INDEX idx_user_id (user_id),
+    INDEX idx_tenant_id (tenant_id),
+    INDEX idx_tenant_type (tenant_type),
     INDEX idx_plan_id (plan_id),
     INDEX idx_status (status),
     INDEX idx_current_period_end (current_period_end),
-    UNIQUE KEY active_subscription (user_id, plan_id) -- Ensure one active subscription per plan per user
+    INDEX idx_is_grandfathered (is_grandfathered),
+    UNIQUE KEY active_subscription (tenant_id, plan_id)
+);
+```
+
+### Transaction Fees Table
+```sql
+CREATE TABLE transaction_fees (
+    id UUID PRIMARY KEY,
+    transaction_id UUID NOT NULL, -- Reference to the actual transaction in service
+    tenant_id UUID NOT NULL,
+    service VARCHAR(50) NOT NULL,
+    transaction_type VARCHAR(50), -- order, booking, ride, delivery
+
+    -- Transaction details
+    transaction_amount DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'USD',
+
+    -- Fee calculation
+    applied_plan_id UUID REFERENCES monetization_plans(id),
+    commission_rate DECIMAL(5,2),
+    commission_amount DECIMAL(10,2),
+    fixed_fee_amount DECIMAL(10,2),
+    total_fee_amount DECIMAL(10,2) NOT NULL,
+
+    -- Split payment details
+    tenant_payout DECIMAL(10,2) NOT NULL,
+    platform_revenue DECIMAL(10,2) NOT NULL,
+
+    -- Payment gateway fees (if applicable)
+    gateway_fee DECIMAL(10,2) DEFAULT 0.00,
+    net_platform_revenue DECIMAL(10,2),
+
+    -- Status
+    status ENUM('pending', 'processed', 'settled', 'refunded', 'disputed') DEFAULT 'pending',
+    processed_at TIMESTAMP,
+    settled_at TIMESTAMP,
+
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_tenant_id (tenant_id),
+    INDEX idx_service (service),
+    INDEX idx_transaction_id (transaction_id),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at)
+);
+```
+
+### Tenant Payouts Table
+```sql
+CREATE TABLE tenant_payouts (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    payout_batch_id VARCHAR(100),
+
+    -- Payout amount
+    amount DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'USD',
+
+    -- Period covered
+    period_start TIMESTAMP NOT NULL,
+    period_end TIMESTAMP NOT NULL,
+
+    -- Transaction summary
+    transaction_count INTEGER NOT NULL,
+    total_sales DECIMAL(10,2) NOT NULL,
+    total_fees DECIMAL(10,2) NOT NULL,
+
+    -- Payout details
+    payout_method ENUM('bank_transfer', 'stripe', 'paypal', 'mobile_money') NOT NULL,
+    payout_account_id VARCHAR(200),
+
+    -- Status
+    status ENUM('pending', 'processing', 'completed', 'failed', 'cancelled') DEFAULT 'pending',
+    processed_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    failure_reason TEXT,
+
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_tenant_id (tenant_id),
+    INDEX idx_status (status),
+    INDEX idx_period_end (period_end),
+    INDEX idx_payout_batch_id (payout_batch_id)
+);
+```
+
+### Plan Migration History Table
+```sql
+CREATE TABLE plan_migrations (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    from_plan_id UUID REFERENCES monetization_plans(id),
+    to_plan_id UUID REFERENCES monetization_plans(id),
+    migration_type ENUM('upgrade', 'downgrade', 'lateral', 'forced') NOT NULL,
+
+    -- Migration details
+    reason TEXT,
+    initiated_by ENUM('tenant', 'admin', 'system') NOT NULL,
+    admin_user_id UUID REFERENCES users(id),
+
+    -- Grandfathering
+    grandfathered BOOLEAN DEFAULT FALSE,
+    retained_features JSONB,
+    retained_pricing DECIMAL(10,2),
+
+    -- Execution
+    scheduled_for TIMESTAMP,
+    executed_at TIMESTAMP,
+
+    metadata JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+
+    INDEX idx_tenant_id (tenant_id),
+    INDEX idx_from_plan_id (from_plan_id),
+    INDEX idx_to_plan_id (to_plan_id),
+    INDEX idx_executed_at (executed_at)
 );
 ```
 
@@ -484,117 +789,411 @@ CREATE TABLE subscription_events (
 
 ## Integration Patterns
 
+### With Payment Gateways (Marketplace-Specific)
+- **Stripe Connect Integration**
+  - Automated seller onboarding
+  - Split payment processing
+  - Managed account creation
+  - Compliance handling
+  - Instant payouts
+
+- **PayStack/Flutterwave Integration**
+  - Sub-account management
+  - Commission splitting
+  - Multi-currency support
+  - Mobile money integration
+
 ### With Core Service
 - User authentication and authorization
-- Payment processing coordination
-- User profile management
+- Payment gateway abstraction
+- Tenant profile management
 - Notification handling
+- Permission synchronization
 
 ### With Service-Specific Features
 ```go
-// Restaurant service integration
-func ValidateRestaurantSubscription(userID string, feature string) bool {
-    subscription := subscriptionEngine.GetActiveSubscription(userID, "restaurant")
-    return subscription.HasFeature(feature) && !subscription.IsLimitExceeded(feature)
+// Restaurant service integration - Hybrid model
+func ProcessRestaurantOrder(tenantID string, orderAmount decimal.Decimal) (TenantPayout, PlatformRevenue decimal.Decimal) {
+    subscription := monetizationEngine.GetTenantSubscription(tenantID, "restaurant")
+    commissionRate := subscription.GetEffectiveCommissionRate()
+
+    // Calculate split
+    platformRevenue := orderAmount.Mul(commissionRate.Div(decimal.NewFromInt(100)))
+    tenantPayout := orderAmount.Sub(platformRevenue)
+
+    // Record transaction fee
+    monetizationEngine.RecordTransactionFee(tenantID, orderAmount, platformRevenue)
+
+    return tenantPayout, platformRevenue
 }
 
-// Marketplace service integration
-func TrackProductListing(userID string) error {
-    return subscriptionEngine.RecordUsage(userID, "marketplace", "product_listings", 1)
+// Marketplace service - Pure commission model
+func ProcessMarketplaceSale(sellerID string, saleAmount decimal.Decimal) error {
+    // Check if seller has subscription for reduced fees
+    subscription := monetizationEngine.GetTenantSubscription(sellerID, "marketplace")
+
+    if subscription == nil {
+        // Apply default commission for non-subscribers
+        return monetizationEngine.ApplyDefaultCommission(sellerID, saleAmount, "marketplace")
+    }
+
+    // Apply subscription-based commission
+    return monetizationEngine.ApplySubscriptionCommission(sellerID, saleAmount)
+}
+
+// Cab service - Pure transaction fee model
+func ProcessCabRide(driverID string, fareAmount decimal.Decimal) error {
+    // No subscription model - pure commission
+    return monetizationEngine.ApplyServiceCommission(driverID, fareAmount, "cab", 0.15) // 15% commission
 }
 ```
 
 ### Event Publishing
-- `SubscriptionCreated`: New subscription created
-- `SubscriptionUpdated`: Subscription plan changed
-- `SubscriptionCancelled`: Subscription cancelled
-- `PaymentSucceeded`: Subscription payment successful
-- `PaymentFailed`: Subscription payment failed
-- `UsageLimitReached`: Usage limit exceeded
+- `PlanCreated`: Admin creates new monetization plan
+- `PlanModified`: Admin modifies existing plan
+- `TenantSubscribed`: Tenant subscribes to a plan
+- `SubscriptionUpdated`: Tenant changes subscription
+- `SubscriptionCancelled`: Tenant cancels subscription
+- `TransactionProcessed`: Transaction fee applied
+- `PayoutScheduled`: Tenant payout scheduled
+- `PayoutCompleted`: Tenant payout completed
+- `CommissionRuleApplied`: Special commission rule triggered
+- `PaymentSucceeded`: Payment processed successfully
+- `PaymentFailed`: Payment processing failed
+- `UsageLimitReached`: Feature usage limit exceeded
 - `TrialExpired`: Trial period ended
 
 ### Event Consumption
-- `UserRegistered`: Create trial subscription
+- `TenantOnboarded`: Create default monetization profile
+- `TransactionCompleted`: Calculate and apply fees
 - `PaymentMethodUpdated`: Update billing information
 - `ServiceUsageRecorded`: Update usage metrics
+- `TenantVerified`: Enable full monetization features
 
 ## Business Rules & Logic
 
-### Plan Change Logic
+### Dynamic Plan Management
 ```go
-// Plan upgrade - immediate access, prorated billing
-func UpgradePlan(subscriptionID string, newPlanID string) error {
-    // 1. Calculate prorated amount
-    // 2. Process immediate payment
-    // 3. Update subscription
-    // 4. Enable new features immediately
-    // 5. Send confirmation notification
+// Admin creates new plan without code changes
+func CreateMonetizationPlan(adminID string, planConfig PlanConfig) (*MonetizationPlan, error) {
+    // 1. Validate admin permissions
+    // 2. Validate feature combinations from registry
+    // 3. Calculate revenue projections
+    // 4. Create plan in draft status
+    // 5. Submit for approval workflow
+    // 6. Publish plan when approved
 }
 
-// Plan downgrade - end of period change
-func DowngradePlan(subscriptionID string, newPlanID string) error {
-    // 1. Schedule change for period end
-    // 2. Disable features at period end
-    // 3. Send confirmation notification
-    // 4. Calculate refund if applicable
+// Handle plan modifications for existing subscribers
+func ModifyPlan(planID string, changes PlanChanges) error {
+    // 1. Create new plan version
+    // 2. Identify affected tenants
+    // 3. Apply grandfathering rules
+    // 4. Schedule migrations
+    // 5. Send notifications
 }
 ```
 
-### Usage Limit Enforcement
+### Tenant Plan Changes
 ```go
-func EnforceUsageLimit(subscriptionID string, feature string) error {
-    usage := GetCurrentUsage(subscriptionID, feature)
-    limit := GetFeatureLimit(subscriptionID, feature)
+// Tenant upgrades plan - immediate with proration
+func UpgradeTenantPlan(tenantID string, newPlanID string) error {
+    currentSub := GetTenantSubscription(tenantID)
+    newPlan := GetPlan(newPlanID)
 
-    if usage >= limit {
-        return errors.New("usage limit exceeded")
+    // Check if downgrading commission (better deal for tenant)
+    if newPlan.CommissionRate < currentSub.Plan.CommissionRate {
+        // Apply immediately - tenant benefits
+        ApplyPlanImmediately(tenantID, newPlanID)
     }
 
-    if usage >= (limit * 0.8) {
-        SendUsageWarning(subscriptionID, feature, usage, limit)
+    // Calculate prorated subscription fee
+    proratedAmount := CalculateProration(currentSub, newPlan)
+
+    // Process payment and update
+    ProcessPaymentAndUpgrade(tenantID, proratedAmount, newPlanID)
+}
+
+// Tenant downgrades - scheduled for period end
+func DowngradeTenantPlan(tenantID string, newPlanID string) error {
+    // Schedule for end of current period
+    SchedulePlanChange(tenantID, newPlanID, GetPeriodEnd(tenantID))
+
+    // If increasing commission rate, keep current rate until period end
+    PreserveFavorableCommission(tenantID)
+}
+```
+
+### Dual-Mode Payment Processing Logic
+```go
+// Main payment processing function that routes to appropriate mode
+func ProcessPayment(order Order, customer Customer, tenant Tenant) (*PaymentResult, error) {
+    // Determine payment mode based on region and payment method
+    paymentMode := DeterminePaymentMode(customer.Region, customer.PaymentMethod)
+    gateway := GetPaymentGateway(customer.Region)
+
+    // Calculate commission
+    commission := CalculateEffectiveCommission(tenant.ID, order.Service, order.Amount, nil)
+
+    switch paymentMode {
+    case INSTANT_SPLIT:
+        return ProcessInstantSplitPayment(order, customer, tenant, commission, gateway)
+    case COLLECT_DISBURSE:
+        return ProcessCollectDisbursePayment(order, customer, tenant, commission, gateway)
+    default:
+        return nil, errors.New("unsupported payment mode")
     }
+}
+
+// Mode 1: Instant Split Payment (Stripe Connect style)
+func ProcessInstantSplitPayment(order Order, customer Customer, tenant Tenant, commission Commission, gateway PaymentGateway) (*PaymentResult, error) {
+    // Create split payment instruction
+    splitInstruction := SplitInstruction{
+        TotalAmount: order.Amount,
+        Splits: []Split{
+            {Recipient: tenant.StripeAccountID, Amount: order.Amount.Sub(commission.Amount)},
+            {Recipient: PLATFORM_ACCOUNT, Amount: commission.Amount},
+        },
+    }
+
+    // Process payment with immediate split
+    tx, err := gateway.ProcessSplitPayment(customer, splitInstruction)
+    if err != nil {
+        return nil, err
+    }
+
+    // Record transaction (already split)
+    RecordCollection(PaymentCollection{
+        TransactionID: tx.ID,
+        TenantID: tenant.ID,
+        AmountCollected: order.Amount,
+        PaymentMode: INSTANT_SPLIT,
+        DisbursementStatus: "completed", // Instant disbursement
+    })
+
+    return &PaymentResult{TransactionID: tx.ID, Status: "completed"}, nil
+}
+
+// Mode 2: Collect and Disburse (Mobile Money)
+func ProcessCollectDisbursePayment(order Order, customer Customer, tenant Tenant, commission Commission, gateway PaymentGateway) (*PaymentResult, error) {
+    // Step 1: Collect full payment to platform holding account
+    tx, err := gateway.CollectPayment(order.Amount, customer)
+    if err != nil {
+        return nil, err
+    }
+
+    // Step 2: Record collection with pending disbursement
+    collection := RecordCollection(PaymentCollection{
+        TransactionID: tx.ID,
+        TenantID: tenant.ID,
+        AmountCollected: order.Amount,
+        TenantShare: order.Amount.Sub(commission.Amount),
+        PlatformShare: commission.Amount,
+        PaymentMode: COLLECT_DISBURSE,
+        CollectionStatus: "successful",
+        DisbursementStatus: "pending",
+    })
+
+    // Step 3: Schedule disbursement
+    ScheduleDisbursement(tenant.ID, collection.TenantShare, collection.ID)
+
+    return &PaymentResult{TransactionID: tx.ID, Status: "collected_pending_disbursement"}, nil
+}
+
+// Batch disbursement processor (runs on schedule)
+func ProcessScheduledDisbursements() error {
+    // Get pending disbursements grouped by provider
+    batches := GetPendingDisbursementBatches()
+
+    for provider, disbursements := range batches {
+        gateway := GetGatewayForProvider(provider)
+
+        // Check if provider supports bulk transfer
+        if gateway.SupportsBulkTransfer() {
+            ProcessBulkDisbursement(gateway, disbursements)
+        } else {
+            // Process individually
+            for _, disbursement := range disbursements {
+                ProcessSingleDisbursement(gateway, disbursement)
+            }
+        }
+    }
+
+    return nil
+}
+
+// Process bulk disbursement for efficiency
+func ProcessBulkDisbursement(gateway PaymentGateway, disbursements []Disbursement) error {
+    // Create batch
+    batch := CreateDisbursementBatch(disbursements)
+
+    // Validate float balance
+    if !HasSufficientFloat(batch.TotalAmount) {
+        return errors.New("insufficient float balance")
+    }
+
+    // Submit to gateway
+    result, err := gateway.BatchDisburse(batch)
+    if err != nil {
+        HandleDisbursementFailure(batch, err)
+        return err
+    }
+
+    // Update disbursement statuses
+    for _, disbursement := range disbursements {
+        if result.IsSuccessful(disbursement.ID) {
+            MarkDisbursementComplete(disbursement.ID)
+            NotifyTenantOfPayout(disbursement.TenantID, disbursement.Amount)
+        } else {
+            ScheduleRetry(disbursement.ID)
+        }
+    }
+
+    // Update float balance
+    UpdateFloatBalance(-batch.TotalAmount)
+
+    return nil
+}
+
+// Daily reconciliation process
+func RunDailyReconciliation() error {
+    date := time.Now().AddDate(0, 0, -1) // Previous day
+
+    // Get all collections and disbursements
+    collections := GetCollections(date)
+    disbursements := GetDisbursements(date)
+
+    reconciliation := SettlementReconciliation{
+        ReconciliationDate: date,
+        TotalCollected: SumCollections(collections),
+        TotalDisbursed: SumDisbursements(disbursements),
+        TotalCommission: SumCommissions(collections),
+    }
+
+    // Calculate expected vs actual float
+    expectedFloat := reconciliation.TotalCollected - reconciliation.TotalDisbursed
+    actualFloat := GetFloatBalance()
+
+    reconciliation.DiscrepancyAmount = actualFloat - expectedFloat
+
+    if reconciliation.DiscrepancyAmount.Abs().GreaterThan(RECONCILIATION_THRESHOLD) {
+        // Flag for manual investigation
+        reconciliation.Status = "discrepancy"
+        NotifyFinanceTeam(reconciliation)
+    } else {
+        reconciliation.Status = "balanced"
+    }
+
+    SaveReconciliation(reconciliation)
 
     return nil
 }
 ```
 
-## Pricing Calculations
+## Pricing & Revenue Calculations
 
-### Proration Calculation
+### Hybrid Revenue Calculation
 ```go
-func CalculateProration(oldPlan Plan, newPlan Plan, daysRemaining int, totalDays int) decimal.Decimal {
-    unusedAmount := oldPlan.Price.Mul(decimal.NewFromInt(int64(daysRemaining))).Div(decimal.NewFromInt(int64(totalDays)))
-    newAmount := newPlan.Price.Mul(decimal.NewFromInt(int64(daysRemaining))).Div(decimal.NewFromInt(int64(totalDays)))
-    return newAmount.Sub(unusedAmount)
+// Calculate total revenue from a tenant (subscription + transactions)
+func CalculateTenantRevenue(tenantID string, period Period) TenantRevenue {
+    subscription := GetTenantSubscription(tenantID)
+
+    revenue := TenantRevenue{
+        TenantID: tenantID,
+        Period: period,
+    }
+
+    // Subscription revenue
+    if subscription != nil && subscription.IsActive() {
+        revenue.SubscriptionRevenue = subscription.GetPeriodPrice()
+    }
+
+    // Transaction revenue (commissions)
+    transactions := GetTenantTransactions(tenantID, period)
+    for _, tx := range transactions {
+        revenue.TransactionRevenue = revenue.TransactionRevenue.Add(tx.CommissionAmount)
+    }
+
+    // Total platform revenue from this tenant
+    revenue.TotalRevenue = revenue.SubscriptionRevenue.Add(revenue.TransactionRevenue)
+
+    return revenue
+}
+
+// Calculate tenant's net earnings after platform fees
+func CalculateTenantEarnings(tenantID string, period Period) TenantEarnings {
+    transactions := GetTenantTransactions(tenantID, period)
+
+    earnings := TenantEarnings{
+        TenantID: tenantID,
+        Period: period,
+    }
+
+    for _, tx := range transactions {
+        earnings.GrossSales = earnings.GrossSales.Add(tx.TransactionAmount)
+        earnings.TotalFees = earnings.TotalFees.Add(tx.TotalFeeAmount)
+    }
+
+    // Net earnings after all fees
+    earnings.NetEarnings = earnings.GrossSales.Sub(earnings.TotalFees)
+
+    // Deduct subscription fee if applicable
+    subscription := GetTenantSubscription(tenantID)
+    if subscription != nil {
+        earnings.SubscriptionFee = subscription.GetPeriodPrice()
+        earnings.NetEarnings = earnings.NetEarnings.Sub(earnings.SubscriptionFee)
+    }
+
+    return earnings
 }
 ```
 
-### Usage-Based Billing
+### Proration for Plan Changes
 ```go
-func CalculateUsageBilling(subscription Subscription, usageRecords []UsageRecord) decimal.Decimal {
-    var total decimal.Decimal
+func CalculateProration(currentSub Subscription, newPlan Plan, changeDate time.Time) decimal.Decimal {
+    // Calculate days remaining in current period
+    daysRemaining := currentSub.CurrentPeriodEnd.Sub(changeDate).Hours() / 24
+    totalDays := currentSub.CurrentPeriodEnd.Sub(currentSub.CurrentPeriodStart).Hours() / 24
 
-    for _, record := range usageRecords {
-        if record.Count > record.IncludedAmount {
-            overage := record.Count - record.IncludedAmount
-            total = total.Add(decimal.NewFromInt(int64(overage)).Mul(record.OverageRate))
-        }
-    }
+    // Calculate unused subscription fee
+    unusedSubscriptionFee := currentSub.Plan.SubscriptionPrice.
+        Mul(decimal.NewFromFloat(daysRemaining)).
+        Div(decimal.NewFromFloat(totalDays))
 
-    return total
+    // Calculate new plan fee for remaining period
+    newSubscriptionFee := newPlan.SubscriptionPrice.
+        Mul(decimal.NewFromFloat(daysRemaining)).
+        Div(decimal.NewFromFloat(totalDays))
+
+    // Return amount to charge (positive) or credit (negative)
+    return newSubscriptionFee.Sub(unusedSubscriptionFee)
 }
 ```
 
 ## Performance Requirements
 
 ### Response Times
+- **Plan Retrieval**: <30ms
+- **Commission Calculation**: <50ms
 - **Subscription Validation**: <50ms
-- **Usage Recording**: <100ms
+- **Transaction Fee Recording**: <100ms
+- **Split Payment Processing**: <200ms
 - **Plan Changes**: <2 seconds
 - **Billing Processing**: <5 seconds
+- **Payout Processing**: <10 seconds
 
 ### Scalability
-- **Concurrent Users**: Support 100,000+ active subscriptions
+- **Concurrent Tenants**: Support 500,000+ active tenants
+- **Plans Management**: Handle 1,000+ active plans across services
+- **Transaction Processing**: 50,000+ transactions per second
+- **Commission Calculations**: 100,000+ per second
 - **Usage Events**: Process 10,000+ events per second
-- **Billing Operations**: Handle 50,000+ invoices per month
-- **API Throughput**: 1,000+ requests per second
+- **Billing Operations**: Handle 200,000+ invoices per month
+- **Payout Operations**: Process 100,000+ payouts per month
+- **API Throughput**: 5,000+ requests per second
+
+### High Availability
+- **Uptime SLA**: 99.99% availability
+- **Failover Time**: <30 seconds
+- **Data Replication**: Multi-region replication
+- **Backup Frequency**: Real-time for transactions, hourly for configurations
