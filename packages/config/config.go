@@ -169,6 +169,10 @@ func Load(configPath string) (*Config, error) {
 	return &config, nil
 }
 
+func NewServiceConfig() (*Config, error) {
+	return Load("./configs/config.yaml")
+}
+
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("service.environment", "development")
 	v.SetDefault("server.port", 8080)

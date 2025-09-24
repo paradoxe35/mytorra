@@ -20,11 +20,19 @@ type TestDB struct {
 	cleanup    func()
 }
 
+func DBTesEnabled() bool {
+	return os.Getenv("ENABLE_DB_TESTS") == "true"
+}
+
 // NewTestDB creates a new test database instance using PostgreSQL
 // It creates an isolated schema for each test to ensure test isolation
 func NewTestDB(t *testing.T) *TestDB {
 	t.Helper()
 	ctx := context.Background()
+
+	if !DBTesEnabled() {
+		t.Skip("test database is not enabled")
+	}
 
 	// Get test database configuration from environment or use defaults
 	cfg := &config.DatabaseConfig{

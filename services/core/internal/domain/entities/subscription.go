@@ -88,6 +88,11 @@ func (s *Subscription) IsWithinUsageLimits(feature string) bool {
 		return true // No limit set
 	}
 
+	// Check for unlimited (-1 means unlimited)
+	if limit == -1 {
+		return true
+	}
+
 	usage := s.CurrentUsage[feature]
 	return usage < limit
 }
@@ -243,7 +248,7 @@ func (s *Subscription) CanChangeTier(newTier valueobjects.SubscriptionTier) erro
 		return fmt.Errorf("cannot change tier for expired subscription")
 	}
 
-	if s.IsInTrial() {
+	if s.IsTrialing {
 		return fmt.Errorf("cannot change tier during trial period")
 	}
 

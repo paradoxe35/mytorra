@@ -26,7 +26,7 @@ on:
         default: ""
 
 concurrency:
-  group: ${{ github.head_ref || github.ref }}
+  group: ${{ github.head_ref || github.ref }}-${{ github.workflow }}
   cancel-in-progress: true
 
 permissions:
@@ -192,6 +192,7 @@ jobs:
           atlas migrate status \
             --env bun \
             --url "$DATABASE_URL" \
+            --revisions-schema "public" \
             --dir "file://migrations"
 
       - name: Check for pending schema changes
@@ -265,6 +266,7 @@ jobs:
             --env bun \
             --url "$DATABASE_URL" \
             --dir "file://migrations" \
+            --revisions-schema "public" \
             --format "{{ .Current }}" 2>/dev/null || echo "")
 
           if [ -n "$CURRENT_VERSION" ] && [ "$CURRENT_VERSION" != "No migration applied yet" ]; then
@@ -436,8 +438,6 @@ jobs:
           TEST_DB_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           TEST_DB_NAME: "${{ env.POSTGRES_DB }}_${{ matrix.service }}_integration"
           TEST_DB_SSL_MODE: "disable"
-          TEST_DB_ISOLATE: "false" # Use shared database since we set it up with migrations
-          TEST_DB_MIGRATE: "false" # Migrations already applied
           # Force unbuffered output for real-time streaming
           GOMAXPROCS: "2"
           GOTRACEBACK: "all"

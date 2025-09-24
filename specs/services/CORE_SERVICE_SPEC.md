@@ -10,11 +10,12 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
 2. **Area Management System** - Dynamic geographic operational boundaries and user area detection
 3. **Organization Management** - Multi-user organization structures with hierarchical roles
 4. **Authentication & Authorization** - JWT, MFA, OAuth2, permission management
-5. **Payment Processing** - Abstracted payment gateway integration
+5. **Payment Processing** - Abstracted payment gateway integration with split payment support
 6. **Notification System** - Generic notification sender (email, SMS, push)
-7. **Subscription Engine** - Generic subscription management for all services
+7. **Monetization Engine** - Dynamic subscription and commission management for all services
 8. **Admin Management** - Platform-wide administrative functions
 9. **Automatic Permission Assignment** - Event-driven permission management based on subscriptions
+10. **Tenant Financial Management** - Earnings tracking, payouts, and financial reporting
 
 ## Features & Functionality
 
@@ -186,42 +187,74 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
   - Organization member permission distribution
   - Trial and grace period permission management
 
-### 4. Payment Processing
+### 4. Dual-Mode Payment Processing
 - **Payment Gateway Abstraction**
-  - Multiple payment provider support (Stripe, PayStack, Flutterwave)
-  - Automatic failover between providers
-  - Payment method management (cards, mobile money, bank transfer)
+  - Dual-mode support (Instant Split vs Collect-and-Disburse)
+  - Regional gateway selection:
+    - **Card Markets**: Stripe Connect (instant splits)
+    - **Mobile Money Markets**: Flutterwave, Paystack, MFS Africa (collect-disburse)
+  - Payment method support:
+    - Mobile money (M-Pesa, MTN, Airtel, Orange)
+    - Cards (Visa, Mastercard, local cards)
+    - Bank transfers
+    - USSD payments
+    - Digital wallets
 
-- **Financial Operations**
-  - Payment processing and validation
-  - Refund management
-  - Payout scheduling for vendors
-  - Transaction history and reconciliation
+- **Collection Operations**
+  - Full payment collection to platform
+  - Commission calculation at collection time
   - Multi-currency support
+  - Payment validation and fraud detection
+  - Transaction reference tracking
 
-### 5. Subscription Engine
-- **Generic Subscription Management**
-  - Plan creation and management
-  - Feature-based subscriptions
-  - Usage-based billing
-  - Tiered pricing models
+- **Disbursement Operations**
+  - **Instant Mode**: Real-time vendor credits
+  - **Scheduled Mode**: Batch disbursements (daily/weekly)
+  - Minimum threshold enforcement
+  - Bulk transfer optimization
+  - Failed disbursement retry logic
+  - Multi-provider routing
 
-- **Service-Specific Plans**
-  - Restaurant plans (MyTorra Food)
-  - Hotel plans (MyTorra Booking)
-  - Marketplace vendor plans
-  - Premium user plans
+- **Float & Reconciliation**
+  - Platform float management
+  - Daily settlement reconciliation
+  - Reserve requirement maintenance (10-20%)
+  - Discrepancy detection and resolution
+  - Regulatory compliance reporting
 
-- **Billing Management**
-  - Automatic billing cycles
-  - Proration for plan changes
-  - Grace periods and suspension
-  - Invoice generation
+### 5. Monetization Engine (Subscriptions & Commissions)
+- **Dynamic Plan Management**
+  - Admin-created plans without code changes
+  - Visual plan builder interface
+  - Feature registry system
+  - Plan versioning and grandfathering
+  - A/B testing for plans
+
+- **Hybrid Revenue Models**
+  - Subscription-based revenue streams
+  - Transaction fees and commissions
+  - Combined subscription + commission models
+  - Listing fees for marketplaces
+  - Volume-based pricing tiers
+
+- **Multi-Tenant Architecture**
+  - Tenant isolation (restaurants, hotels, drivers, sellers)
+  - Tenant-specific dashboards
+  - Financial tracking per tenant
+  - Payout management
+  - Earnings analytics
+
+- **Split Payment Processing**
+  - Stripe Connect integration
+  - Automatic payment splitting
+  - Commission calculation
+  - Gateway fee handling
+  - Multi-currency support
 
 - **Permission Integration**
   - Automatic permission assignment on subscription
-  - Permission templates per plan
-  - Permission revocation on cancellation
+  - Dynamic permission templates
+  - Commission-based access levels
   - Grace period permission retention
   - Organization seat-based permissions
 
@@ -254,12 +287,27 @@ The Core Service is the foundational nervous system of the MyTorra platform, pro
 - Financial reporting
 - Payment provider configuration
 
-### 3. Subscription Management
-- Plan creation and editing
-- Subscription monitoring
-- Billing issue resolution
-- Revenue analytics
-- Plan performance metrics
+### 3. Monetization Management
+- **Dynamic Plan Builder**
+  - Visual plan creation interface
+  - Feature catalog management
+  - Commission rule configuration
+  - Plan template library
+  - Version control for plans
+
+- **Revenue Management**
+  - Subscription revenue tracking
+  - Transaction fee monitoring
+  - Commission analytics
+  - Payout scheduling
+  - Revenue forecasting
+
+- **Tenant Management**
+  - Tenant onboarding workflows
+  - Financial profile management
+  - Earnings tracking
+  - Payout configuration
+  - Custom deal creation
 
 ### 4. System Administration
 - Service health monitoring
@@ -307,14 +355,24 @@ POST /payments/methods
 DELETE /payments/methods/{id}
 ```
 
-### Subscription Endpoints
+### Monetization Endpoints
 ```
-GET /subscriptions/plans
-GET /subscriptions/current
-POST /subscriptions/subscribe
-PUT /subscriptions/change-plan
-POST /subscriptions/cancel
-GET /subscriptions/billing-history
+# Tenant Operations
+GET /monetization/plans/available
+GET /monetization/subscription/current
+POST /monetization/subscribe
+PUT /monetization/subscription/change
+POST /monetization/subscription/cancel
+GET /monetization/earnings
+GET /monetization/payouts
+GET /monetization/transactions
+
+# Admin Operations
+POST /admin/monetization/plans
+PUT /admin/monetization/plans/{id}
+POST /admin/monetization/commission-rules
+GET /admin/monetization/analytics
+POST /admin/monetization/payouts/process
 ```
 
 ### Area Management Endpoints
@@ -568,92 +626,257 @@ CREATE TABLE user_roles (
 );
 ```
 
-### Subscriptions Tables
+### Monetization Tables
 ```sql
-CREATE TABLE subscription_plans (
+CREATE TABLE monetization_plans (
     id UUID PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     service VARCHAR(50) NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
+    tenant_type ENUM('restaurant', 'hotel', 'marketplace_seller', 'driver', 'delivery') NOT NULL,
+    plan_type ENUM('subscription', 'commission', 'hybrid') DEFAULT 'hybrid',
+
+    -- Pricing
+    subscription_price DECIMAL(10,2) DEFAULT 0.00,
+    commission_rate DECIMAL(5,2) DEFAULT 0.00,
     currency VARCHAR(3) DEFAULT 'USD',
-    billing_cycle ENUM('monthly', 'yearly', 'weekly') DEFAULT 'monthly',
+    billing_cycle ENUM('monthly', 'yearly', 'weekly', 'transaction') DEFAULT 'monthly',
+
+    -- Configuration
     features JSONB,
-    max_limits JSONB,
-    active BOOLEAN DEFAULT TRUE,
+    limits JSONB,
+    commission_rules JSONB,
+
+    -- Status
+    status ENUM('draft', 'active', 'archived') DEFAULT 'draft',
+    version INTEGER DEFAULT 1,
+
+    created_by UUID REFERENCES users(id),
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE user_subscriptions (
+CREATE TABLE tenant_subscriptions (
     id UUID PRIMARY KEY,
-    user_id UUID REFERENCES users(id),
-    plan_id UUID REFERENCES subscription_plans(id),
-    status ENUM('active', 'cancelled', 'expired', 'suspended', 'grace_period', 'trial') DEFAULT 'active',
+    tenant_id UUID NOT NULL,
+    tenant_type ENUM('user', 'organization') NOT NULL,
+    plan_id UUID REFERENCES monetization_plans(id),
+
+    -- Status
+    status ENUM('trial', 'active', 'past_due', 'cancelled', 'suspended') DEFAULT 'active',
+
+    -- Custom terms
+    custom_commission_rate DECIMAL(5,2),
+    negotiated_price DECIMAL(10,2),
+
+    -- Periods
     current_period_start TIMESTAMP,
     current_period_end TIMESTAMP,
-    cancel_at_period_end BOOLEAN DEFAULT FALSE,
-    permissions_applied BOOLEAN DEFAULT FALSE,
-    permission_template_id UUID,
+
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE subscription_permission_templates (
+CREATE TABLE transaction_fees (
     id UUID PRIMARY KEY,
-    plan_id UUID REFERENCES subscription_plans(id),
+    transaction_id UUID NOT NULL,
+    tenant_id UUID NOT NULL,
     service VARCHAR(50) NOT NULL,
-    permissions JSONB NOT NULL, -- Array of permission IDs
-    roles JSONB, -- Array of role IDs to assign
-    resource_limits JSONB, -- Max items, API calls, etc.
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE KEY unique_plan_service (plan_id, service)
+
+    -- Amounts
+    transaction_amount DECIMAL(10,2) NOT NULL,
+    commission_amount DECIMAL(10,2) NOT NULL,
+    tenant_payout DECIMAL(10,2) NOT NULL,
+    platform_revenue DECIMAL(10,2) NOT NULL,
+
+    status ENUM('pending', 'processed', 'settled') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW()
 );
 ```
 
 ## Integration Patterns
 
 ### With Other Services
-- **Marketplace Service**: User authentication, seller subscription validation
-- **Delivery Service**: Restaurant owner authentication, delivery plan management
-- **Booking Service**: Hotel owner authentication, booking plan validation
-- **TorraCab Service**: Driver authentication, ride revenue processing
-- **Media Service**: User authentication for secure uploads
-- **Realtime Service**: User authentication for WebSocket connections
+- **Marketplace Service**:
+  - Seller authentication and onboarding
+  - Transaction fee calculation on sales
+  - Seller payout processing
+  - Dynamic commission rates based on seller plans
+
+- **Delivery Service**:
+  - Restaurant authentication
+  - Delivery commission calculation
+  - Driver earnings tracking
+  - Split payment between restaurant and delivery driver
+
+- **Booking Service**:
+  - Hotel authentication and plan management
+  - Booking commission processing
+  - Room rate commission calculations
+  - Hotel payout scheduling
+
+- **MyTorraCab Service**:
+  - Driver authentication and onboarding
+  - Ride commission processing (no subscription model)
+  - Driver earnings and payout management
+  - Real-time fare splitting
+
+- **Media Service**:
+  - User authentication for secure uploads
+  - Storage quota enforcement based on plans
+
+- **Realtime Service**:
+  - User authentication for WebSocket connections
+  - Real-time financial updates to tenant dashboards
+  - Live commission calculations for ongoing transactions
 
 ### Internal Event Handling (Core Service)
-The Core Service internally handles subscription events to automatically manage permissions:
+The Core Service internally handles monetization events to manage permissions and dual-mode payment operations:
 
-#### Subscription Event Handlers
+#### Dual-Mode Payment Event Handlers
 ```go
-// Internal event handlers within Core Service
-func (s *SubscriptionService) HandleSubscriptionCreated(sub *Subscription) {
-    // Automatically apply permission template for the plan
-    permissionService.ApplyPlanPermissions(sub.UserID, sub.PlanID)
-    // Publish event for other services
-    eventBus.Publish("subscription.created", sub)
+// Determine payment mode based on region and method
+func (m *MonetizationEngine) DeterminePaymentMode(region Region, paymentMethod PaymentMethod) PaymentMode {
+    // Check region configuration
+    if region.SupportsInstantSplit && paymentMethod.Type == "card" {
+        return INSTANT_SPLIT
+    }
+
+    // Default to collect-and-disburse for mobile money regions
+    if paymentMethod.Type == "mobile_money" || region.PrimaryPayment == "mobile_money" {
+        return COLLECT_DISBURSE
+    }
+
+    return region.DefaultPaymentMode
 }
 
-func (s *SubscriptionService) HandleSubscriptionUpgraded(sub *Subscription, oldPlanID string) {
-    // Remove old plan permissions
-    permissionService.RevokePlanPermissions(sub.UserID, oldPlanID)
-    // Apply new plan permissions
-    permissionService.ApplyPlanPermissions(sub.UserID, sub.PlanID)
-    // Publish event for other services
-    eventBus.Publish("subscription.upgraded", sub)
+// Handle transaction based on payment mode
+func (m *MonetizationEngine) HandleTransactionCompleted(tx Transaction) {
+    paymentMode := DeterminePaymentMode(tx.Region, tx.PaymentMethod)
+
+    switch paymentMode {
+    case INSTANT_SPLIT:
+        ProcessInstantSplitTransaction(tx)
+    case COLLECT_DISBURSE:
+        ProcessCollectDisburseTransaction(tx)
+    }
 }
 
-func (s *SubscriptionService) HandleSubscriptionCancelled(sub *Subscription) {
-    // Schedule permission revocation for subscription end date
-    permissionService.SchedulePermissionRevocation(sub.UserID, sub.PlanID, sub.CurrentPeriodEnd)
-    // Publish event for other services
-    eventBus.Publish("subscription.cancelled", sub)
+// Process instant split (Stripe Connect style)
+func (m *MonetizationEngine) ProcessInstantSplitTransaction(tx Transaction) {
+    // Calculate commission
+    commission := CalculateCommission(tx.TenantID, tx.Amount)
+
+    // Process with instant split
+    gateway := GetGateway(tx.Region)
+    splitResult := gateway.ProcessInstantSplit(tx, commission)
+
+    // Record completed transaction
+    RecordCollection(PaymentCollection{
+        TransactionID: tx.ID,
+        PaymentMode: INSTANT_SPLIT,
+        DisbursementStatus: "completed",
+    })
+
+    // Notify tenant of instant payout
+    NotifyInstantPayout(tx.TenantID, splitResult.TenantAmount)
 }
 
-func (s *SubscriptionService) HandlePaymentFailed(sub *Subscription) {
-    // Apply grace period permissions (limited access)
-    permissionService.ApplyGracePeriodPermissions(sub.UserID, sub.PlanID)
-    // Publish event for other services
-    eventBus.Publish("subscription.payment_failed", sub)
+// Process collect-and-disburse (Mobile Money)
+func (m *MonetizationEngine) ProcessCollectDisburseTransaction(tx Transaction) {
+    // Step 1: Collect to platform account
+    gateway := GetGateway(tx.Region)
+    collection := gateway.CollectToHoldingAccount(tx)
+
+    // Step 2: Calculate and record splits
+    commission := CalculateCommission(tx.TenantID, tx.Amount)
+    RecordCollection(PaymentCollection{
+        TransactionID: tx.ID,
+        TenantShare: tx.Amount.Sub(commission.Amount),
+        PlatformShare: commission.Amount,
+        PaymentMode: COLLECT_DISBURSE,
+        CollectionStatus: "successful",
+        DisbursementStatus: "pending",
+    })
+
+    // Step 3: Add to disbursement queue
+    QueueForDisbursement(tx.TenantID, tx.Amount.Sub(commission.Amount))
+
+    // Notify tenant of pending payout
+    NotifyPendingPayout(tx.TenantID, tx.Amount.Sub(commission.Amount))
+}
+
+// Scheduled disbursement processing (for collect-and-disburse regions)
+func (m *MonetizationEngine) ProcessScheduledDisbursements() {
+    // Group by region and provider for efficiency
+    disbursementBatches := GroupPendingDisbursements()
+
+    for region, batches := range disbursementBatches {
+        gateway := GetGateway(region)
+
+        for provider, disbursements := range batches {
+            // Check float balance
+            if !HasSufficientFloat(provider, SumDisbursements(disbursements)) {
+                AlertFinanceTeam("Insufficient float", provider)
+                continue
+            }
+
+            // Process batch disbursement
+            if gateway.SupportsBulkTransfer() {
+                result := gateway.ProcessBulkDisbursement(disbursements)
+                HandleBulkDisbursementResult(result)
+            } else {
+                // Process individually for providers without bulk support
+                for _, disbursement := range disbursements {
+                    ProcessSingleDisbursement(gateway, disbursement)
+                }
+            }
+        }
+    }
+
+    // Run reconciliation after disbursements
+    RunDisbursementReconciliation()
+}
+
+// Daily reconciliation for collect-and-disburse mode
+func (m *MonetizationEngine) RunDailyReconciliation() {
+    reconciliation := SettlementReconciliation{
+        Date: time.Now().AddDate(0, 0, -1),
+        Collections: GetDailyCollections(),
+        Disbursements: GetDailyDisbursements(),
+    }
+
+    // Calculate platform float
+    reconciliation.ExpectedFloat = reconciliation.Collections.Total - reconciliation.Disbursements.Total
+    reconciliation.ActualFloat = GetActualFloatBalance()
+    reconciliation.Discrepancy = reconciliation.ActualFloat - reconciliation.ExpectedFloat
+
+    // Check for discrepancies
+    if reconciliation.Discrepancy.Abs() > THRESHOLD {
+        reconciliation.Status = "DISCREPANCY"
+        CreateInvestigationTicket(reconciliation)
+    } else {
+        reconciliation.Status = "BALANCED"
+    }
+
+    SaveReconciliation(reconciliation)
+    GenerateFinancialReports(reconciliation)
+}
+
+// Plan migration handling
+func (m *MonetizationEngine) HandlePlanModified(planID string, changes PlanChanges) {
+    affectedTenants := GetTenantsOnPlan(planID)
+
+    for _, tenant := range affectedTenants {
+        if ShouldGrandfather(tenant, changes) {
+            // Keep tenant on old plan version
+            MarkAsGrandfathered(tenant.SubscriptionID)
+        } else {
+            // Schedule migration to new plan version
+            SchedulePlanMigration(tenant.ID, planID, changes.EffectiveDate)
+        }
+    }
+
+    // Publish event
+    eventBus.Publish("plan.modified", planID, affectedTenants)
 }
 ```
 
@@ -680,16 +903,26 @@ func (s *OrganizationService) HandleMemberRoleChanged(orgID, userID, newRole str
 
 ### Event Publishing (To Other Services)
 - `UserRegistered`: When new user registers
-- `SubscriptionChanged`: When user subscription changes
+- `TenantOnboarded`: When business entity joins platform
+- `TenantSubscribed`: When tenant subscribes to plan
+- `PlanChanged`: When tenant changes subscription plan
+- `TransactionFeeProcessed`: When commission is calculated and applied
+- `TenantEarningsUpdated`: When tenant earnings change
+- `PayoutProcessed`: When tenant payout is completed
 - `PaymentProcessed`: When payment is completed
 - `UserSuspended`: When user account is suspended
 - `PermissionsUpdated`: When user permissions change
 - `OrganizationMemberAdded`: When member joins organization
 - `OrganizationMemberRemoved`: When member leaves organization
+- `CommissionRateChanged`: When tenant's commission rate changes
 
 ### Event Consumption (From Other Services)
-- `OrderCompleted`: Update user transaction history
-- `ServiceUsageRecorded`: Update subscription usage metrics
-- `SecurityIncident`: Log and notify administrators
-- `BusinessVerified`: Grant verified business permissions
-- `DriverApproved`: Grant driver operation permissions
+- `OrderCompleted`: Calculate commission and update earnings
+- `BookingCompleted`: Apply booking commission
+- `RideCompleted`: Apply cab service commission
+- `DeliveryCompleted`: Apply delivery commission
+- `ProductSold`: Apply marketplace commission
+- `ServiceUsageRecorded`: Update usage metrics
+- `BusinessVerified`: Enable full monetization features
+- `DriverApproved`: Set driver commission rates
+- `PaymentReceived`: Trigger split payment processing

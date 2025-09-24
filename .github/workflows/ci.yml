@@ -2,13 +2,14 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [main, develop, feature/*]
-  pull_request:
     branches: [main, develop]
+  pull_request:
+    branches: [main, develop, feature/*]
+
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.head_ref || github.ref }}
+  group: ${{ github.head_ref || github.ref }}-${{ github.workflow }}
   cancel-in-progress: true
 
 permissions:
@@ -98,16 +99,6 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
-
-      - name: Setup test environment
-        if: false
-        run: |
-          cp .env.example .env.test
-          echo "MYTORRA_DATABASE_HOST=localhost" >> .env.test
-          echo "MYTORRA_DATABASE_USER=test" >> .env.test
-          echo "MYTORRA_DATABASE_PASSWORD=test" >> .env.test
-          echo "MYTORRA_DATABASE_NAME=testdb" >> .env.test
-          echo "MYTORRA_REDIS_HOST=localhost" >> .env.test
 
       - name: Run unit tests
         run: |
